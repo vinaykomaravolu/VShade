@@ -60,6 +60,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
+          disable_search: true
           name: vshade-engine
           fail_ci_if_error: true
           use_oidc: true
