@@ -1,6 +1,9 @@
 set(VSHADE_SOURCES
-    src/Log.cpp
-    src/Window.cpp
+    src/Core/Application.cpp
+    src/Core/FileSystem.cpp
+    src/Core/Log.cpp
+    src/Core/Time.cpp
+    src/Core/Window.cpp
 )
 
 # STATIC means the engine is copied into each executable that links it.

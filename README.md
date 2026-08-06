@@ -3,7 +3,10 @@
 VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 
 - a cross-platform GLFW window and OpenGL 3.3 context;
-- engine and application logging through spdlog;
+- an application lifecycle and frame-timed main loop;
+- resize callbacks, fullscreen switching, and VSync controls;
+- engine and game logging through spdlog;
+- assertions and basic filesystem helpers;
 - GLM as the public math dependency;
 - a static engine library;
 - a minimal sandbox application.
@@ -68,7 +71,32 @@ target_link_libraries(MyGame PRIVATE VShade::Engine)
 Then include the public API with:
 
 ```cpp
-#include <VShade/VShade.hpp>
+#include <Core/Application.hpp>
+```
+
+A game supplies behavior by deriving from `Application`:
+
+```cpp
+class MyGame final : public VShade::Application {
+protected:
+    void OnUpdate(float deltaTime) override {
+        // Update the active scene here.
+    }
+
+    void OnRender() override {
+        // Render the active scene here.
+    }
+};
+```
+
+Other core systems have focused headers:
+
+```cpp
+#include <Core/Assert.hpp>
+#include <Core/FileSystem.hpp>
+#include <Core/Log.hpp>
+#include <Core/Time.hpp>
+#include <Core/Window.hpp>
 ```
 
 Modern OpenGL function loading is intentionally not part of this first step.

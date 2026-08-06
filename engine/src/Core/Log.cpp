@@ -1,4 +1,4 @@
-#include "VShade/Log.hpp"
+#include "Core/Log.hpp"
 
 #include <mutex>
 #include <utility>
@@ -10,10 +10,10 @@ namespace {
 
 std::mutex logger_mutex;
 std::shared_ptr<spdlog::logger> engine_logger;
-std::shared_ptr<spdlog::logger> client_logger;
+std::shared_ptr<spdlog::logger> game_logger;
 
 void initialize_locked() {
-    if (engine_logger && client_logger) {
+    if (engine_logger && game_logger) {
         return;
     }
 
@@ -22,14 +22,14 @@ void initialize_locked() {
         engine_logger = spdlog::stdout_color_mt("VShade");
     }
 
-    client_logger = spdlog::get("Application");
-    if (!client_logger) {
-        client_logger = spdlog::stdout_color_mt("Application");
+    game_logger = spdlog::get("Game");
+    if (!game_logger) {
+        game_logger = spdlog::stdout_color_mt("Game");
     }
 
     constexpr auto pattern = "%^[%T] [%n] [%l] %v%$";
     engine_logger->set_pattern(pattern);
-    client_logger->set_pattern(pattern);
+    game_logger->set_pattern(pattern);
 
 #if defined(NDEBUG)
     constexpr auto default_level = spdlog::level::info;
@@ -38,17 +38,17 @@ void initialize_locked() {
 #endif
 
     engine_logger->set_level(default_level);
-    client_logger->set_level(default_level);
+    game_logger->set_level(default_level);
 }
 
 } // namespace
 
-void Log::initialize() {
+void Log::Initialize() {
     const std::scoped_lock lock(logger_mutex);
     initialize_locked();
 }
 
-void Log::shutdown() {
+void Log::Shutdown() {
     const std::scoped_lock lock(logger_mutex);
 
     // Only remove VShade-owned loggers. Do not shut down the host application's
@@ -59,30 +59,30 @@ void Log::shutdown() {
         engine_logger.reset();
     }
 
-    if (client_logger) {
-        client_logger->flush();
-        spdlog::drop(client_logger->name());
-        client_logger.reset();
+    if (game_logger) {
+        game_logger->flush();
+        spdlog::drop(game_logger->name());
+        game_logger.reset();
     }
 }
 
-void Log::set_level(const spdlog::level::level_enum level) {
+void Log::SetLevel(const spdlog::level::level_enum level) {
     const std::scoped_lock lock(logger_mutex);
     initialize_locked();
     engine_logger->set_level(level);
-    client_logger->set_level(level);
+    game_logger->set_level(level);
 }
 
-std::shared_ptr<spdlog::logger> Log::engine() {
+std::shared_ptr<spdlog::logger> Log::Engine() {
     const std::scoped_lock lock(logger_mutex);
     initialize_locked();
     return engine_logger;
 }
 
-std::shared_ptr<spdlog::logger> Log::client() {
+std::shared_ptr<spdlog::logger> Log::Game() {
     const std::scoped_lock lock(logger_mutex);
     initialize_locked();
-    return client_logger;
+    return game_logger;
 }
 
 } // namespace VShade

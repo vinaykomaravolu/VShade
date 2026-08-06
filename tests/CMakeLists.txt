@@ -1,4 +1,5 @@
 add_executable(VShadeTests
+    FileSystemTests.cpp
     LogTests.cpp
 )
 
