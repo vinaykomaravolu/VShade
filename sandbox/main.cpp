@@ -1,36 +1,46 @@
-#include <exception>
+#include <Core/Application.hpp>
+#include <Core/EntryPoint.hpp>
+#include <Core/Log.hpp>
+#include <Core/Time.hpp>
+#include <Platform/Input.hpp>
 
-#include <VShade/VShade.hpp>
+namespace {
 
-int main() {
-    try {
-        VShade::Log::initialize();
-        VSHADE_INFO("Starting the VShade sandbox");
+class SandboxApplication final : public VShade::Application {
+public:
+    SandboxApplication()
+        : Application({
+              .window = {
+                  .title = "VShade Sandbox",
+                  .width = 1920,
+                  .height = 1080,
+                  .fullscreen = false,
+                  .vsync = true,
+              },
+          }) {}
 
-        VShade::Window window({
-            .title = "VShade Sandbox",
-            .width = 1280,
-            .height = 720,
-            .vertical_sync = true,
-        });
+protected:
+    void OnStart() override {
+        GAME_INFO("Sandbox started");
+    }
 
-        while (!window.should_close()) {
-            window.poll_events();
-
-            if (window.is_key_pressed(VShade::Key::Escape)) {
-                window.request_close();
-            }
-
-            window.clear(0.06F, 0.07F, 0.10F);
-            window.swap_buffers();
+    void OnUpdate(const float delta_time) override {
+        if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
+            Close();
         }
 
-        VSHADE_INFO("Stopping the VShade sandbox");
-        VShade::Log::shutdown();
-        return 0;
-    } catch (const std::exception& error) {
-        VSHADE_CRITICAL("Fatal error: {}", error.what());
-        VShade::Log::shutdown();
-        return 1;
+        static_cast<void>(delta_time);
     }
-}
+
+    void OnShutdown() override {
+        GAME_INFO(
+            "Sandbox stopped after {} frames ({:.2f} seconds)",
+            VShade::Time::FrameCount(),
+            VShade::Time::ElapsedTime()
+        );
+    }
+};
+
+} // namespace
+
+SHADE_ENGINE_MAIN(SandboxApplication)

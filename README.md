@@ -3,10 +3,17 @@
 VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 
 - a cross-platform GLFW window and OpenGL 3.3 context;
-- engine and application logging through spdlog;
+- an application lifecycle and frame-timed main loop;
+- resize callbacks, fullscreen switching, and VSync controls;
+- engine and game logging through spdlog;
+- assertions and basic filesystem helpers;
 - GLM as the public math dependency;
 - a static engine library;
 - a minimal sandbox application.
+
+The generated [API reference](https://vinaykomaravolu.github.io/VShade/) is
+published with GitHub Pages. Documentation source and local build instructions
+are in [docs/api.md](docs/api.md).
 
 ## Get the dependencies
 
@@ -68,7 +75,49 @@ target_link_libraries(MyGame PRIVATE VShade::Engine)
 Then include the public API with:
 
 ```cpp
-#include <VShade/VShade.hpp>
+#include <Core/Application.hpp>
+#include <Core/EntryPoint.hpp>
+```
+
+A game supplies behavior by deriving from `Application`:
+
+```cpp
+class MyGame final : public VShade::Application {
+protected:
+    void OnUpdate(float deltaTime) override {
+        // Update the active scene here.
+    }
+};
+
+SHADE_ENGINE_MAIN(MyGame)
+```
+
+Input is stored once per frame, so it does not need a `Window` argument:
+
+```cpp
+if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
+    Close();
+}
+
+const glm::vec2 movement = VShade::Input::mouse_delta();
+```
+
+Use `is_key_down` for a held key, `is_key_pressed` for its first frame down,
+and `is_key_released` for its first frame up. Mouse buttons provide the same
+three states.
+
+Other core systems have focused headers:
+
+```cpp
+#include <Core/Assert.hpp>
+#include <Core/EntryPoint.hpp>
+#include <Core/FileSystem.hpp>
+#include <Core/Log.hpp>
+#include <Core/Time.hpp>
+#include <Platform/Input.hpp>
+#include <Platform/Keycode.hpp>
+#include <Platform/Mousecode.hpp>
+#include <Platform/Window.hpp>
 ```
 
 Modern OpenGL function loading is intentionally not part of this first step.
