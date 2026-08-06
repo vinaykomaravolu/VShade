@@ -33,6 +33,22 @@ target_link_libraries(VShadeEngine
 # logger levels still decide which messages are printed.
 target_compile_definitions(VShadeEngine PUBLIC SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
+if(VSHADE_ENABLE_COVERAGE)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "VSHADE_ENABLE_COVERAGE currently requires GCC")
+    endif()
+
+    # Instrument only engine implementation files. The INTERFACE link option
+    # supplies the gcov runtime when a test executable links this static library.
+    target_compile_options(VShadeEngine PRIVATE
+        --coverage
+        -fprofile-abs-path
+        -O0
+        -g
+    )
+    target_link_options(VShadeEngine INTERFACE --coverage)
+endif()
+
 if(MSVC)
     target_compile_options(VShadeEngine PRIVATE /W4 /permissive-)
     if(VSHADE_WARNINGS_AS_ERRORS)

@@ -1,5 +1,7 @@
 /build/
+/build-coverage/
 /out/
+/coverage.xml
 /.vs/
 /.vscode/
 /.idea/

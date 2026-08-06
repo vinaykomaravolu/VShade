@@ -11,6 +11,7 @@ include(CTest)
 
 option(VSHADE_BUILD_SANDBOX "Build the example sandbox application" ON)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
+option(VSHADE_ENABLE_COVERAGE "Instrument VShadeEngine for GCC coverage reports" OFF)
 
 foreach(dependency IN ITEMS spdlog glfw glm)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/${dependency}/CMakeLists.txt")

@@ -45,6 +45,15 @@ For a build that does not compile the tests or Catch2, configure with:
 cmake -S . -B build-no-tests -DBUILD_TESTING=OFF
 ```
 
+### Coverage
+
+Pushes and pull requests targeting `main` run the coverage workflow on GitHub.
+It builds the engine with GCC coverage instrumentation, runs the Catch2 suite,
+generates `coverage.xml` with gcovr, and uploads the report to Codecov.
+
+The first upload requires the repository to be enabled in Codecov. The workflow
+uses GitHub OIDC, so it does not require a `CODECOV_TOKEN` secret.
+
 ## Use the library from another CMake target
 
 When the engine and game are in the same source tree:

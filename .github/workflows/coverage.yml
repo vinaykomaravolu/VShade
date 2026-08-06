@@ -1,0 +1,65 @@
+name: Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  coverage:
+    name: GCC coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install coverage and OpenGL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libgl1-mesa-dev
+          python3 -m pip install gcovr==8.6
+
+      - name: Configure coverage build
+        run: >-
+          cmake -S . -B build-coverage
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON
+          -DVSHADE_BUILD_SANDBOX=OFF
+          -DVSHADE_ENABLE_COVERAGE=ON
+          -DGLFW_BUILD_X11=OFF
+          -DGLFW_BUILD_WAYLAND=OFF
+
+      - name: Build tests
+        run: cmake --build build-coverage --config Debug --target VShadeTests --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build-coverage -C Debug --output-on-failure
+
+      - name: Generate coverage report
+        run: >-
+          gcovr build-coverage
+          --root .
+          --filter "engine/"
+          --exclude "tests/"
+          --cobertura-pretty
+          --output coverage.xml
+          --print-summary
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          name: vshade-engine
+          fail_ci_if_error: true
+          use_oidc: true
