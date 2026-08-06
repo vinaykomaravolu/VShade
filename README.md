@@ -100,7 +100,7 @@ Other core systems have focused headers:
 #include <Core/FileSystem.hpp>
 #include <Core/Log.hpp>
 #include <Core/Time.hpp>
-#include <Core/Window.hpp>
+#include <Platform/Window.hpp>
 ```
 
 Modern OpenGL function loading is intentionally not part of this first step.
