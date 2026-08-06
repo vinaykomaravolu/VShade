@@ -32,7 +32,7 @@ int Application::Run() {
 
         Time::Reset();
         m_running = true;
-        OnStartup();
+        OnStart();
         shutdown_needed = true;
 
         while (m_running && !m_window->ShouldClose()) {
@@ -45,7 +45,9 @@ int Application::Run() {
             // The application will forward these calls to its active scene
             // once the scene system exists.
             OnUpdate(Time::DeltaTime());
-            OnRender();
+
+            // Later: render the active scene here once the renderer and scene
+            // systems exist.
 
             m_window->SwapBuffers();
         }

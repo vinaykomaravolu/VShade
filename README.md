@@ -72,6 +72,7 @@ Then include the public API with:
 
 ```cpp
 #include <Core/Application.hpp>
+#include <Core/EntryPoint.hpp>
 ```
 
 A game supplies behavior by deriving from `Application`:
@@ -87,12 +88,15 @@ protected:
         // Render the active scene here.
     }
 };
+
+SHADE_ENGINE_MAIN(MyGame)
 ```
 
 Other core systems have focused headers:
 
 ```cpp
 #include <Core/Assert.hpp>
+#include <Core/EntryPoint.hpp>
 #include <Core/FileSystem.hpp>
 #include <Core/Log.hpp>
 #include <Core/Time.hpp>

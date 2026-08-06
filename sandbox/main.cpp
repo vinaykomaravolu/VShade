@@ -1,7 +1,5 @@
-#include <exception>
-#include <iostream>
-
 #include <Core/Application.hpp>
+#include <Core/EntryPoint.hpp>
 #include <Core/Log.hpp>
 #include <Core/Time.hpp>
 
@@ -13,15 +11,15 @@ public:
         : Application({
               .window = {
                   .title = "VShade Sandbox",
-                  .width = 1280,
-                  .height = 720,
+                  .width = 1920,
+                  .height = 1080,
                   .fullscreen = false,
                   .vsync = true,
               },
           }) {}
 
 protected:
-    void OnStartup() override {
+    void OnStart() override {
         GAME_INFO("Sandbox started");
     }
 
@@ -29,14 +27,6 @@ protected:
         if (GetWindow().IsKeyPressed(VShade::Key::Escape)) {
             Close();
         }
-
-        // Later: update the active scene here.
-        static_cast<void>(delta_time);
-    }
-
-    void OnRender() override {
-        // Later: render the active scene here.
-        GetWindow().Clear(0.06F, 0.07F, 0.10F);
     }
 
     void OnShutdown() override {
@@ -50,12 +40,4 @@ protected:
 
 } // namespace
 
-int main() {
-    try {
-        SandboxApplication application;
-        return application.Run();
-    } catch (const std::exception& error) {
-        std::cerr << "Fatal error: " << error.what() << '\n';
-        return 1;
-    }
-}
+SHADE_ENGINE_MAIN(SandboxApplication)

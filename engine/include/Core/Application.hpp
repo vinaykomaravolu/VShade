@@ -27,7 +27,7 @@ public:
     [[nodiscard]] const Window& GetWindow() const;
 
 protected:
-    virtual void OnStartup() {}
+    virtual void OnStart() {}
 
     // The future scene system will update the active scene from this hook.
     virtual void OnUpdate(float delta_time) {
@@ -35,7 +35,6 @@ protected:
     }
 
     // The future renderer will render the active scene from this hook.
-    virtual void OnRender() {}
     virtual void OnShutdown() {}
 
     virtual void OnWindowResize(std::uint32_t width, std::uint32_t height) {
