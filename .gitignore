@@ -1,5 +1,6 @@
 /build/
 /build-coverage/
+/build-docs/
 /out/
 /coverage.xml
 /.vs/

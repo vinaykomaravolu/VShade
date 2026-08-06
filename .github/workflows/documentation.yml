@@ -1,0 +1,72 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Doxygen
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source and submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Doxygen and OpenGL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends doxygen graphviz libgl1-mesa-dev
+
+      - name: Configure documentation build
+        run: >-
+          cmake -S . -B build-docs
+          -DVSHADE_BUILD_DOCS=ON
+          -DVSHADE_BUILD_SANDBOX=OFF
+          -DBUILD_TESTING=OFF
+          -DGLFW_BUILD_X11=OFF
+          -DGLFW_BUILD_WAYLAND=OFF
+
+      - name: Generate API reference
+        run: cmake --build build-docs --target VShadeDocs
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build-docs/docs/html
+
+  deploy:
+    name: Publish GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy API reference
+        id: deployment
+        uses: actions/deploy-pages@v4

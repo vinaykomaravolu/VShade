@@ -2,6 +2,7 @@
 #include <Core/EntryPoint.hpp>
 #include <Core/Log.hpp>
 #include <Core/Time.hpp>
+#include <Platform/Input.hpp>
 
 namespace {
 
@@ -24,9 +25,11 @@ protected:
     }
 
     void OnUpdate(const float delta_time) override {
-        if (GetWindow().IsKeyPressed(VShade::Key::Escape)) {
+        if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
             Close();
         }
+
+        static_cast<void>(delta_time);
     }
 
     void OnShutdown() override {

@@ -3,6 +3,7 @@ set(VSHADE_SOURCES
     src/Core/FileSystem.cpp
     src/Core/Log.cpp
     src/Core/Time.cpp
+    src/Platform/Input.cpp
     src/Platform/Window.cpp
 )
 

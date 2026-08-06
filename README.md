@@ -11,6 +11,10 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - a static engine library;
 - a minimal sandbox application.
 
+The generated [API reference](https://vinaykomaravolu.github.io/VShade/) is
+published with GitHub Pages. Documentation source and local build instructions
+are in [docs/api.md](docs/api.md).
+
 ## Get the dependencies
 
 After cloning the repository, initialize its submodules:
@@ -83,14 +87,24 @@ protected:
     void OnUpdate(float deltaTime) override {
         // Update the active scene here.
     }
-
-    void OnRender() override {
-        // Render the active scene here.
-    }
 };
 
 SHADE_ENGINE_MAIN(MyGame)
 ```
+
+Input is stored once per frame, so it does not need a `Window` argument:
+
+```cpp
+if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
+    Close();
+}
+
+const glm::vec2 movement = VShade::Input::mouse_delta();
+```
+
+Use `is_key_down` for a held key, `is_key_pressed` for its first frame down,
+and `is_key_released` for its first frame up. Mouse buttons provide the same
+three states.
 
 Other core systems have focused headers:
 
@@ -100,6 +114,9 @@ Other core systems have focused headers:
 #include <Core/FileSystem.hpp>
 #include <Core/Log.hpp>
 #include <Core/Time.hpp>
+#include <Platform/Input.hpp>
+#include <Platform/Keycode.hpp>
+#include <Platform/Mousecode.hpp>
 #include <Platform/Window.hpp>
 ```
 

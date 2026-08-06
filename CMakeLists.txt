@@ -10,6 +10,7 @@ project(
 include(CTest)
 
 option(VSHADE_BUILD_SANDBOX "Build the example sandbox application" ON)
+option(VSHADE_BUILD_DOCS "Build the VShade Doxygen API reference" OFF)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
 option(VSHADE_ENABLE_COVERAGE "Instrument VShadeEngine for GCC coverage reports" OFF)
 
@@ -58,4 +59,8 @@ endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)
+endif()
+
+if(VSHADE_BUILD_DOCS)
+    add_subdirectory(docs)
 endif()
