@@ -29,6 +29,8 @@ protected:
             Close();
         }
 
+        GAME_INFO("Mouse position: {} {}", VShade::Input::mouse_position().x, VShade::Input::mouse_position().y);
+
         static_cast<void>(delta_time);
     }
 
