@@ -1,11 +1,11 @@
-#include "Core/FileSystem.hpp"
+#include "core/filesystem.hpp"
 
 #include <fstream>
 #include <iterator>
 #include <limits>
 #include <stdexcept>
 
-namespace VShade::FileSystem {
+namespace vshade::core::filesystem {
 namespace {
 
 std::runtime_error ReadError(const std::filesystem::path& path) {
@@ -65,4 +65,4 @@ std::string GetExtension(const std::filesystem::path& path) {
     return path.extension().string();
 }
 
-} // namespace VShade::FileSystem
+} // namespace vshade::core::filesystem

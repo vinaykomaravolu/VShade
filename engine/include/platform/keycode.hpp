@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace VShade {
+namespace vshade::platform {
 
 /**
  * @brief Engine-independent keyboard key identifiers.
@@ -133,4 +133,4 @@ enum class KeyCode : std::uint16_t {
     Count
 };
 
-} // namespace VShade
+} // namespace vshade::platform

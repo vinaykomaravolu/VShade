@@ -1,15 +1,15 @@
 #pragma once
 
-#include "Platform/Window.hpp"
+#include "platform/window.hpp"
 
 #include <memory>
 
-namespace VShade {
+namespace vshade::core {
 
 /** @brief Configuration used to start an Application. */
 struct ApplicationConfig {
     /** @brief Settings used to create the main window. */
-    WindowConfig window{};
+    platform::WindowConfig window{};
 };
 
 /**
@@ -43,10 +43,10 @@ public:
     void Close();
 
     /** @brief Returns the main window while the application is running. */
-    [[nodiscard]] Window& GetWindow();
+    [[nodiscard]] platform::Window& GetWindow();
 
     /** @brief Returns the main window while the application is running. */
-    [[nodiscard]] const Window& GetWindow() const;
+    [[nodiscard]] const platform::Window& GetWindow() const;
 
 protected:
     /** @brief Called once after the window and time system are ready. */
@@ -78,8 +78,8 @@ protected:
 
 private:
     ApplicationConfig m_config;
-    std::unique_ptr<Window> m_window;
+    std::unique_ptr<platform::Window> m_window;
     bool m_running = false;
 };
 
-} // namespace VShade
+} // namespace vshade::core

@@ -1,10 +1,10 @@
-#include "Platform/Input.hpp"
+#include "platform/input.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 
-namespace VShade {
+namespace vshade::platform {
 namespace {
 
 constexpr auto key_count = static_cast<std::size_t>(KeyCode::Count);
@@ -141,4 +141,4 @@ void Input::on_mouse_scrolled(const float x, const float y) {
     current_scroll_delta += glm::vec2{x, y};
 }
 
-} // namespace VShade
+} // namespace vshade::platform

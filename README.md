@@ -75,14 +75,14 @@ target_link_libraries(MyGame PRIVATE VShade::Engine)
 Then include the public API with:
 
 ```cpp
-#include <Core/Application.hpp>
-#include <Core/EntryPoint.hpp>
+#include <core/application.hpp>
+#include <core/entrypoint.hpp>
 ```
 
 A game supplies behavior by deriving from `Application`:
 
 ```cpp
-class MyGame final : public VShade::Application {
+class MyGame final : public vshade::core::Application {
 protected:
     void OnUpdate(float deltaTime) override {
         // Update the active scene here.
@@ -95,11 +95,11 @@ SHADE_ENGINE_MAIN(MyGame)
 Input is stored once per frame, so it does not need a `Window` argument:
 
 ```cpp
-if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
+if (vshade::platform::Input::is_key_pressed(vshade::platform::KeyCode::Escape)) {
     Close();
 }
 
-const glm::vec2 movement = VShade::Input::mouse_delta();
+const glm::vec2 movement = vshade::platform::Input::mouse_delta();
 ```
 
 Use `is_key_down` for a held key, `is_key_pressed` for its first frame down,
@@ -109,15 +109,15 @@ three states.
 Other core systems have focused headers:
 
 ```cpp
-#include <Core/Assert.hpp>
-#include <Core/EntryPoint.hpp>
-#include <Core/FileSystem.hpp>
-#include <Core/Log.hpp>
-#include <Core/Time.hpp>
-#include <Platform/Input.hpp>
-#include <Platform/Keycode.hpp>
-#include <Platform/Mousecode.hpp>
-#include <Platform/Window.hpp>
+#include <core/assert.hpp>
+#include <core/entrypoint.hpp>
+#include <core/filesystem.hpp>
+#include <core/log.hpp>
+#include <core/time.hpp>
+#include <platform/input.hpp>
+#include <platform/keycode.hpp>
+#include <platform/mousecode.hpp>
+#include <platform/window.hpp>
 ```
 
 Modern OpenGL function loading is intentionally not part of this first step.

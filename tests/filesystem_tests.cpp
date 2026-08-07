@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <Core/FileSystem.hpp>
+#include <core/filesystem.hpp>
 
 #include <array>
 #include <chrono>
@@ -49,9 +49,9 @@ TEST_CASE("Text files can be read", "[filesystem]") {
         output << contents;
     }
 
-    CHECK(VShade::FileSystem::FileExists(file.Path()));
-    CHECK(VShade::FileSystem::ReadTextFile(file.Path()) == contents);
-    CHECK(VShade::FileSystem::GetExtension(file.Path()) == ".txt");
+    CHECK(vshade::core::filesystem::FileExists(file.Path()));
+    CHECK(vshade::core::filesystem::ReadTextFile(file.Path()) == contents);
+    CHECK(vshade::core::filesystem::GetExtension(file.Path()) == ".txt");
 }
 
 TEST_CASE("Binary files preserve their bytes", "[filesystem]") {
@@ -67,7 +67,7 @@ TEST_CASE("Binary files preserve their bytes", "[filesystem]") {
         );
     }
 
-    const auto result = VShade::FileSystem::ReadBinaryFile(file.Path());
+    const auto result = vshade::core::filesystem::ReadBinaryFile(file.Path());
     REQUIRE(result.size() == contents.size());
 
     for (std::size_t index = 0; index < contents.size(); ++index) {
@@ -78,9 +78,9 @@ TEST_CASE("Binary files preserve their bytes", "[filesystem]") {
 TEST_CASE("Missing files are reported", "[filesystem]") {
     const TemporaryFile file(".missing");
 
-    CHECK_FALSE(VShade::FileSystem::FileExists(file.Path()));
+    CHECK_FALSE(vshade::core::filesystem::FileExists(file.Path()));
     CHECK_THROWS_AS(
-        VShade::FileSystem::ReadTextFile(file.Path()),
+        vshade::core::filesystem::ReadTextFile(file.Path()),
         std::runtime_error
     );
 }

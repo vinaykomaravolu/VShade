@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Platform/Keycode.hpp"
-#include "Platform/Mousecode.hpp"
+#include "platform/keycode.hpp"
+#include "platform/mousecode.hpp"
 
 #include <glm/vec2.hpp>
 
-namespace VShade {
+namespace vshade::platform {
 
 class Window;
 
@@ -68,4 +68,4 @@ private:
     static void on_mouse_scrolled(float x, float y);
 };
 
-} // namespace VShade
+} // namespace vshade::platform

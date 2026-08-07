@@ -7,7 +7,7 @@
 
 struct GLFWwindow;
 
-namespace VShade {
+namespace vshade::platform {
 
 /** @brief Settings used when creating a Window. */
 struct WindowConfig {
@@ -94,4 +94,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace VShade
+} // namespace vshade::platform

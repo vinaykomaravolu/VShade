@@ -1,13 +1,13 @@
-#include "Core/Application.hpp"
+#include "core/application.hpp"
 
-#include "Core/Assert.hpp"
-#include "Core/Log.hpp"
-#include "Core/Time.hpp"
+#include "core/assert.hpp"
+#include "core/log.hpp"
+#include "core/time.hpp"
 
 #include <stdexcept>
 #include <utility>
 
-namespace VShade {
+namespace vshade::core {
 
 Application::Application(ApplicationConfig config)
     : m_config(std::move(config)) {}
@@ -25,7 +25,7 @@ int Application::Run() {
     try {
         ENGINE_INFO("Starting VShade");
 
-        m_window = std::make_unique<Window>(m_config.window);
+        m_window = std::make_unique<platform::Window>(m_config.window);
         m_window->SetResizeCallback([this](const std::uint32_t width, const std::uint32_t height) {
             OnWindowResize(width, height);
         });
@@ -85,14 +85,14 @@ void Application::Close() {
     }
 }
 
-Window& Application::GetWindow() {
+platform::Window& Application::GetWindow() {
     ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
     return *m_window;
 }
 
-const Window& Application::GetWindow() const {
+const platform::Window& Application::GetWindow() const {
     ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
     return *m_window;
 }
 
-} // namespace VShade
+} // namespace vshade::core

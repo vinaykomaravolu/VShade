@@ -1,12 +1,12 @@
-#include <Core/Application.hpp>
-#include <Core/EntryPoint.hpp>
-#include <Core/Log.hpp>
-#include <Core/Time.hpp>
-#include <Platform/Input.hpp>
+#include <core/application.hpp>
+#include <core/entrypoint.hpp>
+#include <core/log.hpp>
+#include <core/time.hpp>
+#include <platform/input.hpp>
 
 namespace {
 
-class SandboxApplication final : public VShade::Application {
+class SandboxApplication final : public vshade::core::Application {
 public:
     SandboxApplication()
         : Application({
@@ -25,11 +25,15 @@ protected:
     }
 
     void OnUpdate(const float delta_time) override {
-        if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
+        if (vshade::platform::Input::is_key_pressed(vshade::platform::KeyCode::Escape)) {
             Close();
         }
 
-        GAME_INFO("Mouse position: {} {}", VShade::Input::mouse_position().x, VShade::Input::mouse_position().y);
+        GAME_INFO(
+            "Mouse position: {} {}",
+            vshade::platform::Input::mouse_position().x,
+            vshade::platform::Input::mouse_position().y
+        );
 
         static_cast<void>(delta_time);
     }
@@ -37,8 +41,8 @@ protected:
     void OnShutdown() override {
         GAME_INFO(
             "Sandbox stopped after {} frames ({:.2f} seconds)",
-            VShade::Time::FrameCount(),
-            VShade::Time::ElapsedTime()
+            vshade::core::Time::FrameCount(),
+            vshade::core::Time::ElapsedTime()
         );
     }
 };

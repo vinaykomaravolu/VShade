@@ -1,8 +1,8 @@
-#include "Core/Time.hpp"
+#include "core/time.hpp"
 
 #include <chrono>
 
-namespace VShade {
+namespace vshade::core {
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -43,4 +43,4 @@ void Time::Tick() noexcept {
     ++frame_count;
 }
 
-} // namespace VShade
+} // namespace vshade::core

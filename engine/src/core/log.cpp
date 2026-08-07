@@ -1,11 +1,11 @@
-#include "Core/Log.hpp"
+#include "core/log.hpp"
 
 #include <mutex>
 #include <utility>
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-namespace VShade {
+namespace vshade::core {
 namespace {
 
 std::mutex logger_mutex;
@@ -85,4 +85,4 @@ std::shared_ptr<spdlog::logger> Log::Game() {
     return game_logger;
 }
 
-} // namespace VShade
+} // namespace vshade::core

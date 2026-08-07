@@ -1,7 +1,7 @@
-#include "Platform/Window.hpp"
+#include "platform/window.hpp"
 
-#include "Core/Log.hpp"
-#include "Platform/Input.hpp"
+#include "core/log.hpp"
+#include "platform/input.hpp"
 
 #include <limits>
 #include <mutex>
@@ -11,7 +11,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace VShade {
+namespace vshade::platform {
 namespace {
 
 std::mutex glfw_mutex;
@@ -369,4 +369,4 @@ GLFWwindow* Window::NativeHandle() const noexcept {
     return m_impl->handle;
 }
 
-} // namespace VShade
+} // namespace vshade::platform

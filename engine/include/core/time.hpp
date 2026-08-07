@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace VShade {
+namespace vshade::core {
 
 class Application;
 
@@ -30,4 +30,4 @@ private:
     static void Tick() noexcept;
 };
 
-} // namespace VShade
+} // namespace vshade::core

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace VShade::FileSystem {
+namespace vshade::core::filesystem {
 
 /**
  * @brief Reads an entire file as text.
@@ -32,4 +32,4 @@ namespace VShade::FileSystem {
  */
 [[nodiscard]] std::string GetExtension(const std::filesystem::path& path);
 
-} // namespace VShade::FileSystem
+} // namespace vshade::core::filesystem

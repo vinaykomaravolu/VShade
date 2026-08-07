@@ -1,10 +1,10 @@
 set(VSHADE_SOURCES
-    src/Core/Application.cpp
-    src/Core/FileSystem.cpp
-    src/Core/Log.cpp
-    src/Core/Time.cpp
-    src/Platform/Input.cpp
-    src/Platform/Window.cpp
+    src/core/application.cpp
+    src/core/filesystem.cpp
+    src/core/log.cpp
+    src/core/time.cpp
+    src/platform/input.cpp
+    src/platform/window.cpp
 )
 
 # STATIC means the engine is copied into each executable that links it.
@@ -21,7 +21,7 @@ target_include_directories(VShadeEngine
 
 find_package(OpenGL REQUIRED)
 
-# spdlog appears in Log.hpp and GLM is part of the engine-facing math API.
+# spdlog appears in log.hpp and GLM is part of the engine-facing math API.
 # GLFW and the native OpenGL library remain implementation details.
 target_link_libraries(VShadeEngine
     PUBLIC
