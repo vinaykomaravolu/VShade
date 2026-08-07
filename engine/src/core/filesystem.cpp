@@ -8,16 +8,16 @@
 namespace vshade::core::filesystem {
 namespace {
 
-std::runtime_error ReadError(const std::filesystem::path& path) {
+std::runtime_error readError(const std::filesystem::path& path) {
     return std::runtime_error("Failed to read file: " + path.string());
 }
 
 } // namespace
 
-std::string ReadTextFile(const std::filesystem::path& path) {
+std::string readTextFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        throw ReadError(path);
+        throw readError(path);
     }
 
     return {
@@ -26,21 +26,21 @@ std::string ReadTextFile(const std::filesystem::path& path) {
     };
 }
 
-std::vector<std::uint8_t> ReadBinaryFile(const std::filesystem::path& path) {
+std::vector<std::uint8_t> readBinaryFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
-        throw ReadError(path);
+        throw readError(path);
     }
 
     const auto end = file.tellg();
     if (end < 0) {
-        throw ReadError(path);
+        throw readError(path);
     }
 
     const auto size = static_cast<std::uintmax_t>(static_cast<std::streamoff>(end));
     if (size > std::numeric_limits<std::size_t>::max() ||
         size > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max())) {
-        throw ReadError(path);
+        throw readError(path);
     }
 
     std::vector<std::uint8_t> data(static_cast<std::size_t>(size));
@@ -49,19 +49,19 @@ std::vector<std::uint8_t> ReadBinaryFile(const std::filesystem::path& path) {
     if (!data.empty()) {
         file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
         if (!file) {
-            throw ReadError(path);
+            throw readError(path);
         }
     }
 
     return data;
 }
 
-bool FileExists(const std::filesystem::path& path) noexcept {
+bool fileExists(const std::filesystem::path& path) noexcept {
     std::error_code error;
     return std::filesystem::is_regular_file(path, error);
 }
 
-std::string GetExtension(const std::filesystem::path& path) {
+std::string getExtension(const std::filesystem::path& path) {
     return path.extension().string();
 }
 

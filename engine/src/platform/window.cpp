@@ -1,7 +1,7 @@
 #include "platform/window.hpp"
 
 #include "core/log.hpp"
-#include "platform/input.hpp"
+#include "input/input.hpp"
 
 #include <limits>
 #include <mutex>
@@ -12,23 +12,27 @@
 #include <GLFW/glfw3.h>
 
 namespace vshade::platform {
+namespace input = ::vshade::input;
 namespace {
+
+using input::KeyCode;
+using input::MouseButton;
 
 std::mutex glfw_mutex;
 std::uint32_t window_count = 0;
 
-void glfw_error_callback(const int code, const char* description) {
+void glfwErrorCallback(const int code, const char* description) {
     ENGINE_ERROR("GLFW error {}: {}", code, description ? description : "unknown error");
 }
 
-int checked_dimension(const std::uint32_t value, const char* name) {
+int checkedDimension(const std::uint32_t value, const char* name) {
     if (value == 0 || value > static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
         throw std::invalid_argument(std::string(name) + " must fit in a positive int");
     }
     return static_cast<int>(value);
 }
 
-std::optional<KeyCode> to_key_code(const int key) {
+std::optional<KeyCode> toKeyCode(const int key) {
     if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) {
         return static_cast<KeyCode>(
             static_cast<int>(KeyCode::D0) + (key - GLFW_KEY_0)
@@ -105,7 +109,7 @@ std::optional<KeyCode> to_key_code(const int key) {
     }
 }
 
-std::optional<MouseButton> to_mouse_button(const int button) {
+std::optional<MouseButton> toMouseButton(const int button) {
     if (button < GLFW_MOUSE_BUTTON_1 || button > GLFW_MOUSE_BUTTON_8) {
         return std::nullopt;
     }
@@ -130,14 +134,14 @@ struct Window::Impl {
 
 Window::Window(const WindowConfig& config)
     : m_impl(std::make_unique<Impl>()) {
-    const auto width = checked_dimension(config.width, "Window width");
-    const auto height = checked_dimension(config.height, "Window height");
+    const auto width = checkedDimension(config.width, "Window width");
+    const auto height = checkedDimension(config.height, "Window height");
 
     {
         const std::scoped_lock lock(glfw_mutex);
 
         if (window_count == 0) {
-            glfwSetErrorCallback(glfw_error_callback);
+            glfwSetErrorCallback(glfwErrorCallback);
             if (glfwInit() != GLFW_TRUE) {
                 throw std::runtime_error("Failed to initialize GLFW");
             }
@@ -205,15 +209,15 @@ Window::Window(const WindowConfig& config)
             static_cast<void>(scancode);
             static_cast<void>(modifiers);
 
-            const auto key_code = to_key_code(key);
+            const auto key_code = toKeyCode(key);
             if (!key_code) {
                 return;
             }
 
             if (action == GLFW_PRESS) {
-                Input::on_key_pressed(*key_code);
+                input::Input::onKeyPressed(*key_code);
             } else if (action == GLFW_RELEASE) {
-                Input::on_key_released(*key_code);
+                input::Input::onKeyReleased(*key_code);
             }
         }
     );
@@ -223,25 +227,25 @@ Window::Window(const WindowConfig& config)
         [](GLFWwindow*, const int button, const int action, const int modifiers) {
             static_cast<void>(modifiers);
 
-            const auto mouse_button = to_mouse_button(button);
+            const auto mouse_button = toMouseButton(button);
             if (!mouse_button) {
                 return;
             }
 
             if (action == GLFW_PRESS) {
-                Input::on_mouse_button_pressed(*mouse_button);
+                input::Input::onMouseButtonPressed(*mouse_button);
             } else if (action == GLFW_RELEASE) {
-                Input::on_mouse_button_released(*mouse_button);
+                input::Input::onMouseButtonReleased(*mouse_button);
             }
         }
     );
 
     glfwSetCursorPosCallback(m_impl->handle, [](GLFWwindow*, const double x, const double y) {
-        Input::on_mouse_moved(static_cast<float>(x), static_cast<float>(y));
+        input::Input::onMouseMoved(static_cast<float>(x), static_cast<float>(y));
     });
 
     glfwSetScrollCallback(m_impl->handle, [](GLFWwindow*, const double x, const double y) {
-        Input::on_mouse_scrolled(static_cast<float>(x), static_cast<float>(y));
+        input::Input::onMouseScrolled(static_cast<float>(x), static_cast<float>(y));
     });
 
     int framebuffer_width = 0;
@@ -276,35 +280,35 @@ Window::~Window() {
     }
 }
 
-void Window::PollEvents() const {
-    Input::begin_frame();
+void Window::pollEvents() const {
+    input::Input::beginFrame();
     glfwPollEvents();
 }
 
-void Window::SwapBuffers() const {
+void Window::swapBuffers() const {
     glfwSwapBuffers(m_impl->handle);
 }
 
-void Window::Clear(const float red, const float green, const float blue, const float alpha) const {
+void Window::clear(const float red, const float green, const float blue, const float alpha) const {
     glfwMakeContextCurrent(m_impl->handle);
     glViewport(0, 0, static_cast<int>(m_impl->width), static_cast<int>(m_impl->height));
     glClearColor(red, green, blue, alpha);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-bool Window::ShouldClose() const {
+bool Window::shouldClose() const {
     return glfwWindowShouldClose(m_impl->handle) == GLFW_TRUE;
 }
 
-void Window::RequestClose() {
+void Window::requestClose() {
     glfwSetWindowShouldClose(m_impl->handle, GLFW_TRUE);
 }
 
-void Window::SetResizeCallback(ResizeCallback callback) {
+void Window::setResizeCallback(ResizeCallback callback) {
     m_impl->resize_callback = std::move(callback);
 }
 
-void Window::SetFullscreen(const bool fullscreen) {
+void Window::setFullscreen(const bool fullscreen) {
     if (fullscreen == m_impl->fullscreen) {
         return;
     }
@@ -343,29 +347,29 @@ void Window::SetFullscreen(const bool fullscreen) {
     m_impl->fullscreen = fullscreen;
 }
 
-bool Window::IsFullscreen() const {
+bool Window::isFullscreen() const {
     return m_impl->fullscreen;
 }
 
-void Window::SetVSync(const bool enabled) {
+void Window::setVSync(const bool enabled) {
     glfwMakeContextCurrent(m_impl->handle);
     glfwSwapInterval(enabled ? 1 : 0);
     m_impl->vsync = enabled;
 }
 
-bool Window::IsVSync() const noexcept {
+bool Window::isVSync() const noexcept {
     return m_impl->vsync;
 }
 
-std::uint32_t Window::Width() const noexcept {
+std::uint32_t Window::width() const noexcept {
     return m_impl->width;
 }
 
-std::uint32_t Window::Height() const noexcept {
+std::uint32_t Window::height() const noexcept {
     return m_impl->height;
 }
 
-GLFWwindow* Window::NativeHandle() const noexcept {
+GLFWwindow* Window::nativeHandle() const noexcept {
     return m_impl->handle;
 }
 

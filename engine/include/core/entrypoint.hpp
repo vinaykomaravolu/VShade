@@ -23,7 +23,7 @@
                                                                                 \
         try {                                                                   \
             application_type application;                                      \
-            return application.Run();                                           \
+            return application.run();                                           \
         } catch (const std::exception& error) {                                 \
             std::cerr << "Fatal error: " << error.what() << '\n';               \
             return 1;                                                           \

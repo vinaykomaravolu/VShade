@@ -7,7 +7,7 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - resize callbacks, fullscreen switching, and VSync controls;
 - engine and game logging through spdlog;
 - assertions and basic filesystem helpers;
-- GLM as the public math dependency;
+- a small `vshade::math` API backed by GLM;
 - a static engine library;
 - a minimal sandbox application.
 
@@ -84,7 +84,7 @@ A game supplies behavior by deriving from `Application`:
 ```cpp
 class MyGame final : public vshade::core::Application {
 protected:
-    void OnUpdate(float deltaTime) override {
+    void onUpdate(float deltaTime) override {
         // Update the active scene here.
     }
 };
@@ -95,15 +95,15 @@ SHADE_ENGINE_MAIN(MyGame)
 Input is stored once per frame, so it does not need a `Window` argument:
 
 ```cpp
-if (vshade::platform::Input::is_key_pressed(vshade::platform::KeyCode::Escape)) {
-    Close();
+if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::Escape)) {
+    close();
 }
 
-const glm::vec2 movement = vshade::platform::Input::mouse_delta();
+const glm::vec2 movement = vshade::input::Input::mouseDelta();
 ```
 
-Use `is_key_down` for a held key, `is_key_pressed` for its first frame down,
-and `is_key_released` for its first frame up. Mouse buttons provide the same
+Use `isKeyDown` for a held key, `isKeyPressed` for its first frame down,
+and `isKeyReleased` for its first frame up. Mouse buttons provide the same
 three states.
 
 Other core systems have focused headers:
@@ -114,9 +114,14 @@ Other core systems have focused headers:
 #include <core/filesystem.hpp>
 #include <core/log.hpp>
 #include <core/time.hpp>
-#include <platform/input.hpp>
-#include <platform/keycode.hpp>
-#include <platform/mousecode.hpp>
+#include <math/math.hpp>
+#include <math/matrix.hpp>
+#include <math/quaternion.hpp>
+#include <math/transform.hpp>
+#include <math/vector.hpp>
+#include <input/input.hpp>
+#include <input/keycode.hpp>
+#include <input/mousecode.hpp>
 #include <platform/window.hpp>
 ```
 

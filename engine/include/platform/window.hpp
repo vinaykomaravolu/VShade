@@ -45,10 +45,10 @@ public:
     Window& operator=(Window&&) = delete;
 
     /** @brief Clears transient input state and processes pending platform events. */
-    void PollEvents() const;
+    void pollEvents() const;
 
     /** @brief Presents the current back buffer. */
-    void SwapBuffers() const;
+    void swapBuffers() const;
 
     /**
      * @brief Clears the color and depth buffers with the supplied color.
@@ -57,37 +57,37 @@ public:
      * @param blue Blue channel in the range 0 to 1.
      * @param alpha Alpha channel in the range 0 to 1.
      */
-    void Clear(float red, float green, float blue, float alpha = 1.0F) const;
+    void clear(float red, float green, float blue, float alpha = 1.0F) const;
 
     /** @brief Returns whether the user or application requested the window to close. */
-    [[nodiscard]] bool ShouldClose() const;
+    [[nodiscard]] bool shouldClose() const;
 
-    /** @brief Marks the window so ShouldClose() returns true. */
-    void RequestClose();
+    /** @brief Marks the window so shouldClose() returns true. */
+    void requestClose();
 
     /** @brief Replaces the callback invoked after framebuffer resize events. */
-    void SetResizeCallback(ResizeCallback callback);
+    void setResizeCallback(ResizeCallback callback);
 
     /** @brief Switches between primary-monitor fullscreen and windowed mode. */
-    void SetFullscreen(bool fullscreen);
+    void setFullscreen(bool fullscreen);
 
     /** @brief Returns whether the window is currently fullscreen. */
-    [[nodiscard]] bool IsFullscreen() const;
+    [[nodiscard]] bool isFullscreen() const;
 
     /** @brief Enables or disables vertical synchronization for this context. */
-    void SetVSync(bool enabled);
+    void setVSync(bool enabled);
 
     /** @brief Returns whether vertical synchronization is enabled. */
-    [[nodiscard]] bool IsVSync() const noexcept;
+    [[nodiscard]] bool isVSync() const noexcept;
 
     /** @brief Returns the current framebuffer width in pixels. */
-    [[nodiscard]] std::uint32_t Width() const noexcept;
+    [[nodiscard]] std::uint32_t width() const noexcept;
 
     /** @brief Returns the current framebuffer height in pixels. */
-    [[nodiscard]] std::uint32_t Height() const noexcept;
+    [[nodiscard]] std::uint32_t height() const noexcept;
 
     /** @brief Returns the underlying GLFW handle for advanced platform integration. */
-    [[nodiscard]] GLFWwindow* NativeHandle() const noexcept;
+    [[nodiscard]] GLFWwindow* nativeHandle() const noexcept;
 
 private:
     struct Impl;

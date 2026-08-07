@@ -8,11 +8,11 @@ namespace {
 class LogSession final {
 public:
     LogSession() {
-        vshade::core::Log::Shutdown();
+        vshade::core::Log::shutdown();
     }
 
     ~LogSession() {
-        vshade::core::Log::Shutdown();
+        vshade::core::Log::shutdown();
     }
 
     LogSession(const LogSession&) = delete;
@@ -24,9 +24,9 @@ public:
 TEST_CASE("Engine and game loggers are distinct", "[log]") {
     const LogSession session;
 
-    vshade::core::Log::Initialize();
-    const auto engine = vshade::core::Log::Engine();
-    const auto game = vshade::core::Log::Game();
+    vshade::core::Log::initialize();
+    const auto engine = vshade::core::Log::engine();
+    const auto game = vshade::core::Log::game();
 
     REQUIRE(engine);
     REQUIRE(game);
@@ -38,36 +38,36 @@ TEST_CASE("Engine and game loggers are distinct", "[log]") {
 TEST_CASE("Logging initialization is idempotent", "[log]") {
     const LogSession session;
 
-    vshade::core::Log::Initialize();
-    const auto first_engine = vshade::core::Log::Engine();
-    const auto first_game = vshade::core::Log::Game();
+    vshade::core::Log::initialize();
+    const auto first_engine = vshade::core::Log::engine();
+    const auto first_game = vshade::core::Log::game();
 
-    vshade::core::Log::Initialize();
+    vshade::core::Log::initialize();
 
-    CHECK(vshade::core::Log::Engine() == first_engine);
-    CHECK(vshade::core::Log::Game() == first_game);
+    CHECK(vshade::core::Log::engine() == first_engine);
+    CHECK(vshade::core::Log::game() == first_game);
 }
 
 TEST_CASE("Log level is applied to both loggers", "[log]") {
     const LogSession session;
 
-    vshade::core::Log::SetLevel(spdlog::level::warn);
+    vshade::core::Log::setLevel(spdlog::level::warn);
 
-    CHECK(vshade::core::Log::Engine()->level() == spdlog::level::warn);
-    CHECK(vshade::core::Log::Game()->level() == spdlog::level::warn);
+    CHECK(vshade::core::Log::engine()->level() == spdlog::level::warn);
+    CHECK(vshade::core::Log::game()->level() == spdlog::level::warn);
 }
 
 TEST_CASE("Loggers can be recreated after shutdown", "[log]") {
     const LogSession session;
 
-    vshade::core::Log::Initialize();
-    REQUIRE(vshade::core::Log::Engine());
-    REQUIRE(vshade::core::Log::Game());
+    vshade::core::Log::initialize();
+    REQUIRE(vshade::core::Log::engine());
+    REQUIRE(vshade::core::Log::game());
 
-    vshade::core::Log::Shutdown();
+    vshade::core::Log::shutdown();
 
     CHECK_FALSE(spdlog::get("VShade"));
     CHECK_FALSE(spdlog::get("Game"));
-    CHECK(vshade::core::Log::Engine());
-    CHECK(vshade::core::Log::Game());
+    CHECK(vshade::core::Log::engine());
+    CHECK(vshade::core::Log::game());
 }

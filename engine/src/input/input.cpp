@@ -1,10 +1,10 @@
-#include "platform/input.hpp"
+#include "input/input.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 
-namespace vshade::platform {
+namespace vshade::input {
 namespace {
 
 constexpr auto key_count = static_cast<std::size_t>(KeyCode::Count);
@@ -31,53 +31,53 @@ bool has_mouse_position = false;
     return static_cast<std::size_t>(button);
 }
 
-[[nodiscard]] bool is_valid(const KeyCode key) {
+[[nodiscard]] bool isValid(const KeyCode key) {
     return key != KeyCode::Unknown && index(key) < key_count;
 }
 
-[[nodiscard]] bool is_valid(const MouseButton button) {
+[[nodiscard]] bool isValid(const MouseButton button) {
     return index(button) < mouse_button_count;
 }
 
 } // namespace
 
-bool Input::is_key_down(const KeyCode key) {
-    return is_valid(key) && keys_down[index(key)];
+bool Input::isKeyDown(const KeyCode key) {
+    return isValid(key) && keys_down[index(key)];
 }
 
-bool Input::is_key_pressed(const KeyCode key) {
-    return is_valid(key) && keys_pressed[index(key)];
+bool Input::isKeyPressed(const KeyCode key) {
+    return isValid(key) && keys_pressed[index(key)];
 }
 
-bool Input::is_key_released(const KeyCode key) {
-    return is_valid(key) && keys_released[index(key)];
+bool Input::isKeyReleased(const KeyCode key) {
+    return isValid(key) && keys_released[index(key)];
 }
 
-bool Input::is_mouse_button_down(const MouseButton button) {
-    return is_valid(button) && mouse_buttons_down[index(button)];
+bool Input::isMouseButtonDown(const MouseButton button) {
+    return isValid(button) && mouse_buttons_down[index(button)];
 }
 
-bool Input::is_mouse_button_pressed(const MouseButton button) {
-    return is_valid(button) && mouse_buttons_pressed[index(button)];
+bool Input::isMouseButtonPressed(const MouseButton button) {
+    return isValid(button) && mouse_buttons_pressed[index(button)];
 }
 
-bool Input::is_mouse_button_released(const MouseButton button) {
-    return is_valid(button) && mouse_buttons_released[index(button)];
+bool Input::isMouseButtonReleased(const MouseButton button) {
+    return isValid(button) && mouse_buttons_released[index(button)];
 }
 
-glm::vec2 Input::mouse_position() {
+glm::vec2 Input::mousePosition() {
     return current_mouse_position;
 }
 
-glm::vec2 Input::mouse_delta() {
+glm::vec2 Input::mouseDelta() {
     return current_mouse_delta;
 }
 
-glm::vec2 Input::scroll_delta() {
+glm::vec2 Input::scrollDelta() {
     return current_scroll_delta;
 }
 
-void Input::begin_frame() {
+void Input::beginFrame() {
     std::fill(keys_pressed.begin(), keys_pressed.end(), false);
     std::fill(keys_released.begin(), keys_released.end(), false);
     std::fill(mouse_buttons_pressed.begin(), mouse_buttons_pressed.end(), false);
@@ -87,8 +87,8 @@ void Input::begin_frame() {
     current_scroll_delta = {};
 }
 
-void Input::on_key_pressed(const KeyCode key) {
-    if (!is_valid(key)) {
+void Input::onKeyPressed(const KeyCode key) {
+    if (!isValid(key)) {
         return;
     }
 
@@ -97,8 +97,8 @@ void Input::on_key_pressed(const KeyCode key) {
     keys_down[key_index] = true;
 }
 
-void Input::on_key_released(const KeyCode key) {
-    if (!is_valid(key)) {
+void Input::onKeyReleased(const KeyCode key) {
+    if (!isValid(key)) {
         return;
     }
 
@@ -107,8 +107,8 @@ void Input::on_key_released(const KeyCode key) {
     keys_down[key_index] = false;
 }
 
-void Input::on_mouse_button_pressed(const MouseButton button) {
-    if (!is_valid(button)) {
+void Input::onMouseButtonPressed(const MouseButton button) {
+    if (!isValid(button)) {
         return;
     }
 
@@ -117,8 +117,8 @@ void Input::on_mouse_button_pressed(const MouseButton button) {
     mouse_buttons_down[button_index] = true;
 }
 
-void Input::on_mouse_button_released(const MouseButton button) {
-    if (!is_valid(button)) {
+void Input::onMouseButtonReleased(const MouseButton button) {
+    if (!isValid(button)) {
         return;
     }
 
@@ -127,7 +127,7 @@ void Input::on_mouse_button_released(const MouseButton button) {
     mouse_buttons_down[button_index] = false;
 }
 
-void Input::on_mouse_moved(const float x, const float y) {
+void Input::onMouseMoved(const float x, const float y) {
     const glm::vec2 new_position{x, y};
     if (has_mouse_position) {
         current_mouse_delta += new_position - current_mouse_position;
@@ -137,8 +137,8 @@ void Input::on_mouse_moved(const float x, const float y) {
     has_mouse_position = true;
 }
 
-void Input::on_mouse_scrolled(const float x, const float y) {
+void Input::onMouseScrolled(const float x, const float y) {
     current_scroll_delta += glm::vec2{x, y};
 }
 
-} // namespace vshade::platform
+} // namespace vshade::input

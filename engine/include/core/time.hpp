@@ -12,22 +12,22 @@ public:
     Time() = delete;
 
     /** @brief Returns the duration of the most recently started frame in seconds. */
-    [[nodiscard]] static float DeltaTime() noexcept;
+    [[nodiscard]] static float deltaTime() noexcept;
 
     /** @brief Returns seconds elapsed since the application main loop started. */
-    [[nodiscard]] static double ElapsedTime() noexcept;
+    [[nodiscard]] static double elapsedTime() noexcept;
 
     /** @brief Returns the number of frames started during this application run. */
-    [[nodiscard]] static std::uint64_t FrameCount() noexcept;
+    [[nodiscard]] static std::uint64_t frameCount() noexcept;
 
 private:
     friend class Application;
 
     /** @brief Resets all timing values for a new application run. */
-    static void Reset() noexcept;
+    static void reset() noexcept;
 
     /** @brief Advances the timing values at the start of a frame. */
-    static void Tick() noexcept;
+    static void tick() noexcept;
 };
 
 } // namespace vshade::core

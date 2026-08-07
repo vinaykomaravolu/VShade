@@ -12,7 +12,7 @@ std::mutex logger_mutex;
 std::shared_ptr<spdlog::logger> engine_logger;
 std::shared_ptr<spdlog::logger> game_logger;
 
-void initialize_locked() {
+void initializeLocked() {
     if (engine_logger && game_logger) {
         return;
     }
@@ -43,12 +43,12 @@ void initialize_locked() {
 
 } // namespace
 
-void Log::Initialize() {
+void Log::initialize() {
     const std::scoped_lock lock(logger_mutex);
-    initialize_locked();
+    initializeLocked();
 }
 
-void Log::Shutdown() {
+void Log::shutdown() {
     const std::scoped_lock lock(logger_mutex);
 
     // Only remove VShade-owned loggers. Do not shut down the host application's
@@ -66,22 +66,22 @@ void Log::Shutdown() {
     }
 }
 
-void Log::SetLevel(const spdlog::level::level_enum level) {
+void Log::setLevel(const spdlog::level::level_enum level) {
     const std::scoped_lock lock(logger_mutex);
-    initialize_locked();
+    initializeLocked();
     engine_logger->set_level(level);
     game_logger->set_level(level);
 }
 
-std::shared_ptr<spdlog::logger> Log::Engine() {
+std::shared_ptr<spdlog::logger> Log::engine() {
     const std::scoped_lock lock(logger_mutex);
-    initialize_locked();
+    initializeLocked();
     return engine_logger;
 }
 
-std::shared_ptr<spdlog::logger> Log::Game() {
+std::shared_ptr<spdlog::logger> Log::game() {
     const std::scoped_lock lock(logger_mutex);
-    initialize_locked();
+    initializeLocked();
     return game_logger;
 }
 

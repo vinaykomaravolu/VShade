@@ -37,41 +37,41 @@ public:
      * @return Zero after a normal shutdown.
      * @throws std::exception If startup or a lifecycle hook fails.
      */
-    int Run();
+    int run();
 
     /** @brief Requests that the main loop stop after the current frame. */
-    void Close();
+    void close();
 
     /** @brief Returns the main window while the application is running. */
-    [[nodiscard]] platform::Window& GetWindow();
+    [[nodiscard]] platform::Window& getWindow();
 
     /** @brief Returns the main window while the application is running. */
-    [[nodiscard]] const platform::Window& GetWindow() const;
+    [[nodiscard]] const platform::Window& getWindow() const;
 
 protected:
     /** @brief Called once after the window and time system are ready. */
-    virtual void OnStart() {}
+    virtual void onStart() {}
 
     /**
      * @brief Called once per frame for game and scene updates.
      * @param delta_time Seconds elapsed since the previous frame.
      */
-    virtual void OnUpdate(float delta_time) {
+    virtual void onUpdate(float delta_time) {
         static_cast<void>(delta_time);
     }
 
     /** @brief Reserved for the future renderer integration. */
-    virtual void OnRender() {}
+    virtual void onRender() {}
 
     /** @brief Called once before application resources are released. */
-    virtual void OnShutdown() {}
+    virtual void onShutdown() {}
 
     /**
      * @brief Called when the framebuffer size changes.
      * @param width New framebuffer width in pixels.
      * @param height New framebuffer height in pixels.
      */
-    virtual void OnWindowResize(std::uint32_t width, std::uint32_t height) {
+    virtual void onWindowResize(std::uint32_t width, std::uint32_t height) {
         static_cast<void>(width);
         static_cast<void>(height);
     }

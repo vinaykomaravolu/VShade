@@ -15,19 +15,19 @@ std::uint64_t frame_count = 0;
 
 } // namespace
 
-float Time::DeltaTime() noexcept {
+float Time::deltaTime() noexcept {
     return delta_time;
 }
 
-double Time::ElapsedTime() noexcept {
+double Time::elapsedTime() noexcept {
     return elapsed_time;
 }
 
-std::uint64_t Time::FrameCount() noexcept {
+std::uint64_t Time::frameCount() noexcept {
     return frame_count;
 }
 
-void Time::Reset() noexcept {
+void Time::reset() noexcept {
     start_time = Clock::now();
     previous_frame_time = start_time;
     delta_time = 0.0F;
@@ -35,7 +35,7 @@ void Time::Reset() noexcept {
     frame_count = 0;
 }
 
-void Time::Tick() noexcept {
+void Time::tick() noexcept {
     const auto now = Clock::now();
     delta_time = std::chrono::duration<float>(now - previous_frame_time).count();
     elapsed_time = std::chrono::duration<double>(now - start_time).count();

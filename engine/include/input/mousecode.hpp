@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace vshade::platform {
+namespace vshade::input {
 
 /** @brief Engine-independent mouse button identifiers. */
 enum class MouseButton : std::uint8_t {
@@ -26,4 +26,4 @@ enum class MouseButton : std::uint8_t {
     Middle = Button3
 };
 
-} // namespace vshade::platform
+} // namespace vshade::input

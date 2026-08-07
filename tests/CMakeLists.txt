@@ -1,6 +1,7 @@
 add_executable(VShadeTests
     filesystem_tests.cpp
     log_tests.cpp
+    math_tests.cpp
 )
 
 # Tests consume the same public engine target as a real game. Catch2 supplies

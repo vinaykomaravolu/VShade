@@ -3,7 +3,11 @@ set(VSHADE_SOURCES
     src/core/filesystem.cpp
     src/core/log.cpp
     src/core/time.cpp
-    src/platform/input.cpp
+    src/input/input.cpp
+    src/math/matrix.cpp
+    src/math/quaternion.cpp
+    src/math/transform.cpp
+    src/math/vector.cpp
     src/platform/window.cpp
 )
 

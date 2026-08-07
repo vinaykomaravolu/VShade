@@ -14,57 +14,57 @@ Application::Application(ApplicationConfig config)
 
 Application::~Application() = default;
 
-int Application::Run() {
+int Application::run() {
     if (m_running) {
         throw std::logic_error("Application is already running");
     }
 
-    Log::Initialize();
+    Log::initialize();
     bool shutdown_needed = false;
 
     try {
         ENGINE_INFO("Starting VShade");
 
         m_window = std::make_unique<platform::Window>(m_config.window);
-        m_window->SetResizeCallback([this](const std::uint32_t width, const std::uint32_t height) {
-            OnWindowResize(width, height);
+        m_window->setResizeCallback([this](const std::uint32_t width, const std::uint32_t height) {
+            onWindowResize(width, height);
         });
 
-        Time::Reset();
+        Time::reset();
         m_running = true;
-        OnStart();
+        onStart();
         shutdown_needed = true;
 
-        while (m_running && !m_window->ShouldClose()) {
-            m_window->PollEvents();
-            Time::Tick();
+        while (m_running && !m_window->shouldClose()) {
+            m_window->pollEvents();
+            Time::tick();
 
             // Later: accumulate delta time and call a fixed update at 1 / 60
             // seconds for deterministic physics and other fixed-step systems.
 
             // The application will forward these calls to its active scene
             // once the scene system exists.
-            OnUpdate(Time::DeltaTime());
+            onUpdate(Time::deltaTime());
 
             // Later: render the active scene here once the renderer and scene
             // systems exist.
 
-            m_window->SwapBuffers();
+            m_window->swapBuffers();
         }
 
         shutdown_needed = false;
-        OnShutdown();
+        onShutdown();
 
         m_running = false;
         m_window.reset();
-        ENGINE_INFO("VShade shutdown complete after {} frames", Time::FrameCount());
-        Log::Shutdown();
+        ENGINE_INFO("VShade shutdown complete after {} frames", Time::frameCount());
+        Log::shutdown();
         return 0;
     } catch (...) {
         if (shutdown_needed) {
             shutdown_needed = false;
             try {
-                OnShutdown();
+                onShutdown();
             } catch (...) {
                 ENGINE_ERROR("Application shutdown hook threw an exception");
             }
@@ -73,24 +73,24 @@ int Application::Run() {
         m_running = false;
         m_window.reset();
         ENGINE_ERROR("VShade stopped because of an unhandled exception");
-        Log::Shutdown();
+        Log::shutdown();
         throw;
     }
 }
 
-void Application::Close() {
+void Application::close() {
     m_running = false;
     if (m_window) {
-        m_window->RequestClose();
+        m_window->requestClose();
     }
 }
 
-platform::Window& Application::GetWindow() {
+platform::Window& Application::getWindow() {
     ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
     return *m_window;
 }
 
-const platform::Window& Application::GetWindow() const {
+const platform::Window& Application::getWindow() const {
     ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
     return *m_window;
 }
