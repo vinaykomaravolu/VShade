@@ -12,6 +12,83 @@ GLenum bufferUsage(const BufferUsage usage) {
     throw std::invalid_argument("Unknown buffer usage");
 }
 
+GLenum blendFactor(const BlendFactor factor) {
+    switch (factor) {
+        case BlendFactor::Zero: return GL_ZERO;
+        case BlendFactor::One: return GL_ONE;
+        case BlendFactor::SourceColor: return GL_SRC_COLOR;
+        case BlendFactor::OneMinusSourceColor: return GL_ONE_MINUS_SRC_COLOR;
+        case BlendFactor::DestinationColor: return GL_DST_COLOR;
+        case BlendFactor::OneMinusDestinationColor: return GL_ONE_MINUS_DST_COLOR;
+        case BlendFactor::SourceAlpha: return GL_SRC_ALPHA;
+        case BlendFactor::OneMinusSourceAlpha: return GL_ONE_MINUS_SRC_ALPHA;
+        case BlendFactor::DestinationAlpha: return GL_DST_ALPHA;
+        case BlendFactor::OneMinusDestinationAlpha: return GL_ONE_MINUS_DST_ALPHA;
+    }
+    throw std::invalid_argument("Unknown blend factor");
+}
+
+GLbitfield clearFlags(const ClearFlags flags) {
+    constexpr auto knownFlags = ClearFlags::Color | ClearFlags::Depth | ClearFlags::Stencil;
+    const auto value = static_cast<std::uint8_t>(flags);
+    const auto knownValue = static_cast<std::uint8_t>(knownFlags);
+    if ((value & static_cast<std::uint8_t>(~knownValue)) != 0) {
+        throw std::invalid_argument("Unknown framebuffer clear flag");
+    }
+
+    GLbitfield result = 0;
+    if ((flags & ClearFlags::Color) == ClearFlags::Color) {
+        result |= GL_COLOR_BUFFER_BIT;
+    }
+    if ((flags & ClearFlags::Depth) == ClearFlags::Depth) {
+        result |= GL_DEPTH_BUFFER_BIT;
+    }
+    if ((flags & ClearFlags::Stencil) == ClearFlags::Stencil) {
+        result |= GL_STENCIL_BUFFER_BIT;
+    }
+    return result;
+}
+
+GLenum cullFace(const CullFace face) {
+    switch (face) {
+        case CullFace::Front: return GL_FRONT;
+        case CullFace::Back: return GL_BACK;
+        case CullFace::FrontAndBack: return GL_FRONT_AND_BACK;
+    }
+    throw std::invalid_argument("Unknown cull face");
+}
+
+GLenum depthFunction(const DepthFunction function) {
+    switch (function) {
+        case DepthFunction::Never: return GL_NEVER;
+        case DepthFunction::Less: return GL_LESS;
+        case DepthFunction::Equal: return GL_EQUAL;
+        case DepthFunction::LessOrEqual: return GL_LEQUAL;
+        case DepthFunction::Greater: return GL_GREATER;
+        case DepthFunction::NotEqual: return GL_NOTEQUAL;
+        case DepthFunction::GreaterOrEqual: return GL_GEQUAL;
+        case DepthFunction::Always: return GL_ALWAYS;
+    }
+    throw std::invalid_argument("Unknown depth function");
+}
+
+GLenum frontFace(const FrontFace winding) {
+    switch (winding) {
+        case FrontFace::Clockwise: return GL_CW;
+        case FrontFace::CounterClockwise: return GL_CCW;
+    }
+    throw std::invalid_argument("Unknown front-face winding");
+}
+
+GLenum polygonMode(const PolygonMode mode) {
+    switch (mode) {
+        case PolygonMode::Fill: return GL_FILL;
+        case PolygonMode::Line: return GL_LINE;
+        case PolygonMode::Point: return GL_POINT;
+    }
+    throw std::invalid_argument("Unknown polygon mode");
+}
+
 GLenum primitiveTopology(const PrimitiveTopology topology) {
     switch (topology) {
         case PrimitiveTopology::Triangles: return GL_TRIANGLES;

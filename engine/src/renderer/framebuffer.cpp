@@ -77,7 +77,7 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept {
 
 void Framebuffer::bind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_rendererId);
-    glViewport(0, 0, checkedDimension(m_width), checkedDimension(m_height));
+    Renderer::setViewport(0, 0, m_width, m_height);
 }
 
 void Framebuffer::unbind() {

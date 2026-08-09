@@ -31,11 +31,33 @@ GLsizei checkedDimension(const std::uint32_t value) {
     return static_cast<GLsizei>(value);
 }
 
-GLsizei checkedIndexCount(const std::size_t count) {
+GLint checkedViewportPosition(const std::uint32_t value) {
+    if (value > static_cast<std::uint32_t>(std::numeric_limits<GLint>::max())) {
+        throw std::overflow_error("Viewport position is too large for OpenGL");
+    }
+    return static_cast<GLint>(value);
+}
+
+GLsizei checkedDrawCount(const std::size_t count) {
     if (count > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max())) {
-        throw std::overflow_error("Index count is too large for OpenGL");
+        throw std::overflow_error("Draw count is too large for OpenGL");
     }
     return static_cast<GLsizei>(count);
+}
+
+GLint checkedFirstVertex(const std::size_t firstVertex) {
+    if (firstVertex > static_cast<std::size_t>(std::numeric_limits<GLint>::max())) {
+        throw std::overflow_error("First vertex is too large for OpenGL");
+    }
+    return static_cast<GLint>(firstVertex);
+}
+
+void setCapability(const GLenum capability, const bool enabled) {
+    if (enabled) {
+        glEnable(capability);
+    } else {
+        glDisable(capability);
+    }
 }
 
 } // namespace
@@ -54,9 +76,15 @@ void Renderer::initialize() {
     }
 
     initialized = true;
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_DEPTH_TEST);
+    setBlending(true);
+    setBlendFunction(BlendFactor::SourceAlpha, BlendFactor::OneMinusSourceAlpha);
+    setFaceCulling(false);
+    setCullFace(CullFace::Back);
+    setFrontFace(FrontFace::CounterClockwise);
+    setPolygonMode(PolygonMode::Fill);
+    setDepthTesting(true);
+    setDepthFunction(DepthFunction::Less);
+    setDepthWrite(true);
 
     const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
     const auto* device = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
@@ -86,9 +114,19 @@ void Renderer::beginFrame() noexcept {
     renderStats = {};
 }
 
-void Renderer::setViewport(const std::uint32_t width, const std::uint32_t height) {
+void Renderer::setViewport(
+    const std::uint32_t x,
+    const std::uint32_t y,
+    const std::uint32_t width,
+    const std::uint32_t height
+) {
     requireInitialized();
-    glViewport(0, 0, checkedDimension(width), checkedDimension(height));
+    glViewport(
+        checkedViewportPosition(x),
+        checkedViewportPosition(y),
+        checkedDimension(width),
+        checkedDimension(height)
+    );
 }
 
 void Renderer::setClearColor(const math::Vec4& color) {
@@ -96,27 +134,59 @@ void Renderer::setClearColor(const math::Vec4& color) {
     glClearColor(color.r, color.g, color.b, color.a);
 }
 
-void Renderer::clear() {
+void Renderer::clear(const ClearFlags flags) {
     requireInitialized();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(opengl::clearFlags(flags));
+}
+
+void Renderer::setBlending(const bool enabled) {
+    requireInitialized();
+    setCapability(GL_BLEND, enabled);
+}
+
+void Renderer::setBlendFunction(const BlendFactor source, const BlendFactor destination) {
+    requireInitialized();
+    glBlendFunc(opengl::blendFactor(source), opengl::blendFactor(destination));
+}
+
+void Renderer::setFaceCulling(const bool enabled) {
+    requireInitialized();
+    setCapability(GL_CULL_FACE, enabled);
+}
+
+void Renderer::setCullFace(const CullFace face) {
+    requireInitialized();
+    glCullFace(opengl::cullFace(face));
+}
+
+void Renderer::setFrontFace(const FrontFace winding) {
+    requireInitialized();
+    glFrontFace(opengl::frontFace(winding));
+}
+
+void Renderer::setPolygonMode(const PolygonMode mode) {
+    requireInitialized();
+    glPolygonMode(GL_FRONT_AND_BACK, opengl::polygonMode(mode));
 }
 
 void Renderer::setDepthTesting(const bool enabled) {
     requireInitialized();
-    if (enabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
+    setCapability(GL_DEPTH_TEST, enabled);
+}
+
+void Renderer::setDepthFunction(const DepthFunction function) {
+    requireInitialized();
+    glDepthFunc(opengl::depthFunction(function));
+}
+
+void Renderer::setDepthWrite(const bool enabled) {
+    requireInitialized();
+    glDepthMask(enabled ? GL_TRUE : GL_FALSE);
 }
 
 void Renderer::setDithering(const bool enabled) {
     requireInitialized();
-    if (enabled) {
-        glEnable(GL_DITHER);
-    } else {
-        glDisable(GL_DITHER);
-    }
+    setCapability(GL_DITHER, enabled);
 }
 
 void Renderer::drawIndexed(
@@ -138,13 +208,50 @@ void Renderer::drawIndexed(
     vertexArray.bind();
     glDrawElements(
         opengl::primitiveTopology(topology),
-        checkedIndexCount(drawCount),
+        checkedDrawCount(drawCount),
         GL_UNSIGNED_INT,
         nullptr
     );
 
     ++renderStats.drawCalls;
     renderStats.indexCount += drawCount;
+}
+
+void Renderer::drawArrays(
+    const VertexArray& vertexArray,
+    const PrimitiveTopology topology,
+    const std::size_t vertexCount,
+    const std::size_t firstVertex
+) {
+    requireInitialized();
+    if (vertexArray.vertexBuffers().empty()) {
+        throw std::invalid_argument("Array drawing requires a vertex buffer");
+    }
+    if (vertexCount == 0) {
+        throw std::invalid_argument("Array drawing requires at least one vertex");
+    }
+    if (firstVertex > std::numeric_limits<std::size_t>::max() - vertexCount) {
+        throw std::overflow_error("Array draw range is too large");
+    }
+
+    const std::size_t endVertex = firstVertex + vertexCount;
+    for (const auto& vertexBuffer : vertexArray.vertexBuffers()) {
+        const std::size_t stride = vertexBuffer->layout().stride();
+        const std::size_t availableVertices = vertexBuffer->size() / stride;
+        if (endVertex > availableVertices) {
+            throw std::out_of_range("Array draw range exceeds a vertex buffer");
+        }
+    }
+
+    vertexArray.bind();
+    glDrawArrays(
+        opengl::primitiveTopology(topology),
+        checkedFirstVertex(firstVertex),
+        checkedDrawCount(vertexCount)
+    );
+
+    ++renderStats.drawCalls;
+    renderStats.vertexCount += vertexCount;
 }
 
 void Renderer::draw(const Mesh& mesh) {

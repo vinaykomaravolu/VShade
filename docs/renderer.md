@@ -63,9 +63,9 @@ generated loader code, and backend conversion helpers remain private in
 `Renderer` owns renderer-global operations:
 
 - OpenGL function loading and default state;
-- viewport and clear-color control;
-- depth testing;
-- indexed draw calls;
+- regional viewport and selective framebuffer clearing;
+- blending, face-culling, polygon, and depth state;
+- indexed and non-indexed draw calls;
 - per-frame rendering statistics.
 
 `Application` calls `Renderer::initialize()`, `Renderer::beginFrame()`, and
@@ -79,6 +79,9 @@ Contains engine-facing enums for:
 - shader vertex data types;
 - static and dynamic buffer usage;
 - triangle, line, and point topology;
+- framebuffer clear flags;
+- blend factors, cull faces, winding, and polygon modes;
+- depth comparison functions;
 - texture formats, filters, and wrapping.
 
 The renderer implementation converts these enums to OpenGL values privately.
@@ -188,13 +191,42 @@ application are destroyed.
 
 ## Basic rendering usage
 
-The sandbox currently clears the framebuffer from `onRender()`:
+The sandbox contains a complete colored-triangle example. It creates its
+buffers, vertex layout, vertex array, and file-backed shader in `onStart()`.
+Each frame binds that shader and submits the indexed triangle:
 
 ```cpp
 void onRender() override {
     vshade::renderer::Renderer::setClearColor({0.05F, 0.06F, 0.09F, 1.0F});
     vshade::renderer::Renderer::clear();
+
+    m_shader->bind();
+    vshade::renderer::Renderer::drawIndexed(*m_triangle);
 }
+```
+
+The GLSL sources live in `sandbox/shaders`. CMake copies them beside the
+sandbox executable, and `Shader::fromFiles()` loads them at startup.
+
+Viewport origins are explicit so the renderer can target an editor panel,
+split-screen region, or part of a larger render target:
+
+```cpp
+vshade::renderer::Renderer::setViewport(x, y, width, height);
+```
+
+Depth testing and depth writes are controlled separately. A transparent pass
+can test transparent fragments against opaque geometry without changing the
+depth buffer:
+
+```cpp
+vshade::renderer::Renderer::setDepthTesting(true);
+vshade::renderer::Renderer::setDepthWrite(false);
+vshade::renderer::Renderer::setBlending(true);
+
+// Draw transparent geometry back-to-front.
+
+vshade::renderer::Renderer::setDepthWrite(true);
 ```
 
 A complete indexed draw will follow this order:
@@ -204,8 +236,8 @@ A complete indexed draw will follow this order:
 3. Attach both buffers to a `VertexArray`.
 4. Create and bind a `Shader`.
 5. Upload camera and model matrices.
-6. Call `Renderer::drawIndexed()` or create a `Mesh` and call
-   `Renderer::draw()`.
+6. Call `Renderer::drawIndexed()`, call `Renderer::drawArrays()` for
+   non-indexed vertices, or create a `Mesh` and call `Renderer::draw()`.
 
 ## Current scope
 

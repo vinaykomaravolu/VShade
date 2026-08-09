@@ -29,6 +29,80 @@ enum class PrimitiveTopology {
     Points,
 };
 
+/** @brief Framebuffer attachments that can be cleared by Renderer::clear(). */
+enum class ClearFlags : std::uint8_t {
+    None = 0,
+    Color = 1 << 0,
+    Depth = 1 << 1,
+    Stencil = 1 << 2,
+};
+
+/** @brief Combines framebuffer clear flags. */
+[[nodiscard]] constexpr ClearFlags operator|(const ClearFlags left, const ClearFlags right) noexcept {
+    return static_cast<ClearFlags>(
+        static_cast<std::uint8_t>(left) | static_cast<std::uint8_t>(right)
+    );
+}
+
+/** @brief Returns the clear flags shared by both operands. */
+[[nodiscard]] constexpr ClearFlags operator&(const ClearFlags left, const ClearFlags right) noexcept {
+    return static_cast<ClearFlags>(
+        static_cast<std::uint8_t>(left) & static_cast<std::uint8_t>(right)
+    );
+}
+
+/** @brief Adds clear flags to @p left. */
+constexpr ClearFlags& operator|=(ClearFlags& left, const ClearFlags right) noexcept {
+    left = left | right;
+    return left;
+}
+
+/** @brief Factors used to combine source and destination fragment colors. */
+enum class BlendFactor {
+    Zero,
+    One,
+    SourceColor,
+    OneMinusSourceColor,
+    DestinationColor,
+    OneMinusDestinationColor,
+    SourceAlpha,
+    OneMinusSourceAlpha,
+    DestinationAlpha,
+    OneMinusDestinationAlpha,
+};
+
+/** @brief Faces that can be discarded during rasterization. */
+enum class CullFace {
+    Front,
+    Back,
+    FrontAndBack,
+};
+
+/** @brief Vertex winding considered to face toward the camera. */
+enum class FrontFace {
+    Clockwise,
+    CounterClockwise,
+};
+
+/** @brief Rasterization mode used for polygon faces. */
+enum class PolygonMode {
+    Fill,
+    Line,
+    Point,
+};
+
+/** @brief Comparison used when testing fragment depth values. */
+enum class DepthFunction {
+    Never,
+    Less,
+    Equal,
+    LessOrEqual,
+    Greater,
+    NotEqual,
+    GreaterOrEqual,
+    Always,
+};
+
 /** @brief Pixel formats supported by Texture2D. */
 enum class TextureFormat {
     Red8,

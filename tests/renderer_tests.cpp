@@ -22,6 +22,22 @@ TEST_CASE("Renderer data types report their byte sizes and components", "[render
     CHECK(vshade::renderer::shaderDataTypeComponentCount(ShaderDataType::Int3) == 3);
 }
 
+TEST_CASE("Framebuffer clear flags can be combined", "[renderer]") {
+    using vshade::renderer::ClearFlags;
+
+    ClearFlags flags = ClearFlags::None;
+    flags |= ClearFlags::Color;
+    flags |= ClearFlags::Depth;
+
+    CHECK((flags & ClearFlags::Color) == ClearFlags::Color);
+    CHECK((flags & ClearFlags::Depth) == ClearFlags::Depth);
+    CHECK((flags & ClearFlags::Stencil) == ClearFlags::None);
+
+    constexpr ClearFlags all =
+        ClearFlags::Color | ClearFlags::Depth | ClearFlags::Stencil;
+    CHECK(static_cast<std::uint8_t>(all) == 7);
+}
+
 TEST_CASE("Buffer layouts calculate offsets and stride", "[renderer]") {
     const vshade::renderer::BufferLayout layout{
         {"position", vshade::renderer::ShaderDataType::Float3},

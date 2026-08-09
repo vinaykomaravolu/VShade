@@ -15,6 +15,12 @@ struct TextureFormatInfo {
 };
 
 [[nodiscard]] GLenum bufferUsage(BufferUsage usage);
+[[nodiscard]] GLenum blendFactor(BlendFactor factor);
+[[nodiscard]] GLbitfield clearFlags(ClearFlags flags);
+[[nodiscard]] GLenum cullFace(CullFace face);
+[[nodiscard]] GLenum depthFunction(DepthFunction function);
+[[nodiscard]] GLenum frontFace(FrontFace winding);
+[[nodiscard]] GLenum polygonMode(PolygonMode mode);
 [[nodiscard]] GLenum primitiveTopology(PrimitiveTopology topology);
 [[nodiscard]] GLenum shaderDataType(ShaderDataType type);
 [[nodiscard]] bool isIntegerType(ShaderDataType type) noexcept;

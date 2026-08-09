@@ -15,6 +15,7 @@ class VertexArray;
 struct RenderStats {
     std::uint64_t drawCalls = 0;
     std::uint64_t indexCount = 0;
+    std::uint64_t vertexCount = 0;
 };
 
 /** @brief Small OpenGL renderer facade used by the engine and games. */
@@ -35,16 +36,45 @@ public:
     static void beginFrame() noexcept;
 
     /** @brief Sets the viewport in framebuffer pixels. */
-    static void setViewport(std::uint32_t width, std::uint32_t height);
+    static void setViewport(
+        std::uint32_t x,
+        std::uint32_t y,
+        std::uint32_t width,
+        std::uint32_t height
+    );
 
     /** @brief Sets the color used by clear(). */
     static void setClearColor(const math::Vec4& color);
 
-    /** @brief Clears the active color and depth attachments. */
-    static void clear();
+    /** @brief Clears the selected attachments of the active framebuffer. */
+    static void clear(ClearFlags flags = ClearFlags::Color | ClearFlags::Depth);
+
+    /** @brief Enables or disables blending. */
+    static void setBlending(bool enabled);
+
+    /** @brief Sets the source and destination blend factors. */
+    static void setBlendFunction(BlendFactor source, BlendFactor destination);
+
+    /** @brief Enables or disables face culling. */
+    static void setFaceCulling(bool enabled);
+
+    /** @brief Sets which faces are discarded when face culling is enabled. */
+    static void setCullFace(CullFace face);
+
+    /** @brief Sets the winding order considered front-facing. */
+    static void setFrontFace(FrontFace winding);
+
+    /** @brief Sets how polygon faces are rasterized. */
+    static void setPolygonMode(PolygonMode mode);
 
     /** @brief Enables or disables depth testing. */
     static void setDepthTesting(bool enabled);
+
+    /** @brief Sets the comparison used by depth testing. */
+    static void setDepthFunction(DepthFunction function);
+
+    /** @brief Enables or disables writing fragment depth values. */
+    static void setDepthWrite(bool enabled);
 
     /** @brief Enables or disables OpenGL color dithering. */
     static void setDithering(bool enabled);
@@ -54,6 +84,14 @@ public:
         const VertexArray& vertexArray,
         PrimitiveTopology topology = PrimitiveTopology::Triangles,
         std::size_t indexCount = 0
+    );
+
+    /** @brief Draws non-indexed geometry from @p vertexArray. */
+    static void drawArrays(
+        const VertexArray& vertexArray,
+        PrimitiveTopology topology,
+        std::size_t vertexCount,
+        std::size_t firstVertex = 0
     );
 
     /** @brief Draws a Mesh using its configured topology. */

@@ -31,9 +31,9 @@ int Application::run() {
 
         m_window = std::make_unique<platform::Window>(m_config.window);
         renderer::Renderer::initialize();
-        renderer::Renderer::setViewport(m_window->width(), m_window->height());
+        renderer::Renderer::setViewport(0, 0, m_window->width(), m_window->height());
         m_window->setResizeCallback([this](const std::uint32_t width, const std::uint32_t height) {
-            renderer::Renderer::setViewport(width, height);
+            renderer::Renderer::setViewport(0, 0, width, height);
             onWindowResize(width, height);
         });
 

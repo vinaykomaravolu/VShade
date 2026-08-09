@@ -98,10 +98,26 @@ void main() {
     vshade::renderer::Framebuffer framebuffer(renderWidth, renderHeight);
     framebuffer.bind();
     vshade::renderer::Renderer::beginFrame();
-    vshade::renderer::Renderer::setDepthTesting(false);
+    vshade::renderer::Renderer::setViewport(0, 0, renderWidth, renderHeight);
+    vshade::renderer::Renderer::setBlending(false);
+    vshade::renderer::Renderer::setBlendFunction(
+        vshade::renderer::BlendFactor::SourceAlpha,
+        vshade::renderer::BlendFactor::OneMinusSourceAlpha
+    );
+    vshade::renderer::Renderer::setFaceCulling(true);
+    vshade::renderer::Renderer::setCullFace(vshade::renderer::CullFace::Back);
+    vshade::renderer::Renderer::setFrontFace(vshade::renderer::FrontFace::CounterClockwise);
+    vshade::renderer::Renderer::setPolygonMode(vshade::renderer::PolygonMode::Fill);
+    vshade::renderer::Renderer::setDepthTesting(true);
+    vshade::renderer::Renderer::setDepthFunction(vshade::renderer::DepthFunction::Less);
+    vshade::renderer::Renderer::setDepthWrite(true);
     vshade::renderer::Renderer::setDithering(false);
     vshade::renderer::Renderer::setClearColor({0.04F, 0.06F, 0.10F, 1.0F});
-    vshade::renderer::Renderer::clear();
+    vshade::renderer::Renderer::clear(
+        vshade::renderer::ClearFlags::Color |
+        vshade::renderer::ClearFlags::Depth |
+        vshade::renderer::ClearFlags::Stencil
+    );
     shader.bind();
     vshade::renderer::Renderer::drawIndexed(*vertexArray);
 
@@ -114,6 +130,17 @@ void main() {
 
     CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
     CHECK(vshade::renderer::Renderer::stats().indexCount == 3);
+
+    vshade::renderer::Renderer::beginFrame();
+    vshade::renderer::Renderer::setDepthWrite(false);
+    vshade::renderer::Renderer::drawArrays(
+        *vertexArray,
+        vshade::renderer::PrimitiveTopology::Triangles,
+        vertices.size()
+    );
+    CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
+    CHECK(vshade::renderer::Renderer::stats().vertexCount == 3);
+    vshade::renderer::Renderer::setDepthWrite(true);
 
     const std::filesystem::path goldenPath =
         std::filesystem::path(VSHADE_GOLDEN_DIR) / "colored_triangle.png";
