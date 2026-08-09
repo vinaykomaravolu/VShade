@@ -3,6 +3,7 @@
 #include "core/assert.hpp"
 #include "core/log.hpp"
 #include "core/time.hpp"
+#include "renderer/renderer.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -12,7 +13,11 @@ namespace vshade::core {
 Application::Application(ApplicationConfig config)
     : m_config(std::move(config)) {}
 
-Application::~Application() = default;
+Application::~Application() {
+    renderer::Renderer::shutdown();
+    m_window.reset();
+    Log::shutdown();
+}
 
 int Application::run() {
     if (m_running) {
@@ -21,12 +26,14 @@ int Application::run() {
 
     Log::initialize();
     bool shutdown_needed = false;
-
     try {
         ENGINE_INFO("Starting VShade");
 
         m_window = std::make_unique<platform::Window>(m_config.window);
+        renderer::Renderer::initialize();
+        renderer::Renderer::setViewport(m_window->width(), m_window->height());
         m_window->setResizeCallback([this](const std::uint32_t width, const std::uint32_t height) {
+            renderer::Renderer::setViewport(width, height);
             onWindowResize(width, height);
         });
 
@@ -46,8 +53,8 @@ int Application::run() {
             // once the scene system exists.
             onUpdate(Time::deltaTime());
 
-            // Later: render the active scene here once the renderer and scene
-            // systems exist.
+            renderer::Renderer::beginFrame();
+            onRender();
 
             m_window->swapBuffers();
         }
@@ -56,9 +63,7 @@ int Application::run() {
         onShutdown();
 
         m_running = false;
-        m_window.reset();
         ENGINE_INFO("VShade shutdown complete after {} frames", Time::frameCount());
-        Log::shutdown();
         return 0;
     } catch (...) {
         if (shutdown_needed) {
@@ -71,9 +76,7 @@ int Application::run() {
         }
 
         m_running = false;
-        m_window.reset();
         ENGINE_ERROR("VShade stopped because of an unhandled exception");
-        Log::shutdown();
         throw;
     }
 }

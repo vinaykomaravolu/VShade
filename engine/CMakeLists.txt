@@ -9,7 +9,21 @@ set(VSHADE_SOURCES
     src/math/transform.cpp
     src/math/vector.cpp
     src/platform/window.cpp
+    src/renderer/buffer.cpp
+    src/renderer/camera.cpp
+    src/renderer/framebuffer.cpp
+    src/renderer/mesh.cpp
+    src/renderer/opengl/openglutils.cpp
+    src/renderer/opengl/generated/src/gl.c
+    src/renderer/renderer.cpp
+    src/renderer/rendertypes.cpp
+    src/renderer/shader.cpp
+    src/renderer/texture.cpp
+    src/renderer/vertexarray.cpp
 )
+
+# The GLAD loader is generated from the pinned external/glad submodule and
+# checked in so normal builds do not require Python or generator packages.
 
 # STATIC means the engine is copied into each executable that links it.
 add_library(VShadeEngine STATIC ${VSHADE_SOURCES})
@@ -21,6 +35,8 @@ target_include_directories(VShadeEngine
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/opengl/generated/include
 )
 
 find_package(OpenGL REQUIRED)
@@ -58,14 +74,23 @@ if(VSHADE_ENABLE_COVERAGE)
 endif()
 
 if(MSVC)
-    target_compile_options(VShadeEngine PRIVATE /W4 /permissive-)
+    target_compile_options(VShadeEngine PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:/W4>
+        $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+        $<$<COMPILE_LANGUAGE:C>:/W0>
+    )
     if(VSHADE_WARNINGS_AS_ERRORS)
-        target_compile_options(VShadeEngine PRIVATE /WX)
+        target_compile_options(VShadeEngine PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/WX>)
     endif()
 else()
-    target_compile_options(VShadeEngine PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(VShadeEngine PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wpedantic>
+        $<$<COMPILE_LANGUAGE:C>:-w>
+    )
     if(VSHADE_WARNINGS_AS_ERRORS)
-        target_compile_options(VShadeEngine PRIVATE -Werror)
+        target_compile_options(VShadeEngine PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror>)
     endif()
 endif()
 

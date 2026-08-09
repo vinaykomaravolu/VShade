@@ -14,6 +14,14 @@ built.
 - `vshade::core::filesystem` contains basic file-reading helpers.
 - `vshade::core::Log` and the logging macros separate engine messages from game messages.
 - `vshade::math` provides GLM-backed vectors, matrices, quaternions, and transforms.
+- `vshade::renderer::Renderer` provides OpenGL startup, frame state, and indexed drawing.
+- Renderer resource classes own buffers, vertex arrays, shaders, textures, cameras, and meshes.
+
+See [Renderer foundation](renderer.md) for the renderer architecture,
+lifecycle, file responsibilities, and current scope.
+
+See [Golden-image renderer testing](visual-testing.md) for hidden-context
+visual regression tests, comparison tolerances, and failure artifacts.
 
 ## Minimal application
 

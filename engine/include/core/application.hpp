@@ -60,7 +60,7 @@ protected:
         static_cast<void>(delta_time);
     }
 
-    /** @brief Reserved for the future renderer integration. */
+    /** @brief Called once per frame to submit and execute rendering work. */
     virtual void onRender() {}
 
     /** @brief Called once before application resources are released. */

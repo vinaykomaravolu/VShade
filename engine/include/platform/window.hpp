@@ -21,6 +21,8 @@ struct WindowConfig {
     bool fullscreen = false;
     /** @brief Whether buffer swaps initially wait for vertical synchronization. */
     bool vsync = true;
+    /** @brief Whether the native window is visible after creation. */
+    bool visible = true;
 };
 
 /** @brief Owns a GLFW window and its OpenGL context. */

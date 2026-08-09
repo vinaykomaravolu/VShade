@@ -3,6 +3,7 @@
 #include <core/log.hpp>
 #include <core/time.hpp>
 #include <input/input.hpp>
+#include <renderer/renderer.hpp>
 
 namespace {
 
@@ -36,6 +37,11 @@ protected:
         );
 
         static_cast<void>(delta_time);
+    }
+
+    void onRender() override {
+        vshade::renderer::Renderer::setClearColor({0.05F, 0.06F, 0.09F, 1.0F});
+        vshade::renderer::Renderer::clear();
     }
 
     void onShutdown() override {

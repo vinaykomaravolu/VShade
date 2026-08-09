@@ -4,7 +4,7 @@ project(
     VShade
     VERSION 0.1.0
     DESCRIPTION "A small cross-platform OpenGL game engine runtime"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 include(CTest)
@@ -26,6 +26,13 @@ endforeach()
 if(BUILD_TESTING AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/Catch2/CMakeLists.txt")
     message(FATAL_ERROR
         "Missing dependency: external/Catch2. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
+if(BUILD_TESTING AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/stb/stb_image.h")
+    message(FATAL_ERROR
+        "Missing dependency: external/stb. "
         "Run: git submodule update --init --recursive"
     )
 endif()

@@ -8,12 +8,15 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - engine and game logging through spdlog;
 - assertions and basic filesystem helpers;
 - a small `vshade::math` API backed by GLM;
+- an OpenGL 3.3 renderer foundation with buffers, shaders, textures, cameras, and meshes;
 - a static engine library;
 - a minimal sandbox application.
 
 The generated [API reference](https://vinaykomaravolu.github.io/VShade/) is
 published with GitHub Pages. Documentation source and local build instructions
-are in [docs/api.md](docs/api.md).
+are in [docs/api.md](docs/api.md). The renderer architecture and lifecycle are
+described in [docs/renderer.md](docs/renderer.md). Offscreen golden-image tests
+are documented in [docs/visual-testing.md](docs/visual-testing.md).
 
 ## Get the dependencies
 
@@ -123,8 +126,17 @@ Other core systems have focused headers:
 #include <input/keycode.hpp>
 #include <input/mousecode.hpp>
 #include <platform/window.hpp>
+#include <renderer/buffer.hpp>
+#include <renderer/camera.hpp>
+#include <renderer/framebuffer.hpp>
+#include <renderer/mesh.hpp>
+#include <renderer/renderer.hpp>
+#include <renderer/rendertypes.hpp>
+#include <renderer/shader.hpp>
+#include <renderer/texture.hpp>
+#include <renderer/vertexarray.hpp>
 ```
 
-Modern OpenGL function loading is intentionally not part of this first step.
-Add a loader such as GLAD before implementing shaders, vertex buffers, or other
-OpenGL functions newer than the platform's base OpenGL interface.
+GLAD loads OpenGL 3.3 core functions after the window creates its context. The
+renderer is initialized and shut down by `Application`; games submit rendering
+work from `onRender()`.

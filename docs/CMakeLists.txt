@@ -25,5 +25,7 @@ set(DOXYGEN_GENERATE_TREEVIEW YES)
 doxygen_add_docs(VShadeDocs
     "${PROJECT_SOURCE_DIR}/engine/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/mainpage.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/renderer.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/visual-testing.md"
     COMMENT "Generating the VShade API reference"
 )
