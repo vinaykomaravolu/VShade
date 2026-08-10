@@ -21,7 +21,10 @@ struct ApplicationConfig {
  */
 class Application {
 public:
-    /** @brief Creates an application with the supplied startup configuration. */
+    /**
+     * @brief Creates an application with the supplied startup configuration.
+     * @param config Window and engine startup settings.
+     */
     explicit Application(ApplicationConfig config = {});
 
     /** @brief Releases application resources. */
@@ -42,10 +45,18 @@ public:
     /** @brief Requests that the main loop stop after the current frame. */
     void close();
 
-    /** @brief Returns the main window while the application is running. */
+    /**
+     * @brief Returns the main window while the application is running.
+     * @return Mutable access to the application-owned window.
+     * @warning Call only after window creation and before application shutdown.
+     */
     [[nodiscard]] platform::Window& getWindow();
 
-    /** @brief Returns the main window while the application is running. */
+    /**
+     * @brief Returns the main window while the application is running.
+     * @return Read-only access to the application-owned window.
+     * @warning Call only after window creation and before application shutdown.
+     */
     [[nodiscard]] const platform::Window& getWindow() const;
 
 protected:

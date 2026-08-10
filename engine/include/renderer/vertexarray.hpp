@@ -25,10 +25,16 @@ public:
     /** @brief Unbinds the current vertex array. */
     static void unbind();
 
-    /** @brief Adds a vertex buffer and configures its vertex attributes. */
+    /**
+     * @brief Adds a vertex buffer and configures its vertex attributes.
+     * @param vertexBuffer Vertex buffer with a non-empty layout.
+     */
     void addVertexBuffer(std::shared_ptr<VertexBuffer> vertexBuffer);
 
-    /** @brief Replaces the index buffer used by this vertex array. */
+    /**
+     * @brief Replaces the index buffer used by this vertex array.
+     * @param indexBuffer Index buffer retained for indexed drawing.
+     */
     void setIndexBuffer(std::shared_ptr<IndexBuffer> indexBuffer);
 
     /** @brief Returns all vertex buffers retained by this vertex array. */

@@ -33,6 +33,7 @@ public:
 
     /**
      * @brief Creates a window and OpenGL context.
+     * @param config Initial title, dimensions, display mode, and visibility.
      * @throws std::runtime_error If GLFW or window creation fails.
      * @throws std::invalid_argument If a requested dimension is invalid.
      */
@@ -61,34 +62,63 @@ public:
      */
     void clear(float red, float green, float blue, float alpha = 1.0F) const;
 
-    /** @brief Returns whether the user or application requested the window to close. */
+    /**
+     * @brief Returns whether the user or application requested the window to close.
+     * @return True when the window should close; otherwise false.
+     */
     [[nodiscard]] bool shouldClose() const;
 
     /** @brief Marks the window so shouldClose() returns true. */
     void requestClose();
 
-    /** @brief Replaces the callback invoked after framebuffer resize events. */
+    /**
+     * @brief Replaces the callback invoked after framebuffer resize events.
+     * @param callback Function that receives the new framebuffer dimensions.
+     */
     void setResizeCallback(ResizeCallback callback);
 
-    /** @brief Switches between primary-monitor fullscreen and windowed mode. */
+    /**
+     * @brief Switches between primary-monitor fullscreen and windowed mode.
+     * @param fullscreen True for fullscreen mode; false for windowed mode.
+     * @throws std::runtime_error If the primary monitor cannot be queried.
+     */
     void setFullscreen(bool fullscreen);
 
-    /** @brief Returns whether the window is currently fullscreen. */
+    /**
+     * @brief Returns whether the window is currently fullscreen.
+     * @return True in fullscreen mode; otherwise false.
+     */
     [[nodiscard]] bool isFullscreen() const;
 
-    /** @brief Enables or disables vertical synchronization for this context. */
+    /**
+     * @brief Enables or disables vertical synchronization for this context.
+     * @param enabled True to synchronize buffer swaps with the display.
+     */
     void setVSync(bool enabled);
 
-    /** @brief Returns whether vertical synchronization is enabled. */
+    /**
+     * @brief Returns whether vertical synchronization is enabled.
+     * @return True when VSync is enabled; otherwise false.
+     */
     [[nodiscard]] bool isVSync() const noexcept;
 
-    /** @brief Returns the current framebuffer width in pixels. */
+    /**
+     * @brief Returns the current framebuffer width in pixels.
+     * @return Framebuffer width in pixels.
+     */
     [[nodiscard]] std::uint32_t width() const noexcept;
 
-    /** @brief Returns the current framebuffer height in pixels. */
+    /**
+     * @brief Returns the current framebuffer height in pixels.
+     * @return Framebuffer height in pixels.
+     */
     [[nodiscard]] std::uint32_t height() const noexcept;
 
-    /** @brief Returns the underlying GLFW handle for advanced platform integration. */
+    /**
+     * @brief Returns the underlying GLFW handle for advanced platform integration.
+     * @return Non-owning pointer to the native GLFW window.
+     * @warning The pointer becomes invalid when this Window is destroyed.
+     */
     [[nodiscard]] GLFWwindow* nativeHandle() const noexcept;
 
 private:

@@ -13,7 +13,16 @@ namespace vshade::renderer {
  */
 class Framebuffer final {
 public:
-    /** @brief Creates a complete offscreen framebuffer at the requested size. */
+    /**
+     * @brief Creates a framebuffer with the specified dimensions.
+     *
+     * @param width Width of the framebuffer in pixels.
+     * @param height Height of the framebuffer in pixels.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If either dimension is zero.
+     * @throws std::overflow_error If a dimension cannot be represented by OpenGL.
+     * @throws std::runtime_error If OpenGL cannot create complete attachments.
+     */
     Framebuffer(std::uint32_t width, std::uint32_t height);
 
     ~Framebuffer();
@@ -29,15 +38,33 @@ public:
     /** @brief Binds the default framebuffer for drawing and reading. */
     static void unbind();
 
-    /** @brief Recreates the attachments at a new non-zero size. */
+    /**
+     * @brief Recreates the attachments at a new non-zero size.
+     * @param width New framebuffer width in pixels.
+     * @param height New framebuffer height in pixels.
+     * @throws std::invalid_argument If either dimension is zero.
+     * @throws std::overflow_error If a dimension cannot be represented by OpenGL.
+     * @throws std::runtime_error If OpenGL cannot create complete attachments.
+     */
     void resize(std::uint32_t width, std::uint32_t height);
 
-    /** @brief Reads the RGBA8 color attachment into top-to-bottom CPU memory. */
+    /**
+     * @brief Reads the RGBA8 color attachment into top-to-bottom CPU memory.
+     * @return Four tightly packed bytes per pixel in top-to-bottom row order.
+     * @throws std::overflow_error If the required CPU allocation is too large.
+     */
     [[nodiscard]] std::vector<std::uint8_t> readPixels() const;
 
+    /** @brief Returns the attachment width. @return Width in pixels. */
     [[nodiscard]] std::uint32_t width() const noexcept;
+
+    /** @brief Returns the attachment height. @return Height in pixels. */
     [[nodiscard]] std::uint32_t height() const noexcept;
+
+    /** @brief Returns the native framebuffer identifier. @return OpenGL framebuffer identifier. */
     [[nodiscard]] std::uint32_t rendererId() const noexcept;
+
+    /** @brief Returns the color texture identifier. @return OpenGL color-attachment texture identifier. */
     [[nodiscard]] std::uint32_t colorAttachmentId() const noexcept;
 
 private:

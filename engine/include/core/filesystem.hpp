@@ -23,11 +23,16 @@ namespace vshade::core::filesystem {
  */
 [[nodiscard]] std::vector<std::uint8_t> readBinaryFile(const std::filesystem::path& path);
 
-/** @brief Returns whether a filesystem entry exists at @p path. */
+/**
+ * @brief Returns whether a filesystem entry exists at @p path.
+ * @param path Filesystem path to inspect.
+ * @return True when an entry exists; otherwise false.
+ */
 [[nodiscard]] bool fileExists(const std::filesystem::path& path) noexcept;
 
 /**
  * @brief Returns a path's extension, including its leading dot.
+ * @param path Filesystem path whose extension is requested.
  * @return An extension such as `.png`, or an empty string when none exists.
  */
 [[nodiscard]] std::string getExtension(const std::filesystem::path& path);

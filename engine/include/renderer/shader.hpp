@@ -14,7 +14,12 @@ namespace vshade::renderer {
 /** @brief Owns a linked OpenGL vertex-and-fragment shader program. */
 class Shader final {
 public:
-    /** @brief Compiles and links GLSL source strings. */
+    /**
+     * @brief Compiles and links GLSL source strings.
+     * @param name Diagnostic name used in errors and debugging.
+     * @param vertexSource GLSL source for the vertex stage.
+     * @param fragmentSource GLSL source for the fragment stage.
+     */
     Shader(std::string name, std::string_view vertexSource, std::string_view fragmentSource);
 
     ~Shader();
@@ -24,7 +29,12 @@ public:
     Shader(Shader&& other) noexcept;
     Shader& operator=(Shader&& other) noexcept;
 
-    /** @brief Loads, compiles, and links a vertex and fragment shader file. */
+    /**
+     * @brief Loads, compiles, and links a vertex and fragment shader file.
+     * @param name Diagnostic name used in errors and debugging.
+     * @param vertexPath Path to the vertex-stage GLSL file.
+     * @param fragmentPath Path to the fragment-stage GLSL file.
+     */
     [[nodiscard]] static Shader fromFiles(
         std::string name,
         const std::filesystem::path& vertexPath,
@@ -37,11 +47,46 @@ public:
     /** @brief Unbinds the current shader program. */
     static void unbind();
 
+    /**
+     * @brief Sets a signed integer uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setInt(std::string_view name, int value);
+
+    /**
+     * @brief Sets a floating-point uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setFloat(std::string_view name, float value);
+
+    /**
+     * @brief Sets a two-component vector uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setVec2(std::string_view name, const math::Vec2& value);
+
+    /**
+     * @brief Sets a three-component vector uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setVec3(std::string_view name, const math::Vec3& value);
+
+    /**
+     * @brief Sets a four-component vector uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setVec4(std::string_view name, const math::Vec4& value);
+
+    /**
+     * @brief Sets a four-by-four matrix uniform.
+     * @param name Uniform variable name.
+     * @param value Value to upload.
+     */
     void setMat4(std::string_view name, const math::Mat4& value);
 
     /** @brief Returns the diagnostic name assigned to this shader. */

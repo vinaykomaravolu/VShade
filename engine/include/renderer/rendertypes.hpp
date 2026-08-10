@@ -37,21 +37,36 @@ enum class ClearFlags : std::uint8_t {
     Stencil = 1 << 2,
 };
 
-/** @brief Combines framebuffer clear flags. */
+/**
+ * @brief Combines framebuffer clear flags.
+ * @param left First flag set.
+ * @param right Second flag set.
+ * @return Union of @p left and @p right.
+ */
 [[nodiscard]] constexpr ClearFlags operator|(const ClearFlags left, const ClearFlags right) noexcept {
     return static_cast<ClearFlags>(
         static_cast<std::uint8_t>(left) | static_cast<std::uint8_t>(right)
     );
 }
 
-/** @brief Returns the clear flags shared by both operands. */
+/**
+ * @brief Returns the clear flags shared by both operands.
+ * @param left First flag set.
+ * @param right Second flag set.
+ * @return Intersection of @p left and @p right.
+ */
 [[nodiscard]] constexpr ClearFlags operator&(const ClearFlags left, const ClearFlags right) noexcept {
     return static_cast<ClearFlags>(
         static_cast<std::uint8_t>(left) & static_cast<std::uint8_t>(right)
     );
 }
 
-/** @brief Adds clear flags to @p left. */
+/**
+ * @brief Adds clear flags to @p left.
+ * @param left Flag set to update.
+ * @param right Flags to add.
+ * @return Reference to the updated @p left operand.
+ */
 constexpr ClearFlags& operator|=(ClearFlags& left, const ClearFlags right) noexcept {
     left = left | right;
     return left;
@@ -122,10 +137,20 @@ enum class TextureWrap {
     ClampToEdge,
 };
 
-/** @brief Returns the size of one value of @p type in bytes. */
+/**
+ * @brief Returns the size of one value of @p type in bytes.
+ * @param type Vertex shader data type to measure.
+ * @return Storage size in bytes.
+ * @throws std::invalid_argument If @p type is not a recognized enumerator.
+ */
 [[nodiscard]] std::uint32_t shaderDataTypeSize(ShaderDataType type);
 
-/** @brief Returns the scalar component count of @p type. */
+/**
+ * @brief Returns the scalar component count of @p type.
+ * @param type Vertex shader data type to inspect.
+ * @return Number of scalar components represented by @p type.
+ * @throws std::invalid_argument If @p type is not a recognized enumerator.
+ */
 [[nodiscard]] std::uint32_t shaderDataTypeComponentCount(ShaderDataType type);
 
 } // namespace vshade::renderer
