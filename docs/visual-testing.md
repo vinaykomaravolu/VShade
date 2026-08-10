@@ -10,7 +10,9 @@ back to CPU memory, and compares them with a committed PNG reference.
 ```text
 tests/
 ├── golden/
-│   └── colored_triangle.png       # committed reference image
+│   ├── colored_triangle.png       # flat-color geometry
+│   ├── rotating_cube.png          # fixed animation snapshot
+│   └── textured_quad.png          # procedural texture sampling
 ├── visual/
 │   ├── imagecomparison.hpp
 │   └── imagecomparison.cpp
@@ -22,6 +24,18 @@ build/tests/visual-output/          # generated failure artifacts
 Committed golden images and generated test output are deliberately separate.
 Nothing in the test code writes to `tests/golden`.
 
+## Covered scenes
+
+The current visual suite covers:
+
+- a flat-colored indexed triangle;
+- an indexed quad sampling a deterministic procedural checkerboard texture;
+- a perspective cube at a fixed rotation, exercising model, view, projection,
+  depth testing, and face culling.
+
+The cube represents one deterministic frame of a rotating object. Its angle is
+fixed deliberately so wall-clock timing cannot make the golden image unstable.
+
 ## Running the tests
 
 Visual tests are ordinary Catch2 cases registered through CTest:
@@ -32,9 +46,9 @@ cmake --build build --config Debug --target VShadeTests
 ctest --test-dir build -C Debug --output-on-failure -R "Offscreen"
 ```
 
-The window uses `WindowConfig::visible = false`, so it is never displayed. The
-current scene renders at 512 by 512 pixels into `renderer::Framebuffer`, not
-the default window framebuffer.
+The window uses `WindowConfig::visible = false`, so it is never displayed. Each
+scene renders at 512 by 512 pixels into `renderer::Framebuffer`, not the default
+window framebuffer.
 
 Linux CI runs CTest through Xvfb because GLFW still requires a window-system
 connection even when the native window is hidden.
