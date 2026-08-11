@@ -17,9 +17,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -233,6 +235,16 @@ void main() {
 TEST_CASE("Offscreen textured quad matches its golden image", "[renderer][visual]") {
     HiddenRenderContext context;
 
+    const vshade::renderer::Texture2D sandboxTexture =
+        vshade::renderer::Texture2D::fromFile(
+            std::filesystem::path(VSHADE_SANDBOX_TEXTURE_DIR) / "checkerboard.ppm",
+            vshade::renderer::TextureFilter::Nearest,
+            vshade::renderer::TextureWrap::ClampToEdge
+        );
+    CHECK(sandboxTexture.width() == 4);
+    CHECK(sandboxTexture.height() == 4);
+    CHECK(sandboxTexture.format() == vshade::renderer::TextureFormat::RGBA8);
+
     constexpr std::array<TexturedVertex, 4> vertices{{
         {{-0.75F, -0.65F, 0.0F}, {0.0F, 0.0F}},
         {{0.75F, -0.65F, 0.0F}, {1.0F, 0.0F}},
@@ -283,14 +295,33 @@ void main() {
     );
 
     const auto pixels = checkerboardPixels();
-    const vshade::renderer::Texture2D texture(
-        8,
-        8,
-        vshade::renderer::TextureFormat::RGBA8,
-        pixels.data(),
+    const std::filesystem::path textureInputDirectory =
+        std::filesystem::path(VSHADE_VISUAL_OUTPUT_DIR) / "texture_input";
+    const std::filesystem::path texturePath = textureInputDirectory / "checkerboard.png";
+    std::filesystem::remove_all(textureInputDirectory);
+    CHECK_THROWS_AS(
+        vshade::renderer::Texture2D::fromFile(textureInputDirectory / "missing.png"),
+        std::runtime_error
+    );
+    vshade::tests::visual::writePng(
+        texturePath,
+        {
+            8,
+            8,
+            std::vector<std::uint8_t>(pixels.begin(), pixels.end()),
+        }
+    );
+
+    const vshade::renderer::Texture2D texture = vshade::renderer::Texture2D::fromFile(
+        texturePath,
         vshade::renderer::TextureFilter::Nearest,
         vshade::renderer::TextureWrap::ClampToEdge
     );
+    std::filesystem::remove_all(textureInputDirectory);
+
+    CHECK(texture.width() == 8);
+    CHECK(texture.height() == 8);
+    CHECK(texture.format() == vshade::renderer::TextureFormat::RGBA8);
 
     vshade::renderer::Framebuffer framebuffer(renderWidth, renderHeight);
     beginOffscreenFrame(framebuffer, {0.03F, 0.04F, 0.07F, 1.0F});

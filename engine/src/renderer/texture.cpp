@@ -1,11 +1,28 @@
+#if defined(_MSC_VER)
+    #define _CRT_SECURE_NO_WARNINGS
+    #pragma warning(push, 0)
+#endif
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
+#include <stb_image.h>
+
+#if defined(_MSC_VER)
+    #pragma warning(pop)
+#endif
+
 #include "renderer/texture.hpp"
 
 #include "renderer/renderer.hpp"
 
 #include "opengl/openglutils.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace vshade::renderer {
@@ -102,6 +119,56 @@ Texture2D& Texture2D::operator=(Texture2D&& other) noexcept {
         m_format = other.m_format;
     }
     return *this;
+}
+
+Texture2D Texture2D::fromFile(
+    const std::filesystem::path& path,
+    const TextureFilter filter,
+    const TextureWrap wrap,
+    const bool flipVertically
+) {
+    if (!Renderer::isInitialized()) {
+        throw std::logic_error("Renderer must be initialized before loading a texture");
+    }
+
+    const std::string pathString = path.string();
+    int width = 0;
+    int height = 0;
+    using PixelPointer = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>;
+    PixelPointer pixels(
+        stbi_load(pathString.c_str(), &width, &height, nullptr, STBI_rgb_alpha),
+        &stbi_image_free
+    );
+
+    if (!pixels) {
+        const char* reason = stbi_failure_reason();
+        throw std::runtime_error(
+            "Failed to load texture '" + pathString + "': " +
+            (reason != nullptr ? reason : "unknown image error")
+        );
+    }
+    if (width <= 0 || height <= 0) {
+        throw std::runtime_error("Texture image has invalid dimensions: " + pathString);
+    }
+
+    constexpr std::size_t channelCount = 4;
+    const std::size_t rowSize = static_cast<std::size_t>(width) * channelCount;
+    if (flipVertically) {
+        for (int row = 0; row < height / 2; ++row) {
+            auto* top = pixels.get() + static_cast<std::size_t>(row) * rowSize;
+            auto* bottom = pixels.get() + static_cast<std::size_t>(height - 1 - row) * rowSize;
+            std::swap_ranges(top, top + rowSize, bottom);
+        }
+    }
+
+    return Texture2D(
+        static_cast<std::uint32_t>(width),
+        static_cast<std::uint32_t>(height),
+        TextureFormat::RGBA8,
+        pixels.get(),
+        filter,
+        wrap
+    );
 }
 
 void Texture2D::setData(const void* data, const std::size_t size) {

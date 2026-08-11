@@ -39,6 +39,11 @@ target_include_directories(VShadeEngine
         ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/opengl/generated/include
 )
 
+# stb_image is an implementation detail used by Texture2D::fromFile().
+target_include_directories(VShadeEngine SYSTEM PRIVATE
+    ${PROJECT_SOURCE_DIR}/external/stb
+)
+
 find_package(OpenGL REQUIRED)
 
 # spdlog appears in log.hpp and GLM is part of the engine-facing math API.

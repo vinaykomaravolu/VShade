@@ -29,7 +29,7 @@ Nothing in the test code writes to `tests/golden`.
 The current visual suite covers:
 
 - a flat-colored indexed triangle;
-- an indexed quad sampling a deterministic procedural checkerboard texture;
+- an indexed quad loading a generated checkerboard PNG through stb_image;
 - a perspective cube at a fixed rotation, exercising model, view, projection,
   depth testing, and face culling.
 

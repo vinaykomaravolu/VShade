@@ -130,8 +130,22 @@ diagnostic log.
 packed pixel data. It supports one-, three-, and four-channel 8-bit formats,
 nearest or linear filtering, and repeat or clamp-to-edge wrapping.
 
-Image-file decoding is not included yet. A future asset layer can use an image
-library to decode PNG or JPEG data before passing pixels to `Texture2D`.
+`Texture2D::fromFile()` uses the pinned stb_image submodule to decode common
+formats such as PNG and JPEG. File textures are converted to RGBA8 for a
+consistent GPU layout. Rows are flipped vertically by default to convert
+top-left image data to the conventional OpenGL texture-coordinate direction:
+
+```cpp
+auto texture = vshade::renderer::Texture2D::fromFile(
+    "assets/textures/player.png",
+    vshade::renderer::TextureFilter::Nearest,
+    vshade::renderer::TextureWrap::ClampToEdge
+);
+texture.bind(0);
+```
+
+Pass `false` as the final argument when the source pixels already use a
+bottom-left origin or when a shader handles the coordinate conversion.
 
 ### `camera.hpp`
 
@@ -191,9 +205,10 @@ application are destroyed.
 
 ## Basic rendering usage
 
-The sandbox contains a complete colored-triangle example. It creates its
-buffers, vertex layout, vertex array, and file-backed shader in `onStart()`.
-Each frame binds that shader and submits the indexed triangle:
+The sandbox contains a complete textured-triangle example. It creates its
+buffers, UV vertex layout, vertex array, file-backed shader, and file-backed
+texture in `onStart()`. Each frame binds the shader and texture before
+submitting the indexed triangle:
 
 ```cpp
 void onRender() override {
@@ -201,12 +216,15 @@ void onRender() override {
     vshade::renderer::Renderer::clear();
 
     m_shader->bind();
+    m_texture->bind(0);
     vshade::renderer::Renderer::drawIndexed(*m_triangle);
 }
 ```
 
-The GLSL sources live in `sandbox/shaders`. CMake copies them beside the
-sandbox executable, and `Shader::fromFiles()` loads them at startup.
+The GLSL sources live in `sandbox/shaders`, while the checkerboard image lives
+in `sandbox/textures`. CMake copies both asset folders beside the sandbox
+executable; `Shader::fromFiles()` and `Texture2D::fromFile()` load them at
+startup.
 
 Viewport origins are explicit so the renderer can target an editor panel,
 split-screen region, or part of a larger render target:
@@ -243,7 +261,6 @@ A complete indexed draw will follow this order:
 
 This foundation does not yet include:
 
-- image-file loading;
 - materials;
 - general-purpose framebuffer attachment configurations and render-to-texture workflows;
 - sprite batching or `Renderer2D`;

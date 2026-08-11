@@ -30,7 +30,7 @@ if(BUILD_TESTING AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/Catch2/CMa
     )
 endif()
 
-if(BUILD_TESTING AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/stb/stb_image.h")
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/stb/stb_image.h")
     message(FATAL_ERROR
         "Missing dependency: external/stb. "
         "Run: git submodule update --init --recursive"

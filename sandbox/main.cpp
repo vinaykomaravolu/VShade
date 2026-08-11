@@ -8,6 +8,7 @@
 #include <renderer/buffer.hpp>
 #include <renderer/renderer.hpp>
 #include <renderer/shader.hpp>
+#include <renderer/texture.hpp>
 #include <renderer/vertexarray.hpp>
 
 #include <array>
@@ -19,7 +20,7 @@ namespace {
 
 struct TriangleVertex {
     vshade::math::Vec3 position;
-    vshade::math::Vec3 color;
+    vshade::math::Vec2 textureCoordinate;
 };
 
 class SandboxApplication final : public vshade::core::Application {
@@ -38,9 +39,9 @@ public:
 protected:
     void onStart() override {
         constexpr std::array<TriangleVertex, 3> vertices{{
-            {{-0.65F, -0.55F, 0.0F}, {0.95F, 0.25F, 0.20F}},
-            {{0.65F, -0.55F, 0.0F}, {0.20F, 0.80F, 0.35F}},
-            {{0.0F, 0.65F, 0.0F}, {0.20F, 0.45F, 1.0F}},
+            {{-0.65F, -0.55F, 0.0F}, {0.0F, 0.0F}},
+            {{0.65F, -0.55F, 0.0F}, {1.0F, 0.0F}},
+            {{0.0F, 0.65F, 0.0F}, {0.5F, 1.0F}},
         }};
         constexpr std::array<std::uint32_t, 3> indices{0, 1, 2};
 
@@ -50,7 +51,7 @@ protected:
         );
         vertexBuffer->setLayout({
             {"position", vshade::renderer::ShaderDataType::Float3},
-            {"color", vshade::renderer::ShaderDataType::Float3},
+            {"textureCoordinate", vshade::renderer::ShaderDataType::Float2},
         });
 
         auto indexBuffer = std::make_shared<vshade::renderer::IndexBuffer>(
@@ -70,6 +71,16 @@ protected:
                 shaderDirectory / "shader.fs"
             )
         );
+
+        const std::filesystem::path textureDirectory{VSHADE_SANDBOX_TEXTURE_DIR};
+        m_texture = std::make_unique<vshade::renderer::Texture2D>(
+            vshade::renderer::Texture2D::fromFile(
+                textureDirectory / "checkerboard.ppm",
+                vshade::renderer::TextureFilter::Nearest,
+                vshade::renderer::TextureWrap::ClampToEdge
+            )
+        );
+        m_shader->setInt("image", 0);
 
         GAME_INFO("Sandbox started");
     }
@@ -93,8 +104,10 @@ protected:
         vshade::renderer::Renderer::clear();
 
         ENGINE_ASSERT(m_shader != nullptr, "Sandbox shader must exist before rendering");
+        ENGINE_ASSERT(m_texture != nullptr, "Sandbox texture must exist before rendering");
         ENGINE_ASSERT(m_triangle != nullptr, "Sandbox triangle must exist before rendering");
         m_shader->bind();
+        m_texture->bind(0);
         vshade::renderer::Renderer::drawIndexed(*m_triangle);
     }
 
@@ -108,6 +121,7 @@ protected:
 
 private:
     std::unique_ptr<vshade::renderer::Shader> m_shader;
+    std::unique_ptr<vshade::renderer::Texture2D> m_texture;
     std::unique_ptr<vshade::renderer::VertexArray> m_triangle;
 };
 
