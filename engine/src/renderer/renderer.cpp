@@ -136,7 +136,24 @@ void Renderer::setClearColor(const math::Vec4& color) {
 
 void Renderer::clear(const ClearFlags flags) {
     requireInitialized();
-    glClear(opengl::clearFlags(flags));
+    const GLbitfield mask = opengl::clearFlags(flags);
+
+    // glClear respects GL_DEPTH_WRITEMASK. Overlays such as Renderer2D disable
+    // depth writes, so make a requested depth clear reliable without changing
+    // the caller's persistent render state.
+    GLboolean depthWriteEnabled = GL_TRUE;
+    if ((mask & GL_DEPTH_BUFFER_BIT) != 0) {
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWriteEnabled);
+        if (depthWriteEnabled == GL_FALSE) {
+            glDepthMask(GL_TRUE);
+        }
+    }
+
+    glClear(mask);
+
+    if ((mask & GL_DEPTH_BUFFER_BIT) != 0 && depthWriteEnabled == GL_FALSE) {
+        glDepthMask(GL_FALSE);
+    }
 }
 
 void Renderer::setBlending(const bool enabled) {

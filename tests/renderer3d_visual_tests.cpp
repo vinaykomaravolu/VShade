@@ -7,6 +7,7 @@
 #include <renderer/buffer.hpp>
 #include <renderer/camera.hpp>
 #include <renderer/framebuffer.hpp>
+#include <renderer/renderer2d.hpp>
 #include <renderer/renderer3d.hpp>
 #include <renderer/texture.hpp>
 #include <renderer/vertexarray.hpp>
@@ -127,6 +128,34 @@ TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual]"
     material.setRoughness(0.65F);
     material.setMetallic(0.0F);
 
+    vshade::renderer::Renderer3D::beginScene(camera);
+    vshade::renderer::Renderer3D::drawMesh(
+        vshade::math::Transform(
+            {0.0F, 0.0F, 0.0F},
+            vshade::math::fromEuler({0.38F, 0.62F, 0.10F}),
+            {1.0F, 1.0F, 1.0F}
+        ),
+        cube,
+        material
+    );
+    vshade::renderer::Renderer3D::endScene();
+
+    // Render an overlay between 3D frames. Its temporary index buffer must not
+    // replace the cube VAO's index buffer, and its disabled depth writes must
+    // not prevent the next frame's depth clear.
+    vshade::renderer::Camera overlayCamera;
+    overlayCamera.setOrthographic(-1.0F, 1.0F, -1.0F, 1.0F, -1.0F, 1.0F);
+    vshade::renderer::Renderer2D::beginScene(overlayCamera);
+    vshade::renderer::Renderer2D::drawQuad(
+        vshade::math::Transform{},
+        {1.0F, 1.0F, 1.0F, 1.0F}
+    );
+    vshade::renderer::Renderer2D::endScene();
+
+    vshade::tests::visual::beginOffscreenFrame(
+        framebuffer,
+        {0.025F, 0.035F, 0.06F, 1.0F}
+    );
     vshade::renderer::Renderer3D::beginScene(camera);
     vshade::renderer::Renderer3D::drawMesh(
         vshade::math::Transform(

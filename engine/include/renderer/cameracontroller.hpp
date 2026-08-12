@@ -6,30 +6,29 @@
 namespace vshade::renderer {
 
 /** @brief Configuration for WASD and mouse-look camera movement. */
-struct PerspectiveCameraControllerConfig {
+struct FlyCameraControllerConfig {
     /** @brief Initial movement speed in world units per second. */
     float movementSpeed = 5.0F;
     /** @brief Mouse-look sensitivity in radians per input unit. */
     float mouseSensitivity = 0.002F;
     /** @brief Amount added to movement speed for each scroll step. */
     float scrollSpeedStep = 0.5F;
+    /** @brief Whether mouse-look is active only while the right mouse button is held. */
+    bool requireRightMouseButton = true;
 };
 
-/** @brief Controls a perspective camera using keyboard, mouse, and scroll input. */
-class PerspectiveCameraController final {
+/** @brief Provides free-flying WASD and mouse-look control for a camera. */
+class FlyCameraController final {
 public:
     /**
      * @brief Creates a controller for an existing camera.
-     * Configure @p camera with Camera::setPerspective() before using the
-     * controller.
-     *
      * @param camera Camera whose view is updated by input.
      * @param config Movement, look, and scroll sensitivity settings.
      * @throws std::invalid_argument If a configuration value is negative or not finite.
      */
-    explicit PerspectiveCameraController(
+    explicit FlyCameraController(
         Camera& camera,
-        PerspectiveCameraControllerConfig config = {}
+        FlyCameraControllerConfig config = {}
     );
 
     /**
@@ -54,7 +53,7 @@ public:
 
 private:
     Camera* m_camera = nullptr;
-    PerspectiveCameraControllerConfig m_config{};
+    FlyCameraControllerConfig m_config{};
     math::Vec3 m_position{0.0F};
     float m_yaw = 0.0F;
     float m_pitch = 0.0F;

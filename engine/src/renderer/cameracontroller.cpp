@@ -2,6 +2,7 @@
 
 #include "input/input.hpp"
 #include "input/keycode.hpp"
+#include "input/mousecode.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,9 +33,9 @@ void validateNonNegativeFinite(const float value, const char* message) {
 
 } // namespace
 
-PerspectiveCameraController::PerspectiveCameraController(
+FlyCameraController::FlyCameraController(
     Camera& camera,
-    const PerspectiveCameraControllerConfig config
+    const FlyCameraControllerConfig config
 ) : m_camera(&camera), m_config(config) {
     validateNonNegativeFinite(
         m_config.movementSpeed,
@@ -58,7 +59,7 @@ PerspectiveCameraController::PerspectiveCameraController(
     }
 }
 
-void PerspectiveCameraController::update(const float deltaTime) {
+void FlyCameraController::update(const float deltaTime) {
     validateNonNegativeFinite(deltaTime, "Camera delta time must be finite and non-negative");
 
     const float scroll = input::Input::scrollDelta().y;
@@ -67,13 +68,17 @@ void PerspectiveCameraController::update(const float deltaTime) {
         m_config.movementSpeed + scroll * m_config.scrollSpeedStep
     );
 
-    const math::Vec2 mouseDelta = input::Input::mouseDelta();
-    m_yaw += mouseDelta.x * m_config.mouseSensitivity;
-    m_pitch = glm::clamp(
-        m_pitch - mouseDelta.y * m_config.mouseSensitivity,
-        -maximumPitch,
-        maximumPitch
-    );
+    const bool mouseLookActive = !m_config.requireRightMouseButton ||
+        input::Input::isMouseButtonDown(input::MouseButton::Right);
+    if (mouseLookActive) {
+        const math::Vec2 mouseDelta = input::Input::mouseDelta();
+        m_yaw += mouseDelta.x * m_config.mouseSensitivity;
+        m_pitch = glm::clamp(
+            m_pitch - mouseDelta.y * m_config.mouseSensitivity,
+            -maximumPitch,
+            maximumPitch
+        );
+    }
 
     const math::Vec3 forward = cameraForward(m_yaw, m_pitch);
     const math::Vec3 right = math::normalize(math::cross(forward, {0.0F, 1.0F, 0.0F}));
@@ -97,11 +102,11 @@ void PerspectiveCameraController::update(const float deltaTime) {
     m_camera->lookAt(m_position, m_position + forward, {0.0F, 1.0F, 0.0F});
 }
 
-float PerspectiveCameraController::movementSpeed() const noexcept {
+float FlyCameraController::movementSpeed() const noexcept {
     return m_config.movementSpeed;
 }
 
-void PerspectiveCameraController::setMovementSpeed(const float speed) {
+void FlyCameraController::setMovementSpeed(const float speed) {
     validateNonNegativeFinite(speed, "Camera movement speed must be finite and non-negative");
     m_config.movementSpeed = speed;
 }

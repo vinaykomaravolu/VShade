@@ -161,6 +161,12 @@ IndexBuffer::IndexBuffer(
         throw std::overflow_error("Index buffer is too large");
     }
 
+    // GL_ELEMENT_ARRAY_BUFFER is stored in the currently bound VAO. Preserve
+    // that binding while uploading this buffer so constructing an unrelated
+    // index buffer cannot silently replace another mesh's indices.
+    GLint previousIndexBuffer = 0;
+    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previousIndexBuffer);
+
     glGenBuffers(1, &m_rendererId);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_rendererId);
     glBufferData(
@@ -169,6 +175,7 @@ IndexBuffer::IndexBuffer(
         indices,
         opengl::bufferUsage(usage)
     );
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(previousIndexBuffer));
 }
 
 IndexBuffer::~IndexBuffer() {

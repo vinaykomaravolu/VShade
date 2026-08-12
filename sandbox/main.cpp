@@ -12,7 +12,6 @@
 #include <renderer/material.hpp>
 #include <renderer/mesh.hpp>
 #include <renderer/renderer.hpp>
-#include <renderer/renderer2d.hpp>
 #include <renderer/renderer3d.hpp>
 #include <renderer/shader.hpp>
 #include <renderer/texture.hpp>
@@ -138,8 +137,8 @@ protected:
         m_cubeMaterial.setMetallic(0.05F);
         m_cubeMaterial.setShading(vshade::renderer::MaterialShading::Lit);
 
-        // Renderer3D uses a perspective camera. The controller reads WASD,
-        // mouse movement, and the scroll wheel in onUpdate().
+        // Start focused on the cube, then let the fly controller update this
+        // view from keyboard and mouse input.
         m_camera3D.lookAt(
             {3.2F, 2.2F, 4.2F},
             {0.0F, 0.0F, 0.0F},
@@ -147,7 +146,7 @@ protected:
         );
         updateCameraProjections(getWindow().width(), getWindow().height());
         m_cameraController =
-            std::make_unique<vshade::renderer::PerspectiveCameraController>(m_camera3D);
+            std::make_unique<vshade::renderer::FlyCameraController>(m_camera3D);
 
         vshade::renderer::Renderer3D::setDirectionalLight({
             .direction = {-0.55F, -1.0F, -0.35F},
@@ -155,15 +154,10 @@ protected:
             .intensity = 0.95F,
         });
 
-        // SpriteRendererComponent retains its shared texture. Its sorting layer
-        // controls when Renderer2D draws it relative to the colored HUD quads.
-        m_hudSprite.texture = m_checkerTexture;
-        m_hudSprite.color = {1.0F, 1.0F, 1.0F, 0.95F};
-        m_hudSprite.tiling = {2.0F, 2.0F};
-        m_hudSprite.sortingLayer = 1;
-
         GAME_INFO("Sandbox started");
-        GAME_INFO("Controls: WASD move, mouse look, scroll changes speed, Escape exits");
+        GAME_INFO(
+            "Controls: WASD move, hold right mouse to look, scroll changes speed, Escape exits"
+        );
     }
 
     void onUpdate(const float deltaTime) override {
@@ -194,8 +188,7 @@ protected:
 
         ENGINE_ASSERT(m_cubeMesh != nullptr, "Cube mesh must exist before rendering");
 
-        // First render the world. Renderer3D configures depth testing and face
-        // culling, then uses the camera, transform, mesh, and material together.
+        // Render the generated cube using the perspective camera.
         vshade::renderer::Renderer3D::beginScene(m_camera3D);
         vshade::renderer::Renderer3D::drawMesh(
             m_cubeTransform,
@@ -203,37 +196,6 @@ protected:
             m_cubeMaterial
         );
         vshade::renderer::Renderer3D::endScene();
-
-        // Then render a pixel-space HUD. Renderer2D disables depth testing,
-        // enables alpha blending, and sorts submissions by sortingLayer.
-        vshade::renderer::Renderer2D::beginScene(m_camera2D);
-        vshade::renderer::Renderer2D::drawQuad(
-            vshade::math::Transform(
-                {180.0F, 92.0F, 0.0F},
-                vshade::math::identity(),
-                {320.0F, 130.0F, 1.0F}
-            ),
-            {0.04F, 0.06F, 0.11F, 0.82F},
-            0
-        );
-        vshade::renderer::Renderer2D::drawSprite(
-            vshade::math::Transform(
-                {92.0F, 92.0F, 0.0F},
-                vshade::math::identity(),
-                {96.0F, 96.0F, 1.0F}
-            ),
-            m_hudSprite
-        );
-        vshade::renderer::Renderer2D::drawQuad(
-            vshade::math::Transform(
-                {230.0F, 92.0F, 0.0F},
-                vshade::math::identity(),
-                {120.0F, 20.0F, 1.0F}
-            ),
-            {0.20F, 0.75F, 0.95F, 0.95F},
-            2
-        );
-        vshade::renderer::Renderer2D::endScene();
     }
 
     void onWindowResize(const std::uint32_t width, const std::uint32_t height) override {
@@ -250,8 +212,7 @@ protected:
         );
 
         // Release GPU-backed objects while Application still owns the active
-        // OpenGL context. Material and sprite references are cleared first.
-        m_hudSprite.texture.reset();
+        // OpenGL context. Material references are cleared first.
         m_cubeMaterial.setShader(nullptr);
         m_cubeMaterial.setAlbedoTexture(nullptr);
         m_cubeMesh.reset();
@@ -264,28 +225,14 @@ private:
     void updateCameraProjections(const std::uint32_t width, const std::uint32_t height) {
         const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
         m_camera3D.setPerspective(0.785398163F, aspectRatio, 0.1F, 100.0F);
-
-        // Zero-to-width and zero-to-height creates a pixel-space 2D camera with
-        // its origin at the framebuffer's bottom-left corner.
-        m_camera2D.setOrthographic(
-            0.0F,
-            static_cast<float>(width),
-            0.0F,
-            static_cast<float>(height),
-            -1.0F,
-            1.0F
-        );
     }
 
     std::shared_ptr<vshade::renderer::Shader> m_materialShader;
     std::shared_ptr<vshade::renderer::Texture2D> m_checkerTexture;
     std::unique_ptr<vshade::renderer::Mesh> m_cubeMesh;
-    std::unique_ptr<vshade::renderer::PerspectiveCameraController> m_cameraController;
-
+    std::unique_ptr<vshade::renderer::FlyCameraController> m_cameraController;
     vshade::renderer::Material m_cubeMaterial;
-    vshade::renderer::SpriteRendererComponent m_hudSprite;
     vshade::renderer::Camera m_camera3D;
-    vshade::renderer::Camera m_camera2D;
     vshade::math::Transform m_cubeTransform;
     float m_cubeAngle = 0.0F;
 };
