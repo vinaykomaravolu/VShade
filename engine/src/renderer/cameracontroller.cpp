@@ -33,9 +33,9 @@ void validateNonNegativeFinite(const float value, const char* message) {
 
 } // namespace
 
-FlyCameraController::FlyCameraController(
+CameraController::CameraController(
     Camera& camera,
-    const FlyCameraControllerConfig config
+    const CameraControllerConfig config
 ) : m_camera(&camera), m_config(config) {
     validateNonNegativeFinite(
         m_config.movementSpeed,
@@ -59,7 +59,7 @@ FlyCameraController::FlyCameraController(
     }
 }
 
-void FlyCameraController::update(const float deltaTime) {
+void CameraController::update(const float deltaTime) {
     validateNonNegativeFinite(deltaTime, "Camera delta time must be finite and non-negative");
 
     const float scroll = input::Input::scrollDelta().y;
@@ -102,11 +102,11 @@ void FlyCameraController::update(const float deltaTime) {
     m_camera->lookAt(m_position, m_position + forward, {0.0F, 1.0F, 0.0F});
 }
 
-float FlyCameraController::movementSpeed() const noexcept {
+float CameraController::movementSpeed() const noexcept {
     return m_config.movementSpeed;
 }
 
-void FlyCameraController::setMovementSpeed(const float speed) {
+void CameraController::setMovementSpeed(const float speed) {
     validateNonNegativeFinite(speed, "Camera movement speed must be finite and non-negative");
     m_config.movementSpeed = speed;
 }

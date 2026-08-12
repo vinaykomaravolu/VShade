@@ -18,7 +18,8 @@ struct MeshCommand {
 };
 
 struct Renderer3DState {
-    math::Mat4 viewProjection{1.0F};
+    math::Mat4 view{1.0F};
+    math::Mat4 projection{1.0F};
     DirectionalLight light{};
     std::vector<MeshCommand> commands;
     Renderer3DStats currentStats{};
@@ -54,26 +55,27 @@ void validateNonNegativeFinite(const float value, const char* message) {
     return Shader(
         "vshade-renderer3d",
         R"glsl(#version 330 core
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 textureCoordinate;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aTexCoord;
 
-uniform mat4 viewProjection;
 uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
 
-out vec3 vertexNormal;
-out vec2 vertexTextureCoordinate;
+out vec3 vNormal;
+out vec2 vTexCoord;
 
 void main() {
     mat3 normalMatrix = mat3(transpose(inverse(model)));
-    vertexNormal = normalize(normalMatrix * normal);
-    vertexTextureCoordinate = textureCoordinate;
-    gl_Position = viewProjection * model * vec4(position, 1.0);
+    vNormal = normalize(normalMatrix * aNormal);
+    vTexCoord = aTexCoord;
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 )glsl",
         R"glsl(#version 330 core
-in vec3 vertexNormal;
-in vec2 vertexTextureCoordinate;
+in vec3 vNormal;
+in vec2 vTexCoord;
 
 uniform sampler2D albedoTexture;
 uniform int hasAlbedoTexture;
@@ -89,7 +91,7 @@ out vec4 fragmentColor;
 
 void main() {
     vec4 sampledAlbedo = hasAlbedoTexture != 0
-        ? texture(albedoTexture, vertexTextureCoordinate)
+        ? texture(albedoTexture, vTexCoord)
         : vec4(1.0);
     vec4 albedo = sampledAlbedo * albedoColor;
 
@@ -98,7 +100,7 @@ void main() {
         return;
     }
 
-    vec3 normalDirection = normalize(vertexNormal);
+    vec3 normalDirection = normalize(vNormal);
     vec3 directionToLight = normalize(-lightDirection);
     float diffuse = max(dot(normalDirection, directionToLight), 0.0);
     vec3 lighting = vec3(0.15) + lightColor * lightIntensity * diffuse;
@@ -127,7 +129,8 @@ void Renderer3D::beginScene(const Camera& camera) {
     Renderer::setCullFace(CullFace::Back);
     Renderer::setFrontFace(FrontFace::CounterClockwise);
 
-    rendererState.viewProjection = camera.viewProjection();
+    rendererState.view = camera.view();
+    rendererState.projection = camera.projection();
     rendererState.commands.clear();
     rendererState.currentStats = {};
     rendererState.sceneActive = true;
@@ -180,8 +183,9 @@ void Renderer3D::endScene() {
                 Shader& shader = command.material.hasShader()
                     ? *command.material.shader()
                     : defaultShader;
-                shader.setMat4("viewProjection", rendererState.viewProjection);
                 shader.setMat4("model", command.model);
+                shader.setMat4("view", rendererState.view);
+                shader.setMat4("projection", rendererState.projection);
                 shader.setVec4("albedoColor", command.material.albedoColor());
                 shader.setFloat("roughness", command.material.roughness());
                 shader.setFloat("metallic", command.material.metallic());

@@ -8,7 +8,7 @@
 #include <limits>
 #include <stdexcept>
 
-TEST_CASE("Fly camera controller preserves its initial camera pose", "[camera][controller]") {
+TEST_CASE("Camera controller preserves its initial camera pose", "[camera][controller]") {
     vshade::renderer::Camera camera;
     camera.setPerspective(0.785398163F, 1.0F, 0.1F, 100.0F);
     camera.lookAt(
@@ -17,7 +17,7 @@ TEST_CASE("Fly camera controller preserves its initial camera pose", "[camera][c
         {0.0F, 1.0F, 0.0F}
     );
 
-    vshade::renderer::FlyCameraController controller(camera);
+    vshade::renderer::CameraController controller(camera);
     controller.update(0.0F);
 
     const vshade::math::Vec4 cameraPositionInView =
@@ -28,9 +28,9 @@ TEST_CASE("Fly camera controller preserves its initial camera pose", "[camera][c
     CHECK(cameraPositionInView.w == Catch::Approx(1.0F).margin(0.0001F));
 }
 
-TEST_CASE("Fly camera controller validates movement settings", "[camera][controller]") {
+TEST_CASE("Camera controller validates movement settings", "[camera][controller]") {
     vshade::renderer::Camera camera;
-    vshade::renderer::FlyCameraController controller(camera);
+    vshade::renderer::CameraController controller(camera);
 
     controller.setMovementSpeed(8.0F);
     CHECK(controller.movementSpeed() == Catch::Approx(8.0F));
@@ -40,7 +40,7 @@ TEST_CASE("Fly camera controller validates movement settings", "[camera][control
         std::invalid_argument
     );
     CHECK_THROWS_AS(
-        vshade::renderer::FlyCameraController(
+        vshade::renderer::CameraController(
             camera,
             {.mouseSensitivity = -0.1F}
         ),

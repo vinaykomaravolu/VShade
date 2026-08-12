@@ -146,7 +146,7 @@ protected:
         );
         updateCameraProjections(getWindow().width(), getWindow().height());
         m_cameraController =
-            std::make_unique<vshade::renderer::FlyCameraController>(m_camera3D);
+            std::make_unique<vshade::renderer::CameraController>(m_camera3D);
 
         vshade::renderer::Renderer3D::setDirectionalLight({
             .direction = {-0.55F, -1.0F, -0.35F},
@@ -230,7 +230,7 @@ private:
     std::shared_ptr<vshade::renderer::Shader> m_materialShader;
     std::shared_ptr<vshade::renderer::Texture2D> m_checkerTexture;
     std::unique_ptr<vshade::renderer::Mesh> m_cubeMesh;
-    std::unique_ptr<vshade::renderer::FlyCameraController> m_cameraController;
+    std::unique_ptr<vshade::renderer::CameraController> m_cameraController;
     vshade::renderer::Material m_cubeMaterial;
     vshade::renderer::Camera m_camera3D;
     vshade::math::Transform m_cubeTransform;

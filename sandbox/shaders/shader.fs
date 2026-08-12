@@ -1,7 +1,7 @@
 #version 330 core
 
-in vec3 vertexNormal;
-in vec2 vertexTextureCoordinate;
+in vec3 vNormal;
+in vec2 vTexCoord;
 
 uniform sampler2D albedoTexture;
 uniform int hasAlbedoTexture;
@@ -15,7 +15,7 @@ out vec4 fragmentColor;
 
 void main() {
     vec4 sampledAlbedo = hasAlbedoTexture != 0
-        ? texture(albedoTexture, vertexTextureCoordinate)
+        ? texture(albedoTexture, vTexCoord)
         : vec4(1.0);
     vec4 albedo = sampledAlbedo * albedoColor;
 
@@ -24,7 +24,7 @@ void main() {
         return;
     }
 
-    vec3 normalDirection = normalize(vertexNormal);
+    vec3 normalDirection = normalize(vNormal);
     vec3 directionToLight = normalize(-lightDirection);
     float diffuse = max(dot(normalDirection, directionToLight), 0.0);
     vec3 lighting = vec3(0.15) + lightColor * lightIntensity * diffuse;

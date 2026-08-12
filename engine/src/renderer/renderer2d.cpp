@@ -30,7 +30,8 @@ struct QuadCommand {
 };
 
 struct Renderer2DState {
-    math::Mat4 viewProjection{1.0F};
+    math::Mat4 view{1.0F};
+    math::Mat4 projection{1.0F};
     std::vector<QuadCommand> commands;
     Renderer2DStats currentStats{};
     Renderer2DStats completedStats{};
@@ -46,22 +47,23 @@ struct QuadResources {
         : shader(
               "vshade-renderer2d",
               R"glsl(#version 330 core
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec2 textureCoordinate;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec2 aTexCoord;
 
-uniform mat4 viewProjection;
 uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
 uniform vec2 tiling;
 
-out vec2 vertexTextureCoordinate;
+out vec2 vTexCoord;
 
 void main() {
-    vertexTextureCoordinate = textureCoordinate * tiling;
-    gl_Position = viewProjection * model * vec4(position, 1.0);
+    vTexCoord = aTexCoord * tiling;
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 )glsl",
               R"glsl(#version 330 core
-in vec2 vertexTextureCoordinate;
+in vec2 vTexCoord;
 
 uniform sampler2D image;
 uniform vec4 tint;
@@ -69,7 +71,7 @@ uniform vec4 tint;
 out vec4 fragmentColor;
 
 void main() {
-    fragmentColor = texture(image, vertexTextureCoordinate) * tint;
+    fragmentColor = texture(image, vTexCoord) * tint;
 }
 )glsl"
           ),
@@ -163,7 +165,8 @@ void Renderer2D::beginScene(const Camera& camera) {
         BlendFactor::OneMinusSourceAlpha
     );
 
-    rendererState.viewProjection = camera.viewProjection();
+    rendererState.view = camera.view();
+    rendererState.projection = camera.projection();
     rendererState.commands.clear();
     rendererState.currentStats = {};
     rendererState.sceneActive = true;
@@ -216,7 +219,8 @@ void Renderer2D::endScene() {
 
         if (!rendererState.commands.empty()) {
             QuadResources resources;
-            resources.shader.setMat4("viewProjection", rendererState.viewProjection);
+            resources.shader.setMat4("view", rendererState.view);
+            resources.shader.setMat4("projection", rendererState.projection);
 
             for (const QuadCommand& command : rendererState.commands) {
                 resources.shader.setMat4("model", command.model);

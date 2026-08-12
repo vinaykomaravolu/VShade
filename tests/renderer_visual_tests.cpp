@@ -376,16 +376,17 @@ TEST_CASE("Offscreen rotating cube snapshot matches its golden image", "[rendere
     vshade::renderer::Shader shader(
         "visual-test-rotating-cube",
         R"glsl(#version 330 core
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 color;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
 
 uniform mat4 model;
-uniform mat4 viewProjection;
+uniform mat4 view;
+uniform mat4 projection;
 out vec3 vertexColor;
 
 void main() {
-    vertexColor = color;
-    gl_Position = viewProjection * model * vec4(position, 1.0);
+    vertexColor = aColor;
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 )glsl",
         R"glsl(#version 330 core
@@ -405,18 +406,19 @@ void main() {
         vshade::math::fromEuler({0.42F, 0.68F, 0.12F}),
         {1.0F, 1.0F, 1.0F}
     );
-    const vshade::math::Mat4 viewProjection =
-        vshade::math::perspective(0.785398163F, 1.0F, 0.1F, 100.0F) *
-        vshade::math::lookAt(
-            {3.2F, 2.4F, 4.2F},
-            {0.0F, 0.0F, 0.0F},
-            {0.0F, 1.0F, 0.0F}
-        );
+    const vshade::math::Mat4 projection =
+        vshade::math::perspective(0.785398163F, 1.0F, 0.1F, 100.0F);
+    const vshade::math::Mat4 view = vshade::math::lookAt(
+        {3.2F, 2.4F, 4.2F},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
 
     vshade::renderer::Framebuffer framebuffer(renderWidth, renderHeight);
     beginOffscreenFrame(framebuffer, {0.025F, 0.035F, 0.06F, 1.0F});
     shader.setMat4("model", model);
-    shader.setMat4("viewProjection", viewProjection);
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
     vshade::renderer::Renderer::drawIndexed(vertexArray);
 
     const vshade::tests::visual::Image actual = captureFramebuffer(framebuffer);
