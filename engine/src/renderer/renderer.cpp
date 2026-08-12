@@ -2,12 +2,18 @@
 
 #include "core/log.hpp"
 #include "renderer/mesh.hpp"
+#include "renderer/framebuffer.hpp"
+#include "renderer/renderer2d.hpp"
+#include "renderer/renderer3d.hpp"
+#include "renderer/shader.hpp"
 #include "renderer/vertexarray.hpp"
 
 #include "opengl/openglutils.hpp"
 
 #include <limits>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -17,6 +23,9 @@ namespace {
 
 bool initialized = false;
 RenderStats renderStats{};
+PipelineState currentPipelineState{};
+Viewport currentViewport{};
+std::uint32_t cachedMaximumTextureSlots = 0;
 
 void requireInitialized() {
     if (!initialized) {
@@ -62,6 +71,47 @@ void setCapability(const GLenum capability, const bool enabled) {
 
 } // namespace
 
+PipelineStateGuard::PipelineStateGuard(const PipelineState& state) noexcept
+    : m_state(state) {}
+
+PipelineStateGuard::~PipelineStateGuard() noexcept {
+    restore();
+}
+
+PipelineStateGuard::PipelineStateGuard(PipelineStateGuard&& other) noexcept
+    : m_state(other.m_state),
+      m_active(std::exchange(other.m_active, false)) {}
+
+PipelineStateGuard& PipelineStateGuard::operator=(PipelineStateGuard&& other) noexcept {
+    if (this != &other) {
+        restore();
+        m_state = other.m_state;
+        m_active = std::exchange(other.m_active, false);
+    }
+    return *this;
+}
+
+void PipelineStateGuard::restore() noexcept {
+    if (!m_active) {
+        return;
+    }
+
+    m_active = false;
+    if (!Renderer::isInitialized()) {
+        return;
+    }
+
+    try {
+        Renderer::applyPipelineState(m_state);
+    } catch (...) {
+        ENGINE_ERROR("Failed to restore a scoped renderer pipeline state");
+    }
+}
+
+bool PipelineStateGuard::active() const noexcept {
+    return m_active;
+}
+
 void Renderer::initialize() {
     if (initialized) {
         return;
@@ -76,6 +126,12 @@ void Renderer::initialize() {
     }
 
     initialized = true;
+    GLint textureSlots = 0;
+    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &textureSlots);
+    cachedMaximumTextureSlots = textureSlots > 0
+        ? static_cast<std::uint32_t>(textureSlots)
+        : 0;
+
     setBlending(true);
     setBlendFunction(BlendFactor::SourceAlpha, BlendFactor::OneMinusSourceAlpha);
     setFaceCulling(false);
@@ -85,6 +141,7 @@ void Renderer::initialize() {
     setDepthTesting(true);
     setDepthFunction(DepthFunction::Less);
     setDepthWrite(true);
+    setDithering(true);
 
     const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
     const auto* device = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
@@ -101,8 +158,15 @@ void Renderer::shutdown() noexcept {
     if (!initialized) {
         return;
     }
+    Renderer2D::shutdown();
+    Renderer3D::shutdown();
+    Framebuffer::resetBindingStack();
+    Shader::resetBindingCache();
     initialized = false;
     renderStats = {};
+    currentPipelineState = {};
+    currentViewport = {};
+    cachedMaximumTextureSlots = 0;
     ENGINE_INFO("Renderer shutdown complete");
 }
 
@@ -112,6 +176,39 @@ bool Renderer::isInitialized() noexcept {
 
 void Renderer::beginFrame() noexcept {
     renderStats = {};
+}
+
+void Renderer::endFrame() {
+    requireInitialized();
+#if !defined(NDEBUG)
+    const GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        throw std::runtime_error(
+            "OpenGL error detected at end of frame: " + std::to_string(error)
+        );
+    }
+#endif
+}
+
+PipelineState Renderer::pipelineState() noexcept {
+    return currentPipelineState;
+}
+
+PipelineStateGuard Renderer::pushPipelineState() noexcept {
+    return PipelineStateGuard(currentPipelineState);
+}
+
+void Renderer::applyPipelineState(const PipelineState& state) {
+    setBlending(state.blending);
+    setBlendFunction(state.sourceBlend, state.destinationBlend);
+    setFaceCulling(state.faceCulling);
+    setCullFace(state.cullFace);
+    setFrontFace(state.frontFace);
+    setPolygonMode(state.polygonMode);
+    setDepthTesting(state.depthTesting);
+    setDepthFunction(state.depthFunction);
+    setDepthWrite(state.depthWrite);
+    setDithering(state.dithering);
 }
 
 void Renderer::setViewport(
@@ -127,6 +224,11 @@ void Renderer::setViewport(
         checkedDimension(width),
         checkedDimension(height)
     );
+    currentViewport = {x, y, width, height};
+}
+
+Viewport Renderer::viewport() noexcept {
+    return currentViewport;
 }
 
 void Renderer::setClearColor(const math::Vec4& color) {
@@ -159,51 +261,62 @@ void Renderer::clear(const ClearFlags flags) {
 void Renderer::setBlending(const bool enabled) {
     requireInitialized();
     setCapability(GL_BLEND, enabled);
+    currentPipelineState.blending = enabled;
 }
 
 void Renderer::setBlendFunction(const BlendFactor source, const BlendFactor destination) {
     requireInitialized();
     glBlendFunc(opengl::blendFactor(source), opengl::blendFactor(destination));
+    currentPipelineState.sourceBlend = source;
+    currentPipelineState.destinationBlend = destination;
 }
 
 void Renderer::setFaceCulling(const bool enabled) {
     requireInitialized();
     setCapability(GL_CULL_FACE, enabled);
+    currentPipelineState.faceCulling = enabled;
 }
 
 void Renderer::setCullFace(const CullFace face) {
     requireInitialized();
     glCullFace(opengl::cullFace(face));
+    currentPipelineState.cullFace = face;
 }
 
 void Renderer::setFrontFace(const FrontFace winding) {
     requireInitialized();
     glFrontFace(opengl::frontFace(winding));
+    currentPipelineState.frontFace = winding;
 }
 
 void Renderer::setPolygonMode(const PolygonMode mode) {
     requireInitialized();
     glPolygonMode(GL_FRONT_AND_BACK, opengl::polygonMode(mode));
+    currentPipelineState.polygonMode = mode;
 }
 
 void Renderer::setDepthTesting(const bool enabled) {
     requireInitialized();
     setCapability(GL_DEPTH_TEST, enabled);
+    currentPipelineState.depthTesting = enabled;
 }
 
 void Renderer::setDepthFunction(const DepthFunction function) {
     requireInitialized();
     glDepthFunc(opengl::depthFunction(function));
+    currentPipelineState.depthFunction = function;
 }
 
 void Renderer::setDepthWrite(const bool enabled) {
     requireInitialized();
     glDepthMask(enabled ? GL_TRUE : GL_FALSE);
+    currentPipelineState.depthWrite = enabled;
 }
 
 void Renderer::setDithering(const bool enabled) {
     requireInitialized();
     setCapability(GL_DITHER, enabled);
+    currentPipelineState.dithering = enabled;
 }
 
 void Renderer::drawIndexed(
@@ -277,6 +390,11 @@ void Renderer::draw(const Mesh& mesh) {
 
 const RenderStats& Renderer::stats() noexcept {
     return renderStats;
+}
+
+std::uint32_t Renderer::maximumTextureSlots() {
+    requireInitialized();
+    return cachedMaximumTextureSlots;
 }
 
 } // namespace vshade::renderer

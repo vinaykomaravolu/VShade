@@ -28,6 +28,12 @@
 namespace vshade::renderer {
 namespace {
 
+void requireRenderer() {
+    if (!Renderer::isInitialized()) {
+        throw std::logic_error("Texture operation requires an initialized renderer");
+    }
+}
+
 std::size_t textureByteSize(
     const std::uint32_t width,
     const std::uint32_t height,
@@ -80,6 +86,11 @@ Texture2D::Texture2D(
     const auto filterValue = static_cast<GLint>(opengl::textureFilter(filter));
     const auto wrapValue = static_cast<GLint>(opengl::textureWrap(wrap));
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+
     glGenTextures(1, &m_rendererId);
     glBindTexture(GL_TEXTURE_2D, m_rendererId);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterValue);
@@ -98,6 +109,8 @@ Texture2D::Texture2D(
         GL_UNSIGNED_BYTE,
         data
     );
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
 }
 
 Texture2D::~Texture2D() {
@@ -172,6 +185,7 @@ Texture2D Texture2D::fromFile(
 }
 
 void Texture2D::setData(const void* data, const std::size_t size) {
+    requireRenderer();
     if (data == nullptr) {
         throw std::invalid_argument("Texture data must not be null");
     }
@@ -182,6 +196,10 @@ void Texture2D::setData(const void* data, const std::size_t size) {
         throw std::invalid_argument("Texture data size does not match its dimensions and format");
     }
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
     glBindTexture(GL_TEXTURE_2D, m_rendererId);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexSubImage2D(
@@ -195,12 +213,13 @@ void Texture2D::setData(const void* data, const std::size_t size) {
         GL_UNSIGNED_BYTE,
         data
     );
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
 }
 
 void Texture2D::bind(const std::uint32_t slot) const {
-    GLint maximumSlots = 0;
-    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maximumSlots);
-    if (slot >= static_cast<std::uint32_t>(maximumSlots)) {
+    requireRenderer();
+    if (slot >= Renderer::maximumTextureSlots()) {
         throw std::out_of_range("Texture slot exceeds the OpenGL limit");
     }
 

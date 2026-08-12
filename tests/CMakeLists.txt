@@ -1,4 +1,5 @@
 add_executable(VShadeTests
+    application_tests.cpp
     cameracontroller_tests.cpp
     filesystem_tests.cpp
     log_tests.cpp

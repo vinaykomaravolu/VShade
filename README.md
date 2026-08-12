@@ -3,12 +3,14 @@
 VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 
 - a cross-platform GLFW window and OpenGL 3.3 context;
-- an application lifecycle and frame-timed main loop;
+- an application lifecycle with clamped variable and fixed-step updates;
 - resize callbacks, fullscreen switching, and VSync controls;
 - engine and game logging through spdlog;
 - assertions and basic filesystem helpers;
 - a small `vshade::math` API backed by GLM;
-- an OpenGL 3.3 renderer foundation with buffers, shaders, textures, cameras, and meshes;
+- an OpenGL 3.3 renderer with buffers, shaders, textures, framebuffers, cameras, and meshes;
+- high-level 2D quad/sprite and 3D mesh/material rendering;
+- a fly-camera controller with cursor capture;
 - a static engine library;
 - a minimal sandbox application.
 
@@ -36,8 +38,8 @@ cmake -S . -B build
 cmake --build build --config Debug
 ```
 
-The sandbox opens a dark window. Press Escape or use the window close button
-to exit.
+The sandbox renders a lit, textured cube. Use WASD to move, hold the right
+mouse button to look, scroll to change speed, and press Escape to exit.
 
 ## Test
 
@@ -87,6 +89,10 @@ A game supplies behavior by deriving from `Application`:
 ```cpp
 class MyGame final : public vshade::core::Application {
 protected:
+    void onFixedUpdate(float fixedDeltaTime) override {
+        // Update fixed-step simulation or physics here.
+    }
+
     void onUpdate(float deltaTime) override {
         // Update the active scene here.
     }
@@ -128,9 +134,13 @@ Other core systems have focused headers:
 #include <platform/window.hpp>
 #include <renderer/buffer.hpp>
 #include <renderer/camera.hpp>
+#include <renderer/cameracontroller.hpp>
 #include <renderer/framebuffer.hpp>
+#include <renderer/material.hpp>
 #include <renderer/mesh.hpp>
 #include <renderer/renderer.hpp>
+#include <renderer/renderer2d.hpp>
+#include <renderer/renderer3d.hpp>
 #include <renderer/rendertypes.hpp>
 #include <renderer/shader.hpp>
 #include <renderer/texture.hpp>

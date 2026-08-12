@@ -7,11 +7,26 @@
 #include <limits>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <glad/gl.h>
 
 namespace vshade::renderer {
 namespace {
+
+struct FramebufferBindingState {
+    GLint drawFramebuffer = 0;
+    GLint readFramebuffer = 0;
+    GLint viewport[4]{0, 0, 0, 0};
+};
+
+std::vector<FramebufferBindingState> bindingStack;
+
+void requireRenderer() {
+    if (!Renderer::isInitialized()) {
+        throw std::logic_error("Framebuffer operation requires an initialized renderer");
+    }
+}
 
 GLsizei checkedDimension(const std::uint32_t value) {
     if (value == 0) {
@@ -76,32 +91,77 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept {
 }
 
 void Framebuffer::bind() const {
+    requireRenderer();
+    FramebufferBindingState previous;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous.drawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous.readFramebuffer);
+    glGetIntegerv(GL_VIEWPORT, previous.viewport);
+    bindingStack.push_back(previous);
     glBindFramebuffer(GL_FRAMEBUFFER, m_rendererId);
     Renderer::setViewport(0, 0, m_width, m_height);
 }
 
 void Framebuffer::unbind() {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    requireRenderer();
+    if (bindingStack.empty()) {
+        throw std::logic_error("Framebuffer::unbind requires a matching bind");
+    }
+
+    const FramebufferBindingState previous = bindingStack.back();
+    bindingStack.pop_back();
+    glBindFramebuffer(
+        GL_DRAW_FRAMEBUFFER,
+        static_cast<GLuint>(previous.drawFramebuffer)
+    );
+    glBindFramebuffer(
+        GL_READ_FRAMEBUFFER,
+        static_cast<GLuint>(previous.readFramebuffer)
+    );
+    Renderer::setViewport(
+        static_cast<std::uint32_t>(std::max(previous.viewport[0], 0)),
+        static_cast<std::uint32_t>(std::max(previous.viewport[1], 0)),
+        static_cast<std::uint32_t>(std::max(previous.viewport[2], 0)),
+        static_cast<std::uint32_t>(std::max(previous.viewport[3], 0))
+    );
 }
 
 void Framebuffer::resize(const std::uint32_t width, const std::uint32_t height) {
+    requireRenderer();
     checkedDimension(width);
     checkedDimension(height);
     if (width == m_width && height == m_height) {
         return;
     }
 
-    release();
-    m_width = width;
-    m_height = height;
-    create();
+    GLint drawFramebuffer = 0;
+    GLint readFramebuffer = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
+    if (drawFramebuffer == static_cast<GLint>(m_rendererId) ||
+        readFramebuffer == static_cast<GLint>(m_rendererId) ||
+        std::any_of(
+            bindingStack.begin(),
+            bindingStack.end(),
+            [this](const FramebufferBindingState& binding) {
+                return binding.drawFramebuffer == static_cast<GLint>(m_rendererId) ||
+                    binding.readFramebuffer == static_cast<GLint>(m_rendererId);
+            }
+        )) {
+        throw std::logic_error("Cannot resize a framebuffer while it is bound");
+    }
+
+    Framebuffer replacement(width, height);
+    *this = std::move(replacement);
 }
 
 std::vector<std::uint8_t> Framebuffer::readPixels() const {
+    requireRenderer();
     std::vector<std::uint8_t> pixels(pixelByteCount(m_width, m_height));
 
     GLint previousReadFramebuffer = 0;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    GLint previousPackAlignment = 0;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_rendererId);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -115,6 +175,7 @@ std::vector<std::uint8_t> Framebuffer::readPixels() const {
         pixels.data()
     );
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
+    glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
 
     const std::size_t rowSize = static_cast<std::size_t>(m_width) * 4;
     for (std::uint32_t row = 0; row < m_height / 2; ++row) {
@@ -146,9 +207,22 @@ std::uint32_t Framebuffer::colorAttachmentId() const noexcept {
     return m_colorAttachmentId;
 }
 
+void Framebuffer::resetBindingStack() noexcept {
+    bindingStack.clear();
+}
+
 void Framebuffer::create() {
     const GLsizei width = checkedDimension(m_width);
     const GLsizei height = checkedDimension(m_height);
+
+    GLint previousDrawFramebuffer = 0;
+    GLint previousReadFramebuffer = 0;
+    GLint previousTexture = 0;
+    GLint previousRenderbuffer = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_RENDERBUFFER_BINDING, &previousRenderbuffer);
 
     glGenFramebuffers(1, &m_rendererId);
     glBindFramebuffer(GL_FRAMEBUFFER, m_rendererId);
@@ -180,10 +254,17 @@ void Framebuffer::create() {
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         release();
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+        glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(previousRenderbuffer));
         throw std::runtime_error("Failed to create a complete OpenGL framebuffer");
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(previousRenderbuffer));
 }
 
 void Framebuffer::release() noexcept {

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -29,12 +30,17 @@ struct QuadCommand {
     std::int32_t sortingLayer = 0;
 };
 
+struct QuadResources;
+
 struct Renderer2DState {
     math::Mat4 view{1.0F};
     math::Mat4 projection{1.0F};
     std::vector<QuadCommand> commands;
     Renderer2DStats currentStats{};
     Renderer2DStats completedStats{};
+    std::optional<PipelineStateGuard> pipelineStateGuard;
+    std::unique_ptr<QuadResources> resources;
+    std::uint64_t resourceInitializationCount = 0;
     bool sceneActive = false;
 };
 
@@ -111,6 +117,15 @@ private:
     return instance;
 }
 
+[[nodiscard]] QuadResources& resources() {
+    Renderer2DState& rendererState = state();
+    if (!rendererState.resources) {
+        rendererState.resources = std::make_unique<QuadResources>();
+        ++rendererState.resourceInitializationCount;
+    }
+    return *rendererState.resources;
+}
+
 void requireActiveScene() {
     if (!state().sceneActive) {
         throw std::logic_error("Renderer2D requires an active scene");
@@ -156,6 +171,7 @@ void Renderer2D::beginScene(const Camera& camera) {
         throw std::logic_error("Renderer2D scene is already active");
     }
 
+    rendererState.pipelineStateGuard.emplace(Renderer::pushPipelineState());
     Renderer::setDepthTesting(false);
     Renderer::setDepthWrite(false);
     Renderer::setFaceCulling(false);
@@ -218,27 +234,32 @@ void Renderer2D::endScene() {
         );
 
         if (!rendererState.commands.empty()) {
-            QuadResources resources;
-            resources.shader.setMat4("view", rendererState.view);
-            resources.shader.setMat4("projection", rendererState.projection);
+            QuadResources& quadResources = resources();
+            quadResources.shader.bind();
+            quadResources.shader.setMat4("view", rendererState.view);
+            quadResources.shader.setMat4("projection", rendererState.projection);
 
             for (const QuadCommand& command : rendererState.commands) {
-                resources.shader.setMat4("model", command.model);
-                resources.shader.setVec4("tint", command.color);
-                resources.shader.setVec2("tiling", command.tiling);
+                quadResources.shader.setMat4("model", command.model);
+                quadResources.shader.setVec4("tint", command.color);
+                quadResources.shader.setVec2("tiling", command.tiling);
 
                 const Texture2D& texture = command.texture != nullptr
                     ? *command.texture
-                    : resources.whiteTexture;
+                    : quadResources.whiteTexture;
                 texture.bind(0);
-                Renderer::drawIndexed(resources.vertexArray);
+                Renderer::drawIndexed(quadResources.vertexArray);
                 ++rendererState.currentStats.drawCalls;
             }
         }
 
         rendererState.completedStats = rendererState.currentStats;
+        rendererState.completedStats.resourceInitializations =
+            rendererState.resourceInitializationCount;
+        rendererState.pipelineStateGuard.reset();
         discardCurrentScene();
     } catch (...) {
+        rendererState.pipelineStateGuard.reset();
         discardCurrentScene();
         throw;
     }
@@ -246,6 +267,15 @@ void Renderer2D::endScene() {
 
 const Renderer2DStats& Renderer2D::stats() noexcept {
     return state().completedStats;
+}
+
+void Renderer2D::shutdown() noexcept {
+    Renderer2DState& rendererState = state();
+    rendererState.pipelineStateGuard.reset();
+    discardCurrentScene();
+    rendererState.resources.reset();
+    rendererState.completedStats = {};
+    rendererState.resourceInitializationCount = 0;
 }
 
 } // namespace vshade::renderer

@@ -47,3 +47,27 @@ TEST_CASE("Camera controller validates movement settings", "[camera][controller]
         std::invalid_argument
     );
 }
+
+TEST_CASE("Camera controller accepts deterministic movement and resynchronizes", "[camera][controller]") {
+    vshade::renderer::Camera camera;
+    vshade::renderer::CameraController controller(camera);
+
+    controller.update(0.5F, {.forward = 1.0F});
+    CHECK(controller.position().x == Catch::Approx(0.0F).margin(0.0001F));
+    CHECK(controller.position().z == Catch::Approx(-2.5F).margin(0.0001F));
+
+    camera.lookAt(
+        {3.0F, 2.0F, 1.0F},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+    controller.syncFromCamera();
+    CHECK(controller.position().x == Catch::Approx(3.0F).margin(0.0001F));
+    CHECK(controller.position().y == Catch::Approx(2.0F).margin(0.0001F));
+    CHECK(controller.position().z == Catch::Approx(1.0F).margin(0.0001F));
+
+    CHECK_THROWS_AS(
+        controller.update(0.1F, {.forward = 2.0F}),
+        std::invalid_argument
+    );
+}

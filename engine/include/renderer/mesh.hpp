@@ -19,16 +19,6 @@ struct MeshVertex {
     math::Vec2 textureCoordinate{0.0F};
 };
 
-/** @brief Indexed region of a mesh that can use its own material. */
-struct Submesh {
-    /** @brief Offset of the first index in the mesh index buffer. */
-    std::size_t firstIndex = 0;
-    /** @brief Number of indices belonging to this submesh. */
-    std::size_t indexCount = 0;
-    /** @brief Index of the material assigned to this submesh. */
-    std::size_t materialIndex = 0;
-};
-
 /** @brief Renderable geometry backed by a vertex array. */
 class Mesh final {
 public:

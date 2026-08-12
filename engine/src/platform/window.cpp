@@ -2,6 +2,7 @@
 
 #include "core/log.hpp"
 #include "input/input.hpp"
+#include "renderer/renderer.hpp"
 
 #include <limits>
 #include <mutex>
@@ -126,6 +127,7 @@ struct Window::Impl {
     std::uint32_t height = 0;
     bool fullscreen = false;
     bool vsync = true;
+    bool cursor_captured = false;
     int windowed_x = 100;
     int windowed_y = 100;
     int windowed_width = 1280;
@@ -249,6 +251,20 @@ Window::Window(const WindowConfig& config)
         input::Input::onMouseScrolled(static_cast<float>(x), static_cast<float>(y));
     });
 
+    glfwSetWindowFocusCallback(m_impl->handle, [](GLFWwindow* handle, const int focused) {
+        if (focused == GLFW_TRUE) {
+            input::Input::resetMouseTracking();
+            return;
+        }
+
+        input::Input::reset();
+        auto* impl = static_cast<Impl*>(glfwGetWindowUserPointer(handle));
+        if (impl && impl->cursor_captured) {
+            glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            impl->cursor_captured = false;
+        }
+    });
+
     int framebuffer_width = 0;
     int framebuffer_height = 0;
     glfwGetFramebufferSize(m_impl->handle, &framebuffer_width, &framebuffer_height);
@@ -292,6 +308,13 @@ void Window::swapBuffers() const {
 
 void Window::clear(const float red, const float green, const float blue, const float alpha) const {
     glfwMakeContextCurrent(m_impl->handle);
+    if (renderer::Renderer::isInitialized()) {
+        renderer::Renderer::setViewport(0, 0, m_impl->width, m_impl->height);
+        renderer::Renderer::setClearColor({red, green, blue, alpha});
+        renderer::Renderer::clear();
+        return;
+    }
+
     glViewport(0, 0, static_cast<int>(m_impl->width), static_cast<int>(m_impl->height));
     glClearColor(red, green, blue, alpha);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -360,6 +383,31 @@ void Window::setVSync(const bool enabled) {
 
 bool Window::isVSync() const noexcept {
     return m_impl->vsync;
+}
+
+void Window::setCursorCaptured(const bool captured) {
+    if (captured == m_impl->cursor_captured) {
+        return;
+    }
+
+    if (glfwRawMouseMotionSupported() == GLFW_TRUE) {
+        glfwSetInputMode(
+            m_impl->handle,
+            GLFW_RAW_MOUSE_MOTION,
+            captured ? GLFW_TRUE : GLFW_FALSE
+        );
+    }
+    glfwSetInputMode(
+        m_impl->handle,
+        GLFW_CURSOR,
+        captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL
+    );
+    m_impl->cursor_captured = captured;
+    input::Input::resetMouseTracking();
+}
+
+bool Window::isCursorCaptured() const noexcept {
+    return m_impl->cursor_captured;
 }
 
 std::uint32_t Window::width() const noexcept {

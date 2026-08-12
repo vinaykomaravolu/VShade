@@ -11,6 +11,8 @@
 
 namespace vshade::renderer {
 
+class Renderer;
+
 /** @brief Owns a linked OpenGL vertex-and-fragment shader program. */
 class Shader final {
 public:
@@ -108,7 +110,14 @@ public:
      */
     [[nodiscard]] std::uint32_t rendererId() const noexcept;
 
+    /** @brief Reports whether the linked program exposes a named active uniform. */
+    [[nodiscard]] bool hasUniform(std::string_view name);
+
 private:
+    friend class Renderer;
+
+    static void resetBindingCache() noexcept;
+
     /**
      * @brief Owns a temporary compiled OpenGL shader stage.
      *

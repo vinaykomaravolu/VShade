@@ -17,6 +17,20 @@ struct CameraControllerConfig {
     bool requireRightMouseButton = true;
 };
 
+/** @brief One frame of deterministic fly-camera input. */
+struct CameraControllerInput {
+    /** @brief Forward/back input in the range -1 through 1. */
+    float forward = 0.0F;
+    /** @brief Right/left input in the range -1 through 1. */
+    float right = 0.0F;
+    /** @brief Cursor movement in input units for this frame. */
+    math::Vec2 lookDelta{0.0F};
+    /** @brief Vertical scroll input used to adjust movement speed. */
+    float scrollDelta = 0.0F;
+    /** @brief Whether lookDelta should rotate the camera this frame. */
+    bool mouseLookActive = false;
+};
+
 /** @brief Provides free-flying WASD and mouse-look control for a camera. */
 class CameraController final {
 public:
@@ -31,12 +45,30 @@ public:
         CameraControllerConfig config = {}
     );
 
+    CameraController(const CameraController&) = delete;
+    CameraController& operator=(const CameraController&) = delete;
+    CameraController(CameraController&&) = delete;
+    CameraController& operator=(CameraController&&) = delete;
+
     /**
      * @brief Applies WASD movement, mouse look, and scroll-speed changes.
      * @param deltaTime Seconds elapsed since the previous frame.
      * @throws std::invalid_argument If @p deltaTime is negative or not finite.
      */
     void update(float deltaTime);
+
+    /**
+     * @brief Updates from an explicit input snapshot for tests or custom input systems.
+     * @param deltaTime Seconds elapsed since the previous frame.
+     * @param input Movement, look, and scroll values for this frame.
+     */
+    void update(float deltaTime, const CameraControllerInput& input);
+
+    /** @brief Rebuilds the controller pose from the camera's current view matrix. */
+    void syncFromCamera();
+
+    /** @brief Returns the controller's current world-space position. */
+    [[nodiscard]] const math::Vec3& position() const noexcept;
 
     /**
      * @brief Returns the current movement speed.
@@ -52,7 +84,7 @@ public:
     void setMovementSpeed(float speed);
 
 private:
-    Camera* m_camera = nullptr;
+    Camera& m_camera;
     CameraControllerConfig m_config{};
     math::Vec3 m_position{0.0F};
     float m_yaw = 0.0F;

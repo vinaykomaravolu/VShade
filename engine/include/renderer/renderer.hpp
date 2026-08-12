@@ -9,13 +9,72 @@
 namespace vshade::renderer {
 
 class Mesh;
+class Texture2D;
 class VertexArray;
+class Renderer;
 
 /** @brief Statistics collected from renderer draw calls during the current frame. */
 struct RenderStats {
     std::uint64_t drawCalls = 0;
     std::uint64_t indexCount = 0;
     std::uint64_t vertexCount = 0;
+};
+
+/** @brief Complete pipeline state managed by the renderer facade. */
+struct PipelineState {
+    bool blending = true;
+    BlendFactor sourceBlend = BlendFactor::SourceAlpha;
+    BlendFactor destinationBlend = BlendFactor::OneMinusSourceAlpha;
+    bool faceCulling = false;
+    CullFace cullFace = CullFace::Back;
+    FrontFace frontFace = FrontFace::CounterClockwise;
+    PolygonMode polygonMode = PolygonMode::Fill;
+    bool depthTesting = true;
+    DepthFunction depthFunction = DepthFunction::Less;
+    bool depthWrite = true;
+    bool dithering = true;
+
+    bool operator==(const PipelineState&) const = default;
+};
+
+/**
+ * @brief Restores a captured renderer pipeline state when it leaves scope.
+ *
+ * Guards are movable but not copyable. A moved-from guard becomes inactive,
+ * ensuring that each captured state is restored exactly once.
+ */
+class PipelineStateGuard final {
+public:
+    ~PipelineStateGuard() noexcept;
+
+    PipelineStateGuard(const PipelineStateGuard&) = delete;
+    PipelineStateGuard& operator=(const PipelineStateGuard&) = delete;
+    PipelineStateGuard(PipelineStateGuard&& other) noexcept;
+    PipelineStateGuard& operator=(PipelineStateGuard&& other) noexcept;
+
+    /** @brief Restores the captured state immediately and deactivates this guard. */
+    void restore() noexcept;
+
+    /** @brief Reports whether this guard still owns a pending restoration. */
+    [[nodiscard]] bool active() const noexcept;
+
+private:
+    friend class Renderer;
+
+    explicit PipelineStateGuard(const PipelineState& state) noexcept;
+
+    PipelineState m_state{};
+    bool m_active = true;
+};
+
+/** @brief Viewport rectangle tracked by the renderer facade. */
+struct Viewport {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+
+    bool operator==(const Viewport&) const = default;
 };
 
 /**
@@ -46,6 +105,24 @@ public:
     static void beginFrame() noexcept;
 
     /**
+     * @brief Validates that the frame produced no OpenGL errors in debug builds.
+     * @throws std::runtime_error If OpenGL reports an error in a debug build.
+     */
+    static void endFrame();
+
+    /** @brief Returns the pipeline state currently tracked by Renderer. */
+    [[nodiscard]] static PipelineState pipelineState() noexcept;
+
+    /**
+     * @brief Captures the current pipeline state in a scoped restoration guard.
+     * @return Movable guard that restores the captured state when destroyed.
+     */
+    [[nodiscard]] static PipelineStateGuard pushPipelineState() noexcept;
+
+    /** @brief Applies a complete pipeline state through the renderer facade. */
+    static void applyPipelineState(const PipelineState& state);
+
+    /**
      * @brief Sets the viewport in framebuffer pixels.
      * @param x Horizontal offset from the framebuffer origin.
      * @param y Vertical offset from the framebuffer origin.
@@ -60,6 +137,9 @@ public:
         std::uint32_t width,
         std::uint32_t height
     );
+
+    /** @brief Returns the viewport most recently set through Renderer. */
+    [[nodiscard]] static Viewport viewport() noexcept;
 
     /**
      * @brief Sets the color used by clear().
@@ -201,6 +281,9 @@ public:
      * @return Read-only reference to the current frame statistics.
      */
     [[nodiscard]] static const RenderStats& stats() noexcept;
+
+    /** @brief Returns the texture-unit limit cached at renderer initialization. */
+    [[nodiscard]] static std::uint32_t maximumTextureSlots();
 };
 
 } // namespace vshade::renderer

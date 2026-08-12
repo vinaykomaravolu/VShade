@@ -14,6 +14,7 @@ set(VSHADE_SOURCES
     src/renderer/cameracontroller.cpp
     src/renderer/framebuffer.cpp
     src/renderer/material.cpp
+    src/renderer/materialparameters.cpp
     src/renderer/mesh.cpp
     src/renderer/opengl/openglutils.cpp
     src/renderer/opengl/generated/src/gl.c

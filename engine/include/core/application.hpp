@@ -10,6 +10,10 @@ namespace vshade::core {
 struct ApplicationConfig {
     /** @brief Settings used to create the main window. */
     platform::WindowConfig window{};
+    /** @brief Fixed-update interval in seconds. */
+    float fixedDeltaTime = 1.0F / 60.0F;
+    /** @brief Maximum variable frame delta accepted after a stall. */
+    float maximumDeltaTime = 0.25F;
 };
 
 /**
@@ -69,6 +73,14 @@ protected:
      */
     virtual void onUpdate(float delta_time) {
         static_cast<void>(delta_time);
+    }
+
+    /**
+     * @brief Called zero or more times per frame at a stable simulation interval.
+     * @param fixed_delta_time Configured fixed timestep in seconds.
+     */
+    virtual void onFixedUpdate(float fixed_delta_time) {
+        static_cast<void>(fixed_delta_time);
     }
 
     /** @brief Called once per frame to submit and execute rendering work. */

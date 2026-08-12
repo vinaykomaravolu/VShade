@@ -79,4 +79,12 @@ void Material::setShading(const MaterialShading shading) noexcept {
     m_shading = shading;
 }
 
+const MaterialParameters& Material::parameters() const noexcept {
+    return m_parameters;
+}
+
+MaterialParameters& Material::parameters() noexcept {
+    return m_parameters;
+}
+
 } // namespace vshade::renderer

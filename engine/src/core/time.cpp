@@ -1,6 +1,7 @@
 #include "core/time.hpp"
 
 #include <chrono>
+#include <algorithm>
 
 namespace vshade::core {
 namespace {
@@ -35,9 +36,10 @@ void Time::reset() noexcept {
     frame_count = 0;
 }
 
-void Time::tick() noexcept {
+void Time::tick(const float maximumDeltaTime) noexcept {
     const auto now = Clock::now();
-    delta_time = std::chrono::duration<float>(now - previous_frame_time).count();
+    const float rawDelta = std::chrono::duration<float>(now - previous_frame_time).count();
+    delta_time = std::min(rawDelta, maximumDeltaTime);
     elapsed_time = std::chrono::duration<double>(now - start_time).count();
     previous_frame_time = now;
     ++frame_count;

@@ -22,12 +22,14 @@ struct SpriteRendererComponent {
     std::int32_t sortingLayer = 0;
 };
 
-/** @brief Statistics collected by the future batched 2D renderer. */
+/** @brief Statistics collected by the 2D renderer. */
 struct Renderer2DStats {
     /** @brief Number of GPU draw calls issued for the completed scene. */
     std::uint64_t drawCalls = 0;
     /** @brief Number of quads submitted for the completed scene. */
     std::uint64_t quadCount = 0;
+    /** @brief Number of persistent resource-set creations in this renderer lifetime. */
+    std::uint64_t resourceInitializations = 0;
 };
 
 /**
@@ -104,6 +106,12 @@ public:
 
     /** @brief Returns statistics from the most recently completed 2D scene. */
     [[nodiscard]] static const Renderer2DStats& stats() noexcept;
+
+private:
+    friend class Renderer;
+
+    /** Releases persistent renderer resources while the GL context is active. */
+    static void shutdown() noexcept;
 };
 
 } // namespace vshade::renderer

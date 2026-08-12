@@ -10,12 +10,15 @@ built.
 - `SHADE_ENGINE_MAIN` creates the executable entry point for a game application.
 - `vshade::platform::Window` owns the GLFW window and OpenGL context.
 - `vshade::input::Input` exposes per-frame keyboard and mouse state.
-- `vshade::core::Time` provides frame timing.
+- `vshade::core::Time` provides clamped frame timing; `Application` also exposes fixed updates.
 - `vshade::core::filesystem` contains basic file-reading helpers.
 - `vshade::core::Log` and the logging macros separate engine messages from game messages.
 - `vshade::math` provides GLM-backed vectors, matrices, quaternions, and transforms.
-- `vshade::renderer::Renderer` provides OpenGL startup, frame state, and indexed drawing.
-- Renderer resource classes own buffers, vertex arrays, shaders, textures, cameras, and meshes.
+- `vshade::renderer::Renderer` provides OpenGL startup, tracked pipeline state, and drawing.
+- `vshade::renderer::Renderer2D` submits quads and sprites.
+- `vshade::renderer::Renderer3D` submits meshes, materials, cameras, and directional lighting.
+- Renderer resource classes own buffers, vertex arrays, shaders, textures, framebuffers, and meshes.
+- `vshade::renderer::CameraController` provides testable fly-camera behavior.
 
 See [Renderer foundation](renderer.md) for the renderer architecture,
 lifecycle, file responsibilities, and current scope.

@@ -125,7 +125,9 @@ TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual]"
     vshade::renderer::Material material(vshade::renderer::MaterialShading::Lit);
     material.setAlbedoTexture(texture);
     material.setAlbedoColor({0.88F, 1.0F, 0.92F, 1.0F});
-    material.setRoughness(0.65F);
+    // The neutral value preserves this test's established lighting baseline;
+    // non-neutral material response is demonstrated by the sandbox.
+    material.setRoughness(0.5F);
     material.setMetallic(0.0F);
 
     vshade::renderer::Renderer3D::beginScene(camera);

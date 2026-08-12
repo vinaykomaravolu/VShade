@@ -15,6 +15,14 @@
 namespace vshade::renderer {
 namespace {
 
+GLuint currentProgram = 0;
+
+void requireRenderer() {
+    if (!Renderer::isInitialized()) {
+        throw std::logic_error("Shader operation requires an initialized renderer");
+    }
+}
+
 GLuint compileStage(const GLenum type, const std::string_view source, const std::string& shaderName) {
     if (source.size() > static_cast<std::size_t>(std::numeric_limits<GLint>::max())) {
         throw std::overflow_error("Shader source is too large: " + shaderName);
@@ -42,6 +50,10 @@ GLuint compileStage(const GLenum type, const std::string_view source, const std:
 
 void deleteProgram(std::uint32_t& rendererId) noexcept {
     if (rendererId != 0 && Renderer::isInitialized()) {
+        if (currentProgram == rendererId) {
+            glUseProgram(0);
+            currentProgram = 0;
+        }
         glDeleteProgram(rendererId);
     }
     rendererId = 0;
@@ -129,11 +141,19 @@ Shader Shader::fromFiles(
 }
 
 void Shader::bind() const {
-    glUseProgram(m_rendererId);
+    requireRenderer();
+    if (currentProgram != m_rendererId) {
+        glUseProgram(m_rendererId);
+        currentProgram = m_rendererId;
+    }
 }
 
 void Shader::unbind() {
-    glUseProgram(0);
+    requireRenderer();
+    if (currentProgram != 0) {
+        glUseProgram(0);
+        currentProgram = 0;
+    }
 }
 
 void Shader::setInt(const std::string_view name, const int value) {
@@ -175,6 +195,7 @@ std::uint32_t Shader::rendererId() const noexcept {
 }
 
 int Shader::uniformLocation(const std::string_view name) {
+    requireRenderer();
     const std::string key(name);
     if (const auto found = m_uniformLocations.find(key); found != m_uniformLocations.end()) {
         return found->second;
@@ -183,6 +204,17 @@ int Shader::uniformLocation(const std::string_view name) {
     const int location = glGetUniformLocation(m_rendererId, key.c_str());
     m_uniformLocations.emplace(key, location);
     return location;
+}
+
+bool Shader::hasUniform(const std::string_view name) {
+    return uniformLocation(name) >= 0;
+}
+
+void Shader::resetBindingCache() noexcept {
+    if (Renderer::isInitialized() && currentProgram != 0) {
+        glUseProgram(0);
+    }
+    currentProgram = 0;
 }
 
 } // namespace vshade::renderer

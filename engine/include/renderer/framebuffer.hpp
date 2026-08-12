@@ -5,6 +5,8 @@
 
 namespace vshade::renderer {
 
+class Renderer;
+
 /**
  * @brief Owns an offscreen RGBA8 framebuffer with a depth-stencil attachment.
  *
@@ -32,10 +34,13 @@ public:
     Framebuffer(Framebuffer&& other) noexcept;
     Framebuffer& operator=(Framebuffer&& other) noexcept;
 
-    /** @brief Binds this framebuffer for drawing and updates the viewport. */
+    /** @brief Binds this framebuffer and saves the current target and viewport. */
     void bind() const;
 
-    /** @brief Binds the default framebuffer for drawing and reading. */
+    /**
+     * @brief Restores the target and viewport saved by the latest bind().
+     * @throws std::logic_error If no matching bind exists or the renderer is inactive.
+     */
     static void unbind();
 
     /**
@@ -80,6 +85,9 @@ public:
     [[nodiscard]] std::uint32_t colorAttachmentId() const noexcept;
 
 private:
+    friend class Renderer;
+
+    static void resetBindingStack() noexcept;
     void create();
     void release() noexcept;
 

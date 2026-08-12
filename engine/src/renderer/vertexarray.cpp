@@ -11,6 +11,12 @@
 namespace vshade::renderer {
 namespace {
 
+void requireRenderer() {
+    if (!Renderer::isInitialized()) {
+        throw std::logic_error("Vertex array operation requires an initialized renderer");
+    }
+}
+
 void deleteVertexArray(std::uint32_t& rendererId) noexcept {
     if (rendererId != 0 && Renderer::isInitialized()) {
         glDeleteVertexArrays(1, &rendererId);
@@ -49,14 +55,17 @@ VertexArray& VertexArray::operator=(VertexArray&& other) noexcept {
 }
 
 void VertexArray::bind() const {
+    requireRenderer();
     glBindVertexArray(m_rendererId);
 }
 
 void VertexArray::unbind() {
+    requireRenderer();
     glBindVertexArray(0);
 }
 
 void VertexArray::addVertexBuffer(std::shared_ptr<VertexBuffer> vertexBuffer) {
+    requireRenderer();
     if (!vertexBuffer) {
         throw std::invalid_argument("Vertex buffer must not be null");
     }
@@ -67,6 +76,10 @@ void VertexArray::addVertexBuffer(std::shared_ptr<VertexBuffer> vertexBuffer) {
         throw std::overflow_error("Vertex layout stride is too large for OpenGL");
     }
 
+    GLint previousVertexArray = 0;
+    GLint previousArrayBuffer = 0;
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
     bind();
     vertexBuffer->bind();
 
@@ -93,15 +106,21 @@ void VertexArray::addVertexBuffer(std::shared_ptr<VertexBuffer> vertexBuffer) {
     }
 
     m_vertexBuffers.push_back(std::move(vertexBuffer));
+    glBindVertexArray(static_cast<GLuint>(previousVertexArray));
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousArrayBuffer));
 }
 
 void VertexArray::setIndexBuffer(std::shared_ptr<IndexBuffer> indexBuffer) {
+    requireRenderer();
     if (!indexBuffer) {
         throw std::invalid_argument("Index buffer must not be null");
     }
+    GLint previousVertexArray = 0;
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
     bind();
     indexBuffer->bind();
     m_indexBuffer = std::move(indexBuffer);
+    glBindVertexArray(static_cast<GLuint>(previousVertexArray));
 }
 
 const std::vector<std::shared_ptr<VertexBuffer>>& VertexArray::vertexBuffers() const noexcept {

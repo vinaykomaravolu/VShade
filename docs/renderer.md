@@ -1,288 +1,228 @@
-# Renderer foundation
+# Renderer architecture and usage
 
-VShade now has a compact OpenGL 3.3 renderer foundation for both 2D and 3D
-games. The renderer is intentionally OpenGL-only for now so the engine can
-focus on useful rendering features before introducing multiple graphics
-backends.
+VShade provides an OpenGL 3.3 renderer with low-level drawing operations and
+high-level 2D and 3D scene submission. OpenGL remains the only backend while
+the runtime API is still evolving.
 
-## What changed
-
-The engine now:
-
-- loads modern OpenGL functions with GLAD after GLFW creates a context;
-- initializes and shuts down the renderer as part of `Application`;
-- calls `Application::onRender()` once per frame;
-- updates the OpenGL viewport when the framebuffer is resized;
-- provides GPU buffers, vertex arrays, shaders, textures, cameras, and meshes;
-- supports indexed triangle, line, and point drawing;
-- records draw-call and index-count statistics for each frame.
-
-GLAD 2.0.8 is pinned in `external/glad`. The generated OpenGL 3.3 core loader
-is checked into `engine/src/renderer/opengl/generated`, so normal builds do not
-need Python or GLAD's generator packages.
-
-## Folder structure
+## Public renderer modules
 
 ```text
-engine/
-├── include/renderer/
-│   ├── buffer.hpp
-│   ├── camera.hpp
-│   ├── framebuffer.hpp
-│   ├── mesh.hpp
-│   ├── renderer.hpp
-│   ├── rendertypes.hpp
-│   ├── shader.hpp
-│   ├── texture.hpp
-│   └── vertexarray.hpp
-│
-└── src/renderer/
-    ├── buffer.cpp
-    ├── camera.cpp
-    ├── framebuffer.cpp
-    ├── mesh.cpp
-    ├── renderer.cpp
-    ├── rendertypes.cpp
-    ├── shader.cpp
-    ├── texture.cpp
-    ├── vertexarray.cpp
-    └── opengl/
-        ├── openglutils.hpp
-        ├── openglutils.cpp
-        └── generated/
+engine/include/renderer/
+|-- buffer.hpp
+|-- camera.hpp
+|-- cameracontroller.hpp
+|-- framebuffer.hpp
+|-- material.hpp
+|-- materialparameters.hpp
+|-- mesh.hpp
+|-- renderer.hpp
+|-- renderer2d.hpp
+|-- renderer3d.hpp
+|-- rendertypes.hpp
+|-- shader.hpp
+|-- texture.hpp
+`-- vertexarray.hpp
 ```
 
-Public game-facing headers live in `include/renderer`. OpenGL headers,
-generated loader code, and backend conversion helpers remain private in
-`src/renderer`.
+- `Renderer` owns initialization, pipeline state, viewport state, clears,
+  drawing, device limits, and frame statistics.
+- `Buffer`, `VertexArray`, `Shader`, `Texture2D`, and `Framebuffer` are
+  move-only RAII wrappers around GPU resources.
+- `Camera` stores validated view and projection matrices.
+- `CameraController` supplies fly-camera WASD and mouse-look behavior.
+- `Mesh` combines a vertex array with a primitive topology.
+- `Material` retains an optional shader and texture plus albedo, basic
+  lighting properties, and typed custom shader parameters.
+- `Renderer2D` queues layer-sorted quads and sprites.
+- `Renderer3D` queues meshes with materials and a directional light.
 
-## File responsibilities
+OpenGL headers, the generated GLAD loader, and enum conversions remain private
+under `engine/src/renderer`.
 
-### `renderer.hpp`
+## Lifetime
 
-`Renderer` owns renderer-global operations:
-
-- OpenGL function loading and default state;
-- regional viewport and selective framebuffer clearing;
-- blending, face-culling, polygon, and depth state;
-- indexed and non-indexed draw calls;
-- per-frame rendering statistics.
-
-`Application` calls `Renderer::initialize()`, `Renderer::beginFrame()`, and
-`Renderer::shutdown()` automatically. Game code normally uses the state and
-drawing functions from `onRender()`.
-
-### `rendertypes.hpp`
-
-Contains engine-facing enums for:
-
-- shader vertex data types;
-- static and dynamic buffer usage;
-- triangle, line, and point topology;
-- framebuffer clear flags;
-- blend factors, cull faces, winding, and polygon modes;
-- depth comparison functions;
-- texture formats, filters, and wrapping.
-
-The renderer implementation converts these enums to OpenGL values privately.
-
-### `buffer.hpp`
-
-Provides:
-
-- `BufferElement`, describing one vertex attribute;
-- `BufferLayout`, calculating attribute offsets and vertex stride;
-- `VertexBuffer`, storing vertex data on the GPU;
-- `IndexBuffer`, storing 32-bit indices on the GPU.
-
-Example layout:
-
-```cpp
-vshade::renderer::BufferLayout layout{
-    {"position", vshade::renderer::ShaderDataType::Float3},
-    {"color", vshade::renderer::ShaderDataType::Float4},
-};
-```
-
-### `vertexarray.hpp`
-
-`VertexArray` connects vertex buffers, their layouts, and an index buffer. It
-configures OpenGL vertex attributes when a vertex buffer is added and retains
-shared ownership of the attached buffers.
-
-### `shader.hpp`
-
-`Shader` compiles and links one GLSL vertex shader and fragment shader. It can
-use source strings or load two text files with `Shader::fromFiles()`.
-
-It currently supports uniforms for:
-
-- integers and floats;
-- `Vec2`, `Vec3`, and `Vec4`;
-- `Mat4`.
-
-Compilation and linking failures throw `std::runtime_error` with the OpenGL
-diagnostic log.
-
-### `texture.hpp`
-
-`Texture2D` creates a raw 2D OpenGL texture and optionally uploads tightly
-packed pixel data. It supports one-, three-, and four-channel 8-bit formats,
-nearest or linear filtering, and repeat or clamp-to-edge wrapping.
-
-`Texture2D::fromFile()` uses the pinned stb_image submodule to decode common
-formats such as PNG and JPEG. File textures are converted to RGBA8 for a
-consistent GPU layout. Rows are flipped vertically by default to convert
-top-left image data to the conventional OpenGL texture-coordinate direction:
-
-```cpp
-auto texture = vshade::renderer::Texture2D::fromFile(
-    "assets/textures/player.png",
-    vshade::renderer::TextureFilter::Nearest,
-    vshade::renderer::TextureWrap::ClampToEdge
-);
-texture.bind(0);
-```
-
-Pass `false` as the final argument when the source pixels already use a
-bottom-left origin or when a shader handles the coordinate conversion.
-
-### `camera.hpp`
-
-`Camera` stores view and projection matrices. It supports:
-
-- explicit matrices;
-- right-handed look-at views;
-- perspective projection for 3D;
-- orthographic projection for 2D or 3D.
-
-`viewProjection()` returns `projection * view`, ready to upload to a shader.
-
-### `framebuffer.hpp`
-
-`Framebuffer` owns an offscreen RGBA8 color attachment and a depth-stencil
-attachment. Binding it updates the viewport to its dimensions. `readPixels()`
-returns top-to-bottom RGBA8 CPU data suitable for image encoding and visual
-regression testing.
-
-### `mesh.hpp`
-
-`Mesh` is a small renderable geometry object. It retains a `VertexArray` and
-the primitive topology used to render that geometry.
-
-## Frame lifecycle
-
-The application lifecycle is now:
+`Application` establishes this order:
 
 ```text
-Create GLFW window and OpenGL context
-    ↓
-Initialize Renderer and GLAD
-    ↓
-Call onStart()
-    ↓
-Poll events and update frame time
-    ↓
-Call onUpdate()
-    ↓
-Reset renderer statistics
-    ↓
-Call onRender()
-    ↓
-Swap window buffers
-    ↓
-Call onShutdown()
-    ↓
-Destroy game-owned renderer resources
-    ↓
-Shut down Renderer and destroy the window
+Create window and OpenGL context
+  -> initialize Renderer
+  -> onStart
+  -> poll input and update time
+  -> zero or more onFixedUpdate calls
+  -> onUpdate
+  -> begin renderer frame and onRender
+  -> present
+  -> onShutdown
+  -> release renderer-owned defaults
+  -> shut down Renderer
+  -> destroy window/context
 ```
 
-Renderer resources should be created in or after `onStart()`, because the
-OpenGL context and renderer are available at that point. The base
-`Application` keeps the context alive while members of the derived game
-application are destroyed.
+Create game-owned GPU resources in or after `onStart` and release them in
+`onShutdown`. Resource operations require an initialized renderer and a live
+context. `Renderer2D` and `Renderer3D` create their built-in shaders, white
+textures, and static geometry lazily, reuse them between frames, and release
+them during `Renderer::shutdown`.
 
-## Basic rendering usage
+## Pipeline state
 
-The sandbox contains a complete textured-triangle example. It creates its
-buffers, UV vertex layout, vertex array, file-backed shader, and file-backed
-texture in `onStart()`. Each frame binds the shader and texture before
-submitting the indexed triangle:
+Use `Renderer` for blend, cull, polygon, depth, dithering, and viewport state.
+`Renderer::pipelineState()` and `Renderer::viewport()` expose the state tracked
+by the facade. `Renderer::pushPipelineState()` returns a movable RAII guard:
 
 ```cpp
-void onRender() override {
-    vshade::renderer::Renderer::setClearColor({0.05F, 0.06F, 0.09F, 1.0F});
-    vshade::renderer::Renderer::clear();
-
-    m_shader->bind();
-    m_texture->bind(0);
-    vshade::renderer::Renderer::drawIndexed(*m_triangle);
+{
+    auto stateGuard = vshade::renderer::Renderer::pushPipelineState();
+    vshade::renderer::Renderer::setDepthTesting(false);
+    vshade::renderer::Renderer::setBlending(true);
+    // The captured state is restored when stateGuard leaves scope.
 }
 ```
 
-The GLSL sources live in `sandbox/shaders`, while the checkerboard image lives
-in `sandbox/textures`. CMake copies both asset folders beside the sandbox
-executable; `Shader::fromFiles()` and `Texture2D::fromFile()` load them at
-startup.
+High-level 2D and 3D scenes retain one of these guards from `beginScene` until
+`endScene`. The previous state is therefore restored after normal submission,
+exceptions, or renderer shutdown without duplicating manual cleanup paths.
 
-Viewport origins are explicit so the renderer can target an editor panel,
-split-screen region, or part of a larger render target:
+Direct OpenGL state changes bypass this tracking and should be avoided in game
+code.
 
-```cpp
-vshade::renderer::Renderer::setViewport(x, y, width, height);
-```
+## Framebuffers
 
-Depth testing and depth writes are controlled separately. A transparent pass
-can test transparent fragments against opaque geometry without changing the
-depth buffer:
+`Framebuffer` owns an RGBA8 color attachment and a depth/stencil attachment.
+`bind()` saves the current draw/read targets and viewport, then selects the
+offscreen target. `Framebuffer::unbind()` must be paired with `bind()` and
+restores the saved targets and viewport. Nested binds are supported.
 
 ```cpp
-vshade::renderer::Renderer::setDepthTesting(true);
-vshade::renderer::Renderer::setDepthWrite(false);
-vshade::renderer::Renderer::setBlending(true);
-
-// Draw transparent geometry back-to-front.
-
-vshade::renderer::Renderer::setDepthWrite(true);
+framebuffer.bind();
+vshade::renderer::Renderer::clear();
+// Render the offscreen pass.
+vshade::renderer::Framebuffer::unbind();
+// The previous target and viewport are active again.
 ```
 
-A complete indexed draw will follow this order:
+Do not resize a framebuffer while it is bound. `readPixels()` returns tightly
+packed, top-to-bottom RGBA8 bytes and restores its temporary readback state.
 
-1. Create a `VertexBuffer` and assign its `BufferLayout`.
-2. Create an `IndexBuffer`.
-3. Attach both buffers to a `VertexArray`.
-4. Create and bind a `Shader`.
-5. Upload camera and model matrices.
-6. Call `Renderer::drawIndexed()`, call `Renderer::drawArrays()` for
-   non-indexed vertices, or create a `Mesh` and call `Renderer::draw()`.
+## Camera and controller
 
-## Current scope
+`Camera` is rendering data: it owns a view matrix and projection matrix. The
+controller is optional behavior that changes a camera's view.
 
-This foundation does not yet include:
+```cpp
+vshade::renderer::Camera camera;
+camera.setPerspective(glm::radians(45.0F), aspect, 0.1F, 100.0F);
+camera.lookAt({3.0F, 2.0F, 4.0F}, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
 
-- materials;
-- general-purpose framebuffer attachment configurations and render-to-texture workflows;
-- sprite batching or `Renderer2D`;
-- model-file loading;
-- lighting, shadows, or post-processing;
-- multiple graphics APIs.
+vshade::renderer::CameraController controller(camera);
+controller.update(deltaTime); // Reads the engine Input service.
+```
 
-Recommended next milestones are a colored triangle, a textured quad, a basic
-3D mesh with a camera, and then a batched 2D renderer.
+The controller can also use an explicit `CameraControllerInput`, which is
+useful for remapping controls, replay, and unit tests. If another system moves
+the camera directly, call `syncFromCamera()` before the controller updates it
+again. A controller is non-copyable and must not outlive its camera.
+
+The sandbox captures the cursor while the right mouse button is held so mouse
+look is not limited by a screen edge. Focus loss clears held input and releases
+the cursor.
+
+## Renderer3D shader contract
+
+Custom material shaders use these vertex locations:
+
+| Location | Input |
+|---:|---|
+| 0 | position (`vec3`) |
+| 1 | normal (`vec3`) |
+| 2 | texture coordinate (`vec2`) |
+
+They must expose active `mat4` uniforms named `model`, `view`, and
+`projection`. `Renderer3D` rejects overrides missing those uniforms. The
+The built-in material uniforms are an implementation detail rather than part
+of `Renderer3DShaderInterface`.
+
+The expected transform is deliberately conventional:
+
+```glsl
+gl_Position = projection * view * model * vec4(aPos, 1.0);
+```
+
+The built-in lit shader is a small directional-light model, not PBR.
+Roughness controls diffuse scattering and metallic reduces diffuse response.
+
+### Custom shader parameters
+
+Store values shared by every use of a material on the material itself:
+
+```cpp
+material.parameters().set("effectColor", vshade::math::Vec3{0.2F, 0.5F, 1.0F});
+material.parameters().set("effectStrength", 0.75F);
+```
+
+For one object, pass `DrawParameters` to `drawMesh`. Draw values override
+material values with the same name:
+
+```cpp
+vshade::renderer::DrawParameters drawParameters;
+drawParameters.set("effectStrength", 1.0F);
+
+vshade::renderer::Renderer3D::drawMesh(
+    transform,
+    mesh,
+    material,
+    drawParameters
+);
+```
+
+Supported values are `int`, `float`, `Vec2`, `Vec3`, `Vec4`, `Mat4`, and a
+shared `Texture2D`. The renderer copies material and draw parameters into its
+queue, so changing either collection after `drawMesh` does not alter an
+already-submitted object. Shader uniform locations are cached by `Shader`.
+Inactive custom uniforms are ignored. `model`, `view`, and `projection` stay
+renderer-owned and cannot be replaced by custom parameters.
+
+## Sandbox
+
+The sandbox generates a 24-vertex indexed cube and submits it twice with a
+shared checkerboard texture, shader, and lit material. The left cube uses
+material-level custom uniforms; the right cube supplies animated per-draw
+overrides. Its render scope also demonstrates `PipelineStateGuard` and
+`PipelineState` by providing a wireframe toggle.
+
+Controls:
+
+- `W`, `A`, `S`, `D`: fly the camera
+- Hold right mouse: capture the cursor and look around
+- Mouse wheel: change movement speed
+- `P`: toggle fill/wireframe pipeline mode
+- Escape: close the application
 
 ## Testing
 
-Renderer tests currently verify logic that does not require a visible OpenGL
-window:
+Catch2 tests exercise renderer validation and actual OpenGL behavior through a
+hidden GLFW context. Golden-image tests cover a colored triangle, textured
+quad, rotating cube, `Renderer2D`, unlit material, and directional lighting.
+State tests also cover persistent high-level resources, pipeline restoration,
+framebuffer viewport restoration, shader contracts, and camera movement.
 
-- shader data-type sizes and component counts;
-- vertex layout offsets and stride;
-- camera view-projection behavior;
-- invalid mesh construction;
-- renderer state before context initialization.
+See [Visual testing](visual-testing.md) for golden-image maintenance.
 
-GPU integration is exercised by compiling the sandbox against the complete
-renderer and GLAD loader. Catch2 visual tests also create a hidden GLFW context,
-render into an offscreen framebuffer, and compare CPU-readback pixels with
-committed golden PNGs. See [Golden-image renderer testing](visual-testing.md).
+## Current scope
+
+Implemented now:
+
+- OpenGL 3.3 rendering and explicit pipeline state
+- Buffers, vertex arrays, shaders, textures, and offscreen framebuffers
+- Perspective/orthographic cameras and fly-camera controls
+- Meshes, materials, 2D quads/sprites, and 3D mesh submission
+- One basic directional light
+- Frame statistics and visual regression tests
+
+Not implemented yet:
+
+- General asset management or model importing
+- Scene/entity storage and serialization
+- Sprite batching and advanced render-queue optimization
+- Multiple lights, shadows, PBR, animation, or post-processing
+- Audio, physics, editor tooling, or additional graphics backends

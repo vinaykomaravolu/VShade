@@ -13,6 +13,18 @@ add_executable(VShadeSandbox
     ${VSHADE_SANDBOX_TEXTURES}
 )
 target_link_libraries(VShadeSandbox PRIVATE VShade::Engine)
+
+if(MSVC)
+    target_compile_options(VShadeSandbox PRIVATE /W4 /permissive-)
+    if(VSHADE_WARNINGS_AS_ERRORS)
+        target_compile_options(VShadeSandbox PRIVATE /WX)
+    endif()
+else()
+    target_compile_options(VShadeSandbox PRIVATE -Wall -Wextra -Wpedantic)
+    if(VSHADE_WARNINGS_AS_ERRORS)
+        target_compile_options(VShadeSandbox PRIVATE -Werror)
+    endif()
+endif()
 target_compile_definitions(VShadeSandbox PRIVATE
     VSHADE_SANDBOX_SHADER_DIR="$<TARGET_FILE_DIR:VShadeSandbox>/shaders"
     VSHADE_SANDBOX_TEXTURE_DIR="$<TARGET_FILE_DIR:VShadeSandbox>/textures"

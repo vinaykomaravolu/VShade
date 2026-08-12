@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <variant>
 
 TEST_CASE("Material exposes safe defaults and validated properties", "[material]") {
     vshade::renderer::Material material;
@@ -43,6 +44,25 @@ TEST_CASE("Material exposes safe defaults and validated properties", "[material]
         material.setMetallic(std::numeric_limits<float>::quiet_NaN()),
         std::invalid_argument
     );
+}
+
+TEST_CASE("Material stores typed custom shader parameters", "[material]") {
+    vshade::renderer::Material material;
+    material.parameters().set("effectStrength", 0.75F);
+    material.parameters().set("effectColor", vshade::math::Vec3{0.2F, 0.4F, 0.8F});
+
+    CHECK(material.parameters().size() == 2);
+    CHECK(material.parameters().contains("effectStrength"));
+    const auto& strength = material.parameters().values().at("effectStrength");
+    CHECK(std::get<float>(strength) == Catch::Approx(0.75F));
+
+    material.parameters().set("effectStrength", 1.0F);
+    CHECK(material.parameters().size() == 2);
+    CHECK(std::get<float>(material.parameters().values().at("effectStrength")) ==
+          Catch::Approx(1.0F));
+    CHECK(material.parameters().erase("effectColor"));
+    CHECK_FALSE(material.parameters().contains("effectColor"));
+    CHECK_THROWS_AS(material.parameters().set("", 1.0F), std::invalid_argument);
 }
 
 TEST_CASE("Material retains shared texture resources", "[material]") {

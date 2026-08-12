@@ -1,17 +1,24 @@
 #include "core/application.hpp"
 
-#include "core/assert.hpp"
 #include "core/log.hpp"
 #include "core/time.hpp"
 #include "renderer/renderer.hpp"
 
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
 namespace vshade::core {
 
 Application::Application(ApplicationConfig config)
-    : m_config(std::move(config)) {}
+    : m_config(std::move(config)) {
+    if (!std::isfinite(m_config.fixedDeltaTime) || m_config.fixedDeltaTime <= 0.0F) {
+        throw std::invalid_argument("Application fixed delta time must be finite and positive");
+    }
+    if (!std::isfinite(m_config.maximumDeltaTime) || m_config.maximumDeltaTime <= 0.0F) {
+        throw std::invalid_argument("Application maximum delta time must be finite and positive");
+    }
+}
 
 Application::~Application() {
     renderer::Renderer::shutdown();
@@ -38,16 +45,19 @@ int Application::run() {
         });
 
         Time::reset();
+        double fixedAccumulator = 0.0;
         m_running = true;
         onStart();
         shutdown_needed = true;
 
         while (m_running && !m_window->shouldClose()) {
             m_window->pollEvents();
-            Time::tick();
-
-            // Later: accumulate delta time and call a fixed update at 1 / 60
-            // seconds for deterministic physics and other fixed-step systems.
+            Time::tick(m_config.maximumDeltaTime);
+            fixedAccumulator += static_cast<double>(Time::deltaTime());
+            while (fixedAccumulator >= static_cast<double>(m_config.fixedDeltaTime)) {
+                onFixedUpdate(m_config.fixedDeltaTime);
+                fixedAccumulator -= static_cast<double>(m_config.fixedDeltaTime);
+            }
 
             // The application will forward these calls to its active scene
             // once the scene system exists.
@@ -55,6 +65,7 @@ int Application::run() {
 
             renderer::Renderer::beginFrame();
             onRender();
+            renderer::Renderer::endFrame();
 
             m_window->swapBuffers();
         }
@@ -89,12 +100,16 @@ void Application::close() {
 }
 
 platform::Window& Application::getWindow() {
-    ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
+    if (!m_window) {
+        throw std::logic_error("Window is only available while the application is running");
+    }
     return *m_window;
 }
 
 const platform::Window& Application::getWindow() const {
-    ENGINE_ASSERT(m_window != nullptr, "Window is only available while the application is running");
+    if (!m_window) {
+        throw std::logic_error("Window is only available while the application is running");
+    }
     return *m_window;
 }
 

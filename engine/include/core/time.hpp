@@ -36,7 +36,7 @@ private:
     static void reset() noexcept;
 
     /** @brief Advances the timing values at the start of a frame. */
-    static void tick() noexcept;
+    static void tick(float maximumDeltaTime) noexcept;
 };
 
 } // namespace vshade::core

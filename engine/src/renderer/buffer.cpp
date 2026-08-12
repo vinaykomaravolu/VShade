@@ -80,17 +80,23 @@ VertexBuffer::VertexBuffer(const void* data, const std::size_t size, const Buffe
         throw std::invalid_argument("Vertex buffer data must not be null");
     }
 
+    GLint previousBuffer = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousBuffer);
     glGenBuffers(1, &m_rendererId);
     glBindBuffer(GL_ARRAY_BUFFER, m_rendererId);
     glBufferData(GL_ARRAY_BUFFER, checkedSize(size), data, opengl::bufferUsage(usage));
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousBuffer));
 }
 
 VertexBuffer::VertexBuffer(const std::size_t size)
     : m_size(size) {
     requireRenderer();
+    GLint previousBuffer = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousBuffer);
     glGenBuffers(1, &m_rendererId);
     glBindBuffer(GL_ARRAY_BUFFER, m_rendererId);
     glBufferData(GL_ARRAY_BUFFER, checkedSize(size), nullptr, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousBuffer));
 }
 
 VertexBuffer::~VertexBuffer() {
@@ -113,14 +119,17 @@ VertexBuffer& VertexBuffer::operator=(VertexBuffer&& other) noexcept {
 }
 
 void VertexBuffer::bind() const {
+    requireRenderer();
     glBindBuffer(GL_ARRAY_BUFFER, m_rendererId);
 }
 
 void VertexBuffer::unbind() {
+    requireRenderer();
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void VertexBuffer::setData(const void* data, const std::size_t size, const std::size_t offset) {
+    requireRenderer();
     if (data == nullptr && size != 0) {
         throw std::invalid_argument("Vertex buffer data must not be null");
     }
@@ -128,8 +137,11 @@ void VertexBuffer::setData(const void* data, const std::size_t size, const std::
         throw std::out_of_range("Vertex buffer update exceeds its capacity");
     }
 
+    GLint previousBuffer = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousBuffer);
     bind();
     glBufferSubData(GL_ARRAY_BUFFER, checkedOffset(offset), checkedSize(size), data);
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousBuffer));
 }
 
 void VertexBuffer::setLayout(BufferLayout layout) {
@@ -161,21 +173,20 @@ IndexBuffer::IndexBuffer(
         throw std::overflow_error("Index buffer is too large");
     }
 
-    // GL_ELEMENT_ARRAY_BUFFER is stored in the currently bound VAO. Preserve
-    // that binding while uploading this buffer so constructing an unrelated
-    // index buffer cannot silently replace another mesh's indices.
+    // Upload through the copy target because GL_ELEMENT_ARRAY_BUFFER belongs
+    // to the active VAO and resource construction must not mutate that VAO.
     GLint previousIndexBuffer = 0;
-    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previousIndexBuffer);
+    glGetIntegerv(GL_COPY_WRITE_BUFFER, &previousIndexBuffer);
 
     glGenBuffers(1, &m_rendererId);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_rendererId);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, m_rendererId);
     glBufferData(
-        GL_ELEMENT_ARRAY_BUFFER,
+        GL_COPY_WRITE_BUFFER,
         checkedSize(count * sizeof(std::uint32_t)),
         indices,
         opengl::bufferUsage(usage)
     );
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(previousIndexBuffer));
+    glBindBuffer(GL_COPY_WRITE_BUFFER, static_cast<GLuint>(previousIndexBuffer));
 }
 
 IndexBuffer::~IndexBuffer() {
@@ -196,10 +207,12 @@ IndexBuffer& IndexBuffer::operator=(IndexBuffer&& other) noexcept {
 }
 
 void IndexBuffer::bind() const {
+    requireRenderer();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_rendererId);
 }
 
 void IndexBuffer::unbind() {
+    requireRenderer();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 

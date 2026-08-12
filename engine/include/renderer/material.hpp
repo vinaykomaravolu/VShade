@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math/vector.hpp"
+#include "renderer/materialparameters.hpp"
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
 
@@ -114,6 +115,12 @@ public:
      */
     void setShading(MaterialShading shading) noexcept;
 
+    /** @brief Returns custom shader values shared by every draw using this material. */
+    [[nodiscard]] const MaterialParameters& parameters() const noexcept;
+
+    /** @brief Returns mutable custom shader values for this material. */
+    [[nodiscard]] MaterialParameters& parameters() noexcept;
+
 private:
     std::shared_ptr<Shader> m_shader;
     std::shared_ptr<Texture2D> m_albedoTexture;
@@ -121,6 +128,7 @@ private:
     float m_roughness = 0.5F;
     float m_metallic = 0.0F;
     MaterialShading m_shading = MaterialShading::Unlit;
+    MaterialParameters m_parameters;
 };
 
 } // namespace vshade::renderer

@@ -18,6 +18,7 @@
 #include <renderer/vertexarray.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -137,6 +138,22 @@ protected:
         m_cubeMaterial.setMetallic(0.5F);
         m_cubeMaterial.setShading(vshade::renderer::MaterialShading::Lit);
 
+        // Custom uniforms live on the material when every object using it
+        // should inherit the same value. Texture parameters are assigned a
+        // texture slot by Renderer3D when the queued command is executed.
+        m_cubeMaterial.parameters().set(
+            "effectTint",
+            vshade::math::Vec3{0.30F, 0.72F, 1.0F}
+        );
+        m_cubeMaterial.parameters().set("effectStrength", 0.22F);
+        m_cubeMaterial.parameters().set("detailTexture", m_checkerTexture);
+        m_cubeMaterial.parameters().set("detailStrength", 0.12F);
+
+        // Both cubes share the mesh, material, shader, and textures. Only
+        // their transforms and optional per-draw parameters differ.
+        m_leftCubeTransform.setPosition({-0.9F, 0.0F, 0.0F});
+        m_rightCubeTransform.setPosition({0.9F, 0.0F, 0.0F});
+
         // Start focused on the cube, then let the fly controller update this
         // view from keyboard and mouse input.
         m_camera3D.lookAt(
@@ -156,7 +173,8 @@ protected:
 
         GAME_INFO("Sandbox started");
         GAME_INFO(
-            "Controls: WASD move, hold right mouse to look, scroll changes speed, Escape exits"
+            "Controls: WASD move, hold right mouse to look, scroll changes speed, "
+            "P toggles wireframe, Escape exits"
         );
     }
 
@@ -164,18 +182,28 @@ protected:
         if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::Escape)) {
             close();
         }
+        if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::P)) {
+            m_wireframe = !m_wireframe;
+        }
 
         ENGINE_ASSERT(
             m_cameraController != nullptr,
             "Camera controller must exist before updating"
         );
+        const bool captureMouse = vshade::input::Input::isMouseButtonDown(
+            vshade::input::MouseButton::Right
+        );
+        getWindow().setCursorCaptured(captureMouse);
         m_cameraController->update(deltaTime);
 
         // Game state is updated separately from rendering. The render method
         // below only reads this transform and submits it.
         m_cubeAngle += deltaTime * 0.65F;
-        m_cubeTransform.setRotation(
+        m_leftCubeTransform.setRotation(
             vshade::math::fromEuler({m_cubeAngle * 0.45F, m_cubeAngle, 0.08F})
+        );
+        m_rightCubeTransform.setRotation(
+            vshade::math::fromEuler({-m_cubeAngle * 0.35F, -m_cubeAngle, -0.08F})
         );
     }
 
@@ -188,12 +216,44 @@ protected:
 
         ENGINE_ASSERT(m_cubeMesh != nullptr, "Cube mesh must exist before rendering");
 
-        // Render the generated cube using the perspective camera.
+        // A scoped pipeline guard makes temporary low-level state explicit.
+        // Renderer3D also scopes the depth/culling state it owns. When this
+        // method returns, both layers have restored the previous state.
+        auto pipelineStateGuard =
+            vshade::renderer::Renderer::pushPipelineState();
+        auto sandboxPipeline = vshade::renderer::Renderer::pipelineState();
+        sandboxPipeline.polygonMode = m_wireframe
+            ? vshade::renderer::PolygonMode::Line
+            : vshade::renderer::PolygonMode::Fill;
+        sandboxPipeline.dithering = false;
+        vshade::renderer::Renderer::applyPipelineState(sandboxPipeline);
+
+        // The left cube uses all custom values stored on the shared material.
         vshade::renderer::Renderer3D::beginScene(m_camera3D);
         vshade::renderer::Renderer3D::drawMesh(
-            m_cubeTransform,
+            m_leftCubeTransform,
             *m_cubeMesh,
             m_cubeMaterial
+        );
+
+        // DrawParameters are copied into this one queued draw. They override
+        // material values with matching names without modifying the material
+        // shared by the left cube.
+        vshade::renderer::DrawParameters rightCubeParameters;
+        rightCubeParameters.set(
+            "effectTint",
+            vshade::math::Vec3{1.0F, 0.36F, 0.12F}
+        );
+        rightCubeParameters.set(
+            "effectStrength",
+            0.45F + 0.25F * std::sin(m_cubeAngle * 2.0F)
+        );
+        rightCubeParameters.set("detailStrength", 0.28F);
+        vshade::renderer::Renderer3D::drawMesh(
+            m_rightCubeTransform,
+            *m_cubeMesh,
+            m_cubeMaterial,
+            rightCubeParameters
         );
         vshade::renderer::Renderer3D::endScene();
     }
@@ -205,6 +265,7 @@ protected:
     }
 
     void onShutdown() override {
+        getWindow().setCursorCaptured(false);
         GAME_INFO(
             "Sandbox stopped after {} frames ({:.2f} seconds)",
             vshade::core::Time::frameCount(),
@@ -213,6 +274,7 @@ protected:
 
         // Release GPU-backed objects while Application still owns the active
         // OpenGL context. Material references are cleared first.
+        m_cubeMaterial.parameters().clear();
         m_cubeMaterial.setShader(nullptr);
         m_cubeMaterial.setAlbedoTexture(nullptr);
         m_cubeMesh.reset();
@@ -233,8 +295,10 @@ private:
     std::unique_ptr<vshade::renderer::CameraController> m_cameraController;
     vshade::renderer::Material m_cubeMaterial;
     vshade::renderer::Camera m_camera3D;
-    vshade::math::Transform m_cubeTransform;
+    vshade::math::Transform m_leftCubeTransform;
+    vshade::math::Transform m_rightCubeTransform;
     float m_cubeAngle = 0.0F;
+    bool m_wireframe = false;
 };
 
 } // namespace

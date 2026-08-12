@@ -141,4 +141,22 @@ void Input::onMouseScrolled(const float x, const float y) {
     current_scroll_delta += glm::vec2{x, y};
 }
 
+void Input::reset() {
+    std::fill(keys_down.begin(), keys_down.end(), false);
+    std::fill(keys_pressed.begin(), keys_pressed.end(), false);
+    std::fill(keys_released.begin(), keys_released.end(), false);
+    std::fill(mouse_buttons_down.begin(), mouse_buttons_down.end(), false);
+    std::fill(mouse_buttons_pressed.begin(), mouse_buttons_pressed.end(), false);
+    std::fill(mouse_buttons_released.begin(), mouse_buttons_released.end(), false);
+    current_mouse_position = {};
+    current_mouse_delta = {};
+    current_scroll_delta = {};
+    has_mouse_position = false;
+}
+
+void Input::resetMouseTracking() {
+    current_mouse_delta = {};
+    has_mouse_position = false;
+}
+
 } // namespace vshade::input

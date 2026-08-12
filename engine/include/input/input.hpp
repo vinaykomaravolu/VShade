@@ -123,6 +123,12 @@ private:
      * @param y Vertical scroll amount.
      */
     static void onMouseScrolled(float x, float y);
+
+    /** @brief Clears all held and transient input after focus or window changes. */
+    static void reset();
+
+    /** @brief Prevents a synthetic cursor jump after changing cursor mode. */
+    static void resetMouseTracking();
 };
 
 } // namespace vshade::input

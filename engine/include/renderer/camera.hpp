@@ -32,7 +32,7 @@ public:
      * @param eye Camera position in world space.
      * @param target World-space point the camera looks toward.
      * @param up Approximate world-up direction.
-     * @warning @p eye and @p target must differ, and @p up must not be parallel to the view direction.
+     * @throws std::invalid_argument If values are non-finite or the view basis is degenerate.
      */
     void lookAt(const math::Vec3& eye, const math::Vec3& target, const math::Vec3& up);
 
@@ -42,7 +42,7 @@ public:
      * @param aspectRatio Viewport width divided by height.
      * @param nearPlane Positive distance to the near clipping plane.
      * @param farPlane Distance to the far clipping plane.
-     * @warning Invalid aspect or clipping-plane values can produce a degenerate projection.
+     * @throws std::invalid_argument If values are non-finite or projection bounds are invalid.
      */
     void setPerspective(float verticalFovRadians, float aspectRatio, float nearPlane, float farPlane);
 
@@ -54,7 +54,7 @@ public:
      * @param top Coordinate of the top clipping plane.
      * @param nearPlane Distance to the near clipping plane.
      * @param farPlane Distance to the far clipping plane.
-     * @warning Equal bounds on an axis produce a degenerate projection.
+     * @throws std::invalid_argument If values are non-finite or any axis has equal bounds.
      */
     void setOrthographic(
         float left,

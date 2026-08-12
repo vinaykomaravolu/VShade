@@ -2,10 +2,15 @@
 
 #include "renderer/renderer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace vshade::renderer {
@@ -15,7 +20,22 @@ struct MeshCommand {
     math::Mat4 model{1.0F};
     const Mesh* mesh = nullptr;
     Material material;
+    DrawParameters parameters;
 };
+
+namespace uniform {
+constexpr std::string_view albedoColor = "albedoColor";
+constexpr std::string_view albedoTexture = "albedoTexture";
+constexpr std::string_view hasAlbedoTexture = "hasAlbedoTexture";
+constexpr std::string_view litMaterial = "litMaterial";
+constexpr std::string_view lightDirection = "lightDirection";
+constexpr std::string_view lightColor = "lightColor";
+constexpr std::string_view lightIntensity = "lightIntensity";
+constexpr std::string_view roughness = "roughness";
+constexpr std::string_view metallic = "metallic";
+} // namespace uniform
+
+struct Renderer3DResources;
 
 struct Renderer3DState {
     math::Mat4 view{1.0F};
@@ -24,6 +44,9 @@ struct Renderer3DState {
     std::vector<MeshCommand> commands;
     Renderer3DStats currentStats{};
     Renderer3DStats completedStats{};
+    std::optional<PipelineStateGuard> pipelineStateGuard;
+    std::unique_ptr<Renderer3DResources> resources;
+    std::uint64_t resourceInitializationCount = 0;
     bool sceneActive = false;
 };
 
@@ -103,11 +126,88 @@ void main() {
     vec3 normalDirection = normalize(vNormal);
     vec3 directionToLight = normalize(-lightDirection);
     float diffuse = max(dot(normalDirection, directionToLight), 0.0);
+    // This is intentionally a small, non-PBR material model. Rough surfaces
+    // scatter more light while metallic surfaces reduce diffuse response.
+    diffuse *= mix(1.15, 0.85, roughness);
+    diffuse *= mix(1.0, 0.85, metallic);
     vec3 lighting = vec3(0.15) + lightColor * lightIntensity * diffuse;
     fragmentColor = vec4(albedo.rgb * lighting, albedo.a);
 }
 )glsl"
     );
+}
+
+struct Renderer3DResources {
+    Shader defaultShader = createDefaultShader();
+    Texture2D whiteTexture;
+
+    Renderer3DResources()
+        : whiteTexture(
+              1,
+              1,
+              TextureFormat::RGBA8,
+              whitePixel.data(),
+              TextureFilter::Nearest,
+              TextureWrap::ClampToEdge
+          ) {}
+
+private:
+    static constexpr std::array<std::uint8_t, 4> whitePixel{255, 255, 255, 255};
+};
+
+[[nodiscard]] Renderer3DResources& resources() {
+    Renderer3DState& rendererState = state();
+    if (!rendererState.resources) {
+        rendererState.resources = std::make_unique<Renderer3DResources>();
+        ++rendererState.resourceInitializationCount;
+    }
+    return *rendererState.resources;
+}
+
+void validateShaderInterface(Shader& shader) {
+    if (!shader.hasUniform(Renderer3DShaderInterface::model) ||
+        !shader.hasUniform(Renderer3DShaderInterface::view) ||
+        !shader.hasUniform(Renderer3DShaderInterface::projection)) {
+        throw std::invalid_argument(
+            "Renderer3D shaders require active model, view, and projection mat4 uniforms"
+        );
+    }
+}
+
+void applyParameters(
+    Shader& shader,
+    const MaterialParameters& parameters,
+    std::uint32_t& nextTextureSlot
+) {
+    for (const auto& [name, parameter] : parameters.values()) {
+        if (!shader.hasUniform(name)) {
+            continue;
+        }
+
+        std::visit(
+            [&shader, &name, &nextTextureSlot](const auto& value) {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, int>) {
+                    shader.setInt(name, value);
+                } else if constexpr (std::is_same_v<Value, float>) {
+                    shader.setFloat(name, value);
+                } else if constexpr (std::is_same_v<Value, math::Vec2>) {
+                    shader.setVec2(name, value);
+                } else if constexpr (std::is_same_v<Value, math::Vec3>) {
+                    shader.setVec3(name, value);
+                } else if constexpr (std::is_same_v<Value, math::Vec4>) {
+                    shader.setVec4(name, value);
+                } else if constexpr (std::is_same_v<Value, math::Mat4>) {
+                    shader.setMat4(name, value);
+                } else {
+                    value->bind(nextTextureSlot);
+                    shader.setInt(name, static_cast<int>(nextTextureSlot));
+                    ++nextTextureSlot;
+                }
+            },
+            parameter
+        );
+    }
 }
 
 } // namespace
@@ -121,6 +221,7 @@ void Renderer3D::beginScene(const Camera& camera) {
         throw std::logic_error("Renderer3D scene is already active");
     }
 
+    rendererState.pipelineStateGuard.emplace(Renderer::pushPipelineState());
     Renderer::setBlending(false);
     Renderer::setDepthTesting(true);
     Renderer::setDepthFunction(DepthFunction::Less);
@@ -133,13 +234,20 @@ void Renderer3D::beginScene(const Camera& camera) {
     rendererState.projection = camera.projection();
     rendererState.commands.clear();
     rendererState.currentStats = {};
+    rendererState.currentStats.resourceInitializations =
+        rendererState.resourceInitializationCount;
     rendererState.sceneActive = true;
 }
 
 void Renderer3D::setDirectionalLight(const DirectionalLight& light) {
-    if (math::lengthSquared(light.direction) <= 0.000001F) {
+    if (!std::isfinite(light.direction.x) || !std::isfinite(light.direction.y) ||
+        !std::isfinite(light.direction.z) ||
+        math::lengthSquared(light.direction) <= 0.000001F) {
         throw std::invalid_argument("Directional light direction must not be zero");
     }
+    validateNonNegativeFinite(light.color.r, "Directional light red must be finite and non-negative");
+    validateNonNegativeFinite(light.color.g, "Directional light green must be finite and non-negative");
+    validateNonNegativeFinite(light.color.b, "Directional light blue must be finite and non-negative");
     validateNonNegativeFinite(light.intensity, "Directional light intensity must be finite and non-negative");
 
     Renderer3DState& rendererState = state();
@@ -150,7 +258,8 @@ void Renderer3D::setDirectionalLight(const DirectionalLight& light) {
 void Renderer3D::drawMesh(
     const math::Transform& transform,
     const Mesh& mesh,
-    const Material& material
+    const Material& material,
+    const DrawParameters& parameters
 ) {
     requireActiveScene();
     Renderer3DState& rendererState = state();
@@ -158,6 +267,7 @@ void Renderer3D::drawMesh(
         .model = transform.matrix(),
         .mesh = &mesh,
         .material = material,
+        .parameters = parameters,
     });
     ++rendererState.currentStats.meshCount;
 }
@@ -168,52 +278,68 @@ void Renderer3D::endScene() {
 
     try {
         if (!rendererState.commands.empty()) {
-            Shader defaultShader = createDefaultShader();
-            constexpr std::array<std::uint8_t, 4> whitePixel{255, 255, 255, 255};
-            Texture2D whiteTexture(
-                1,
-                1,
-                TextureFormat::RGBA8,
-                whitePixel.data(),
-                TextureFilter::Nearest,
-                TextureWrap::ClampToEdge
+            Renderer3DResources& rendererResources = resources();
+            std::stable_sort(
+                rendererState.commands.begin(),
+                rendererState.commands.end(),
+                [](const MeshCommand& left, const MeshCommand& right) {
+                    const std::uint32_t leftShader = left.material.hasShader()
+                        ? left.material.shader()->rendererId()
+                        : 0;
+                    const std::uint32_t rightShader = right.material.hasShader()
+                        ? right.material.shader()->rendererId()
+                        : 0;
+                    return leftShader < rightShader;
+                }
             );
 
             for (const MeshCommand& command : rendererState.commands) {
                 Shader& shader = command.material.hasShader()
                     ? *command.material.shader()
-                    : defaultShader;
-                shader.setMat4("model", command.model);
-                shader.setMat4("view", rendererState.view);
-                shader.setMat4("projection", rendererState.projection);
-                shader.setVec4("albedoColor", command.material.albedoColor());
-                shader.setFloat("roughness", command.material.roughness());
-                shader.setFloat("metallic", command.material.metallic());
+                    : rendererResources.defaultShader;
+                validateShaderInterface(shader);
+                shader.bind();
+                shader.setVec4(uniform::albedoColor, command.material.albedoColor());
+                shader.setFloat(uniform::roughness, command.material.roughness());
+                shader.setFloat(uniform::metallic, command.material.metallic());
                 shader.setInt(
-                    "litMaterial",
+                    uniform::litMaterial,
                     command.material.shading() == MaterialShading::Lit ? 1 : 0
                 );
-                shader.setVec3("lightDirection", rendererState.light.direction);
-                shader.setVec3("lightColor", rendererState.light.color);
-                shader.setFloat("lightIntensity", rendererState.light.intensity);
-                shader.setInt("albedoTexture", 0);
+                shader.setVec3(uniform::lightDirection, rendererState.light.direction);
+                shader.setVec3(uniform::lightColor, rendererState.light.color);
+                shader.setFloat(uniform::lightIntensity, rendererState.light.intensity);
+                shader.setInt(uniform::albedoTexture, 0);
                 shader.setInt(
-                    "hasAlbedoTexture",
+                    uniform::hasAlbedoTexture,
                     command.material.hasAlbedoTexture() ? 1 : 0
                 );
 
                 const Texture2D& texture = command.material.hasAlbedoTexture()
                     ? *command.material.albedoTexture()
-                    : whiteTexture;
+                    : rendererResources.whiteTexture;
                 texture.bind(0);
+
+                std::uint32_t nextTextureSlot = 1;
+                applyParameters(shader, command.material.parameters(), nextTextureSlot);
+                applyParameters(shader, command.parameters, nextTextureSlot);
+
+                // Renderer-owned transforms cannot be replaced by custom values.
+                shader.setMat4(Renderer3DShaderInterface::model, command.model);
+                shader.setMat4(Renderer3DShaderInterface::view, rendererState.view);
+                shader.setMat4(Renderer3DShaderInterface::projection, rendererState.projection);
                 Renderer::draw(*command.mesh);
                 ++rendererState.currentStats.drawCalls;
             }
         }
 
         rendererState.completedStats = rendererState.currentStats;
+        rendererState.completedStats.resourceInitializations =
+            rendererState.resourceInitializationCount;
+        rendererState.pipelineStateGuard.reset();
         discardCurrentScene();
     } catch (...) {
+        rendererState.pipelineStateGuard.reset();
         discardCurrentScene();
         throw;
     }
@@ -221,6 +347,15 @@ void Renderer3D::endScene() {
 
 const Renderer3DStats& Renderer3D::stats() noexcept {
     return state().completedStats;
+}
+
+void Renderer3D::shutdown() noexcept {
+    Renderer3DState& rendererState = state();
+    rendererState.pipelineStateGuard.reset();
+    discardCurrentScene();
+    rendererState.resources.reset();
+    rendererState.completedStats = {};
+    rendererState.resourceInitializationCount = 0;
 }
 
 } // namespace vshade::renderer

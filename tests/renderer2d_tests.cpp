@@ -47,3 +47,25 @@ TEST_CASE("Renderer2D rejects nested scenes and supports an empty scene", "[rend
     CHECK(vshade::renderer::Renderer2D::stats().quadCount == 0);
     CHECK(vshade::renderer::Renderer2D::stats().drawCalls == 0);
 }
+
+TEST_CASE("Renderer2D reuses resources and restores pipeline state", "[renderer2d]") {
+    vshade::tests::visual::HiddenRenderContext context(64, 64);
+    vshade::renderer::Camera camera;
+    camera.setOrthographic(-1.0F, 1.0F, -1.0F, 1.0F, -1.0F, 1.0F);
+
+    vshade::renderer::Renderer::setDepthTesting(true);
+    vshade::renderer::Renderer::setDepthWrite(true);
+    vshade::renderer::Renderer::setBlending(false);
+    const auto originalState = vshade::renderer::Renderer::pipelineState();
+
+    for (int frame = 0; frame < 2; ++frame) {
+        vshade::renderer::Renderer2D::beginScene(camera);
+        vshade::renderer::Renderer2D::drawQuad(
+            vshade::math::Transform{},
+            {1.0F, 1.0F, 1.0F, 1.0F}
+        );
+        vshade::renderer::Renderer2D::endScene();
+        CHECK(vshade::renderer::Renderer::pipelineState() == originalState);
+        CHECK(vshade::renderer::Renderer2D::stats().resourceInitializations == 1);
+    }
+}

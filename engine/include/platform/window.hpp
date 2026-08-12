@@ -102,6 +102,12 @@ public:
      */
     [[nodiscard]] bool isVSync() const noexcept;
 
+    /** @brief Captures or releases the cursor for unbounded mouse-look input. */
+    void setCursorCaptured(bool captured);
+
+    /** @brief Returns whether the cursor is currently captured by this window. */
+    [[nodiscard]] bool isCursorCaptured() const noexcept;
+
     /**
      * @brief Returns the current framebuffer width in pixels.
      * @return Framebuffer width in pixels.

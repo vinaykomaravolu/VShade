@@ -7,6 +7,7 @@
 #include "renderer/mesh.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace vshade::renderer {
 
@@ -26,12 +27,30 @@ struct Renderer3DStats {
     std::uint64_t drawCalls = 0;
     /** @brief Number of meshes submitted for the completed scene. */
     std::uint64_t meshCount = 0;
+    /** @brief Number of persistent resource-set creations in this renderer lifetime. */
+    std::uint64_t resourceInitializations = 0;
+};
+
+/**
+ * @brief Required names and vertex locations for Renderer3D shader overrides.
+ *
+ * Position, normal, and texture-coordinate inputs use locations 0, 1, and 2.
+ * The three matrix uniforms are the renderer-owned contract. Material and
+ * per-draw parameters provide all other user-defined uniforms.
+ */
+struct Renderer3DShaderInterface {
+    static constexpr std::uint32_t positionLocation = 0;
+    static constexpr std::uint32_t normalLocation = 1;
+    static constexpr std::uint32_t textureCoordinateLocation = 2;
+    static constexpr std::string_view model = "model";
+    static constexpr std::string_view view = "view";
+    static constexpr std::string_view projection = "projection";
 };
 
 /**
  * @brief High-level 3D API for meshes, materials, cameras, and directional light.
  *
- * The first implementation should support cube and sphere meshes, depth
+ * Mesh geometry is supplied by the caller. The renderer provides depth
  * testing, back-face culling, unlit materials, and basic lit materials. PBR,
  * tangents, and normal mapping are intentionally deferred.
  *
@@ -63,13 +82,15 @@ public:
      * @brief Queues a mesh with a model transform and material.
      * @param transform Local-to-world transformation for the mesh.
      * @param mesh Geometry submitted for drawing.
-     * @param material Shader, texture, color, and shading parameters.
+     * @param material Shader, texture, color, and shared material parameters.
+     * @param parameters Optional per-object values that override material values.
      * @throws std::logic_error If no 3D scene is active.
      */
     static void drawMesh(
         const math::Transform& transform,
         const Mesh& mesh,
-        const Material& material
+        const Material& material,
+        const DrawParameters& parameters = {}
     );
 
     /**
@@ -80,6 +101,12 @@ public:
 
     /** @brief Returns statistics from the most recently completed 3D scene. */
     [[nodiscard]] static const Renderer3DStats& stats() noexcept;
+
+private:
+    friend class Renderer;
+
+    /** Releases persistent renderer resources while the GL context is active. */
+    static void shutdown() noexcept;
 };
 
 } // namespace vshade::renderer
