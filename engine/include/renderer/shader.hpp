@@ -19,6 +19,9 @@ public:
      * @param name Diagnostic name used in errors and debugging.
      * @param vertexSource GLSL source for the vertex stage.
      * @param fragmentSource GLSL source for the fragment stage.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::overflow_error If a source string is too large for OpenGL.
+     * @throws std::runtime_error If a stage cannot compile or the program cannot link.
      */
     Shader(std::string name, std::string_view vertexSource, std::string_view fragmentSource);
 
@@ -34,6 +37,10 @@ public:
      * @param name Diagnostic name used in errors and debugging.
      * @param vertexPath Path to the vertex-stage GLSL file.
      * @param fragmentPath Path to the fragment-stage GLSL file.
+     * @return Linked shader program loaded from the supplied files.
+     * @throws std::runtime_error If a file cannot be read, compilation fails, or linking fails.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::overflow_error If a source file is too large for OpenGL.
      */
     [[nodiscard]] static Shader fromFiles(
         std::string name,
@@ -89,10 +96,16 @@ public:
      */
     void setMat4(std::string_view name, const math::Mat4& value);
 
-    /** @brief Returns the diagnostic name assigned to this shader. */
+    /**
+     * @brief Returns the diagnostic name assigned to this shader.
+     * @return Read-only reference to the diagnostic name.
+     */
     [[nodiscard]] const std::string& name() const noexcept;
 
-    /** @brief Returns the native OpenGL program identifier. */
+    /**
+     * @brief Returns the native OpenGL program identifier.
+     * @return OpenGL program object identifier.
+     */
     [[nodiscard]] std::uint32_t rendererId() const noexcept;
 
 private:
@@ -104,6 +117,10 @@ private:
      */
     class ShaderStage final {
     public:
+        /**
+         * @brief Takes ownership of a compiled shader-stage object.
+         * @param id OpenGL shader-stage identifier to own.
+         */
         explicit ShaderStage(std::uint32_t id) noexcept;
         ~ShaderStage();
 
@@ -112,7 +129,10 @@ private:
         ShaderStage(ShaderStage&&) = delete;
         ShaderStage& operator=(ShaderStage&&) = delete;
 
-        /** @brief Returns the native OpenGL shader-stage identifier. */
+        /**
+         * @brief Returns the native OpenGL shader-stage identifier.
+         * @return Owned OpenGL shader-stage identifier.
+         */
         [[nodiscard]] std::uint32_t rendererId() const noexcept;
 
     private:

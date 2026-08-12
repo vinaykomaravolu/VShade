@@ -1,7 +1,14 @@
 add_executable(VShadeTests
+    cameracontroller_tests.cpp
     filesystem_tests.cpp
     log_tests.cpp
+    material_tests.cpp
+    material_visual_tests.cpp
     math_tests.cpp
+    renderer2d_tests.cpp
+    renderer2d_visual_tests.cpp
+    renderer3d_tests.cpp
+    renderer3d_visual_tests.cpp
     renderer_tests.cpp
     renderer_visual_tests.cpp
     visual/imagecomparison.cpp
@@ -23,6 +30,7 @@ target_include_directories(VShadeTests PRIVATE
 
 target_compile_definitions(VShadeTests PRIVATE
     VSHADE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
+    VSHADE_SANDBOX_SHADER_DIR="${PROJECT_SOURCE_DIR}/sandbox/shaders"
     VSHADE_SANDBOX_TEXTURE_DIR="${PROJECT_SOURCE_DIR}/sandbox/textures"
     VSHADE_VISUAL_OUTPUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/visual-output"
 )

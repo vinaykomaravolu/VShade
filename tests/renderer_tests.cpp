@@ -5,6 +5,8 @@
 #include <renderer/camera.hpp>
 #include <renderer/mesh.hpp>
 #include <renderer/renderer.hpp>
+#include <renderer/renderer2d.hpp>
+#include <renderer/renderer3d.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -79,4 +81,27 @@ TEST_CASE("Mesh rejects a missing vertex array", "[renderer]") {
 
 TEST_CASE("Renderer starts uninitialized without an OpenGL context", "[renderer]") {
     CHECK_FALSE(vshade::renderer::Renderer::isInitialized());
+}
+
+TEST_CASE("Renderer2D requires the low-level renderer", "[renderer2d]") {
+    vshade::renderer::Renderer::shutdown();
+    const vshade::renderer::Camera camera;
+
+    CHECK_THROWS_AS(
+        vshade::renderer::Renderer2D::beginScene(camera),
+        std::logic_error
+    );
+}
+
+TEST_CASE("Sprite renderer data has safe defaults", "[renderer2d]") {
+    const vshade::renderer::SpriteRendererComponent sprite;
+
+    CHECK_FALSE(sprite.texture);
+    CHECK(sprite.color.r == Catch::Approx(1.0F));
+    CHECK(sprite.color.g == Catch::Approx(1.0F));
+    CHECK(sprite.color.b == Catch::Approx(1.0F));
+    CHECK(sprite.color.a == Catch::Approx(1.0F));
+    CHECK(sprite.tiling.x == Catch::Approx(1.0F));
+    CHECK(sprite.tiling.y == Catch::Approx(1.0F));
+    CHECK(sprite.sortingLayer == 0);
 }

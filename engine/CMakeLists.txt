@@ -11,11 +11,15 @@ set(VSHADE_SOURCES
     src/platform/window.cpp
     src/renderer/buffer.cpp
     src/renderer/camera.cpp
+    src/renderer/cameracontroller.cpp
     src/renderer/framebuffer.cpp
+    src/renderer/material.cpp
     src/renderer/mesh.cpp
     src/renderer/opengl/openglutils.cpp
     src/renderer/opengl/generated/src/gl.c
     src/renderer/renderer.cpp
+    src/renderer/renderer2d.cpp
+    src/renderer/renderer3d.cpp
     src/renderer/rendertypes.cpp
     src/renderer/shader.cpp
     src/renderer/texture.cpp

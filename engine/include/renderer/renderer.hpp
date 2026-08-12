@@ -64,18 +64,22 @@ public:
     /**
      * @brief Sets the color used by clear().
      * @param color Red, green, blue, and alpha clear values.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setClearColor(const math::Vec4& color);
 
     /**
      * @brief Clears the selected attachments of the active framebuffer.
      * @param flags Framebuffer attachments to clear.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If @p flags contains an unknown bit.
      */
     static void clear(ClearFlags flags = ClearFlags::Color | ClearFlags::Depth);
 
     /**
      * @brief Enables or disables blending.
      * @param enabled True to enable fragment blending.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setBlending(bool enabled);
 
@@ -83,54 +87,68 @@ public:
      * @brief Sets the source and destination blend factors.
      * @param source Factor applied to the source fragment.
      * @param destination Factor applied to the framebuffer destination.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If a blend factor is not recognized.
      */
     static void setBlendFunction(BlendFactor source, BlendFactor destination);
 
     /**
      * @brief Enables or disables face culling.
      * @param enabled True to discard the configured face orientation.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setFaceCulling(bool enabled);
 
     /**
      * @brief Sets which faces are discarded when face culling is enabled.
      * @param face Face orientation to discard.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If @p face is not recognized.
      */
     static void setCullFace(CullFace face);
 
     /**
      * @brief Sets the winding order considered front-facing.
      * @param winding Vertex winding treated as the front face.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If @p winding is not recognized.
      */
     static void setFrontFace(FrontFace winding);
 
     /**
      * @brief Sets how polygon faces are rasterized.
      * @param mode Fill, line, or point rasterization mode.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If @p mode is not recognized.
      */
     static void setPolygonMode(PolygonMode mode);
 
     /**
      * @brief Enables or disables depth testing.
      * @param enabled True to compare fragment depth before drawing.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setDepthTesting(bool enabled);
 
     /**
      * @brief Sets the comparison used by depth testing.
      * @param function Comparison applied to incoming fragment depth.
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If @p function is not recognized.
      */
     static void setDepthFunction(DepthFunction function);
 
     /**
      * @brief Enables or disables writing fragment depth values.
      * @param enabled True to allow writes to the depth attachment.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setDepthWrite(bool enabled);
 
     /**
      * @brief Enables or disables OpenGL color dithering.
      * @param enabled True to enable color dithering.
+     * @throws std::logic_error If the renderer is not initialized.
      */
     static void setDithering(bool enabled);
 
@@ -171,7 +189,10 @@ public:
     /**
      * @brief Draws a Mesh using its configured topology.
      * @param mesh Mesh whose geometry should be submitted.
-     * @throws std::exception Propagates validation failures from drawIndexed().
+     * @throws std::logic_error If the renderer is not initialized.
+     * @throws std::invalid_argument If the mesh has no index buffer.
+     * @throws std::out_of_range If the configured draw range is invalid.
+     * @throws std::overflow_error If the draw count cannot be represented by OpenGL.
      */
     static void draw(const Mesh& mesh);
 

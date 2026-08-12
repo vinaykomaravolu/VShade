@@ -55,16 +55,28 @@ public:
      */
     [[nodiscard]] std::vector<std::uint8_t> readPixels() const;
 
-    /** @brief Returns the attachment width. @return Width in pixels. */
+    /**
+     * @brief Returns the attachment width.
+     * @return Width in pixels.
+     */
     [[nodiscard]] std::uint32_t width() const noexcept;
 
-    /** @brief Returns the attachment height. @return Height in pixels. */
+    /**
+     * @brief Returns the attachment height.
+     * @return Height in pixels.
+     */
     [[nodiscard]] std::uint32_t height() const noexcept;
 
-    /** @brief Returns the native framebuffer identifier. @return OpenGL framebuffer identifier. */
+    /**
+     * @brief Returns the native framebuffer identifier.
+     * @return OpenGL framebuffer identifier.
+     */
     [[nodiscard]] std::uint32_t rendererId() const noexcept;
 
-    /** @brief Returns the color texture identifier. @return OpenGL color-attachment texture identifier. */
+    /**
+     * @brief Returns the color texture identifier.
+     * @return OpenGL color-attachment texture identifier.
+     */
     [[nodiscard]] std::uint32_t colorAttachmentId() const noexcept;
 
 private:
