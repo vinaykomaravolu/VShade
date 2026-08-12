@@ -30,7 +30,7 @@ struct QuadCommand {
     std::int32_t sortingLayer = 0;
 };
 
-struct QuadResources;
+struct Renderer2DResources;
 
 struct Renderer2DState {
     math::Mat4 view{1.0F};
@@ -39,17 +39,17 @@ struct Renderer2DState {
     Renderer2DStats currentStats{};
     Renderer2DStats completedStats{};
     std::optional<PipelineStateGuard> pipelineStateGuard;
-    std::unique_ptr<QuadResources> resources;
+    std::unique_ptr<Renderer2DResources> resources;
     std::uint64_t resourceInitializationCount = 0;
     bool sceneActive = false;
 };
 
-struct QuadResources {
+struct Renderer2DResources {
     Shader shader;
     Texture2D whiteTexture;
     VertexArray vertexArray;
 
-    QuadResources()
+    Renderer2DResources()
         : shader(
               "vshade-renderer2d",
               R"glsl(#version 330 core
@@ -117,10 +117,10 @@ private:
     return instance;
 }
 
-[[nodiscard]] QuadResources& resources() {
+[[nodiscard]] Renderer2DResources& resources() {
     Renderer2DState& rendererState = state();
     if (!rendererState.resources) {
-        rendererState.resources = std::make_unique<QuadResources>();
+        rendererState.resources = std::make_unique<Renderer2DResources>();
         ++rendererState.resourceInitializationCount;
     }
     return *rendererState.resources;
@@ -234,21 +234,21 @@ void Renderer2D::endScene() {
         );
 
         if (!rendererState.commands.empty()) {
-            QuadResources& quadResources = resources();
-            quadResources.shader.bind();
-            quadResources.shader.setMat4("view", rendererState.view);
-            quadResources.shader.setMat4("projection", rendererState.projection);
+            Renderer2DResources& rendererResources = resources();
+            rendererResources.shader.bind();
+            rendererResources.shader.setMat4("view", rendererState.view);
+            rendererResources.shader.setMat4("projection", rendererState.projection);
 
             for (const QuadCommand& command : rendererState.commands) {
-                quadResources.shader.setMat4("model", command.model);
-                quadResources.shader.setVec4("tint", command.color);
-                quadResources.shader.setVec2("tiling", command.tiling);
+                rendererResources.shader.setMat4("model", command.model);
+                rendererResources.shader.setVec4("tint", command.color);
+                rendererResources.shader.setVec2("tiling", command.tiling);
 
                 const Texture2D& texture = command.texture != nullptr
                     ? *command.texture
-                    : quadResources.whiteTexture;
+                    : rendererResources.whiteTexture;
                 texture.bind(0);
-                Renderer::drawIndexed(quadResources.vertexArray);
+                Renderer::drawIndexed(rendererResources.vertexArray);
                 ++rendererState.currentStats.drawCalls;
             }
         }
