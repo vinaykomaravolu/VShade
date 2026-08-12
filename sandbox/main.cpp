@@ -134,7 +134,7 @@ protected:
         m_cubeMaterial.setAlbedoTexture(m_checkerTexture);
         m_cubeMaterial.setAlbedoColor({0.85F, 0.95F, 1.0F, 1.0F});
         m_cubeMaterial.setRoughness(0.65F);
-        m_cubeMaterial.setMetallic(0.05F);
+        m_cubeMaterial.setMetallic(0.5F);
         m_cubeMaterial.setShading(vshade::renderer::MaterialShading::Lit);
 
         // Start focused on the cube, then let the fly controller update this
