@@ -23,6 +23,13 @@ foreach(dependency IN ITEMS spdlog glfw glm)
     endif()
 endforeach()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/entt/src/entt/entt.hpp")
+    message(FATAL_ERROR
+        "Missing dependency: external/entt. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
 if(BUILD_TESTING AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/Catch2/CMakeLists.txt")
     message(FATAL_ERROR
         "Missing dependency: external/Catch2. "
@@ -53,6 +60,14 @@ set(CATCH_DEVELOPMENT_BUILD OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/spdlog EXCLUDE_FROM_ALL)
 add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
+
+# EnTT is header-only. Defining its interface target here preserves VShade's
+# CMake 3.20 baseline even when EnTT's own development build requires newer CMake.
+add_library(VShadeEnTT INTERFACE)
+add_library(EnTT::EnTT ALIAS VShadeEnTT)
+target_include_directories(VShadeEnTT SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/entt/src"
+)
 
 if(BUILD_TESTING)
     add_subdirectory(external/Catch2 EXCLUDE_FROM_ALL)

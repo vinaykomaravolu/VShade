@@ -25,6 +25,9 @@ set(VSHADE_SOURCES
     src/renderer/shader.cpp
     src/renderer/texture.cpp
     src/renderer/vertexarray.cpp
+    src/scene/Entity.cpp
+    src/scene/Scene.cpp
+    src/scene/SceneSerializer.cpp
 )
 
 # The GLAD loader is generated from the pinned external/glad submodule and
@@ -57,6 +60,7 @@ target_link_libraries(VShadeEngine
     PUBLIC
         spdlog::spdlog
         glm::glm
+        EnTT::EnTT
     PRIVATE
         glfw
         OpenGL::GL

@@ -12,6 +12,7 @@ add_executable(VShadeTests
     renderer3d_visual_tests.cpp
     renderer_tests.cpp
     renderer_visual_tests.cpp
+    scene_tests.cpp
     visual/imagecomparison.cpp
 )
 
