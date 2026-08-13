@@ -27,7 +27,11 @@ jobs:
       - name: Install coverage and OpenGL dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libgl1-mesa-dev
+          sudo apt-get install --yes --no-install-recommends \
+            libgl1-mesa-dev \
+            libgl1-mesa-dri \
+            xorg-dev \
+            xvfb
           python3 -m pip install gcovr==8.6
 
       - name: Configure coverage build
@@ -37,14 +41,24 @@ jobs:
           -DBUILD_TESTING=ON
           -DVSHADE_BUILD_SANDBOX=OFF
           -DVSHADE_ENABLE_COVERAGE=ON
-          -DGLFW_BUILD_X11=OFF
           -DGLFW_BUILD_WAYLAND=OFF
 
       - name: Build tests
         run: cmake --build build-coverage --config Debug --target VShadeTests --parallel
 
       - name: Run tests
-        run: ctest --test-dir build-coverage -C Debug --output-on-failure
+        run: >-
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24"
+          ctest --test-dir build-coverage -C Debug --output-on-failure
+
+      - name: Upload visual-test failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-test-artifacts
+          path: build-coverage/tests/visual-output
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Generate coverage report
         run: >-
@@ -52,6 +66,7 @@ jobs:
           --root .
           --filter "engine/"
           --exclude "tests/"
+          --exclude "engine/src/renderer/opengl/generated/"
           --cobertura-pretty
           --output coverage.xml
           --print-summary

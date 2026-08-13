@@ -10,3 +10,12 @@
 [submodule "external/Catch2"]
 	path = external/Catch2
 	url = https://github.com/catchorg/Catch2.git
+[submodule "external/glad"]
+	path = external/glad
+	url = https://github.com/Dav1dde/glad.git
+[submodule "external/stb"]
+	path = external/stb
+	url = https://github.com/nothings/stb.git
+[submodule "external/entt"]
+	path = external/entt
+	url = https://github.com/skypjack/entt.git

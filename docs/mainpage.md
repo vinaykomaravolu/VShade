@@ -6,26 +6,38 @@ built.
 
 ## Start here
 
-- `VShade::Application` owns startup, the main loop, and shutdown.
+- `vshade::core::Application` owns startup, the main loop, and shutdown.
 - `SHADE_ENGINE_MAIN` creates the executable entry point for a game application.
-- `VShade::Window` owns the GLFW window and OpenGL context.
-- `VShade::Input` exposes per-frame keyboard and mouse state.
-- `VShade::Time` provides frame timing.
-- `VShade::FileSystem` contains basic file-reading helpers.
-- `VShade::Log` and the logging macros separate engine messages from game messages.
+- `vshade::platform::Window` owns the GLFW window and OpenGL context.
+- `vshade::input::Input` exposes per-frame keyboard and mouse state.
+- `vshade::core::Time` provides clamped frame timing; `Application` also exposes fixed updates.
+- `vshade::core::filesystem` contains basic file-reading helpers.
+- `vshade::core::Log` and the logging macros separate engine messages from game messages.
+- `vshade::math` provides GLM-backed vectors, matrices, quaternions, and transforms.
+- `vshade::renderer::Renderer` provides OpenGL startup, tracked pipeline state, and drawing.
+- `vshade::renderer::Renderer2D` submits quads and sprites.
+- `vshade::renderer::Renderer3D` submits meshes, materials, cameras, and directional lighting.
+- Renderer resource classes own buffers, vertex arrays, shaders, textures, framebuffers, and meshes.
+- `vshade::renderer::CameraController` provides testable fly-camera behavior.
+
+See [Renderer foundation](renderer.md) for the renderer architecture,
+lifecycle, file responsibilities, and current scope.
+
+See [Golden-image renderer testing](visual-testing.md) for hidden-context
+visual regression tests, comparison tolerances, and failure artifacts.
 
 ## Minimal application
 
 ```cpp
-#include <Core/Application.hpp>
-#include <Core/EntryPoint.hpp>
-#include <Platform/Input.hpp>
+#include <core/application.hpp>
+#include <core/entrypoint.hpp>
+#include <input/input.hpp>
 
-class Game final : public VShade::Application {
+class Game final : public vshade::core::Application {
 protected:
-    void OnUpdate(float delta_time) override {
-        if (VShade::Input::is_key_pressed(VShade::KeyCode::Escape)) {
-            Close();
+    void onUpdate(float delta_time) override {
+        if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::Escape)) {
+            close();
         }
 
         static_cast<void>(delta_time);

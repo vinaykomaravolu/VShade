@@ -1,0 +1,58 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Ubuntu GCC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install OpenGL test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libgl1-mesa-dev libgl1-mesa-dri xorg-dev xvfb
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DGLFW_BUILD_WAYLAND=OFF -DVSHADE_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" ctest --test-dir build --output-on-failure
+
+  windows:
+    name: Windows MSVC
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DVSHADE_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+      - name: Test non-visual cases
+        run: ctest --test-dir build -C Debug --output-on-failure -E "matches its golden image"
+
+  macos:
+    name: macOS AppleClang
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DVSHADE_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test non-visual cases
+        run: ctest --test-dir build --output-on-failure -E "matches its golden image"
