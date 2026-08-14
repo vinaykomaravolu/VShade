@@ -27,6 +27,11 @@ namespace uniform {
 constexpr std::string_view albedoColor = "albedoColor";
 constexpr std::string_view albedoTexture = "albedoTexture";
 constexpr std::string_view hasAlbedoTexture = "hasAlbedoTexture";
+constexpr std::string_view normalTexture = "normalTexture";
+constexpr std::string_view hasNormalTexture = "hasNormalTexture";
+constexpr std::string_view normalScale = "normalScale";
+constexpr std::string_view alphaMode = "alphaMode";
+constexpr std::string_view alphaCutoff = "alphaCutoff";
 constexpr std::string_view litMaterial = "litMaterial";
 constexpr std::string_view lightDirection = "lightDirection";
 constexpr std::string_view lightColor = "lightColor";
@@ -114,27 +119,37 @@ void queueModelNode(
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
+layout(location = 3) in vec4 aTangent;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-out vec3 vNormal;
+out mat3 vTangentBasis;
 out vec2 vTexCoord;
 
 void main() {
     mat3 normalMatrix = mat3(transpose(inverse(model)));
-    vNormal = normalize(normalMatrix * aNormal);
+    vec3 normal = normalize(normalMatrix * aNormal);
+    vec3 tangent = normalize(mat3(model) * aTangent.xyz);
+    tangent = normalize(tangent - normal * dot(normal, tangent));
+    vec3 bitangent = cross(normal, tangent) * aTangent.w;
+    vTangentBasis = mat3(tangent, bitangent, normal);
     vTexCoord = aTexCoord;
     gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 )glsl",
         R"glsl(#version 330 core
-in vec3 vNormal;
+in mat3 vTangentBasis;
 in vec2 vTexCoord;
 
 uniform sampler2D albedoTexture;
 uniform int hasAlbedoTexture;
+uniform sampler2D normalTexture;
+uniform int hasNormalTexture;
+uniform float normalScale;
+uniform int alphaMode;
+uniform float alphaCutoff;
 uniform int litMaterial;
 uniform vec4 albedoColor;
 uniform vec3 lightDirection;
@@ -151,12 +166,23 @@ void main() {
         : vec4(1.0);
     vec4 albedo = sampledAlbedo * albedoColor;
 
+    if (alphaMode == 1 && albedo.a < alphaCutoff) {
+        discard;
+    }
+
     if (litMaterial == 0) {
         fragmentColor = albedo;
         return;
     }
 
-    vec3 normalDirection = normalize(vNormal);
+    vec3 tangentNormal = hasNormalTexture != 0
+        ? texture(normalTexture, vTexCoord).xyz * 2.0 - 1.0
+        : vec3(0.0, 0.0, 1.0);
+    tangentNormal.xy *= normalScale;
+    vec3 normalDirection = normalize(vTangentBasis * normalize(tangentNormal));
+    if (!gl_FrontFacing) {
+        normalDirection = -normalDirection;
+    }
     vec3 directionToLight = normalize(-lightDirection);
     float diffuse = max(dot(normalDirection, directionToLight), 0.0);
     // This is intentionally a small, non-PBR material model. Rough surfaces
@@ -173,6 +199,7 @@ void main() {
 struct Renderer3DResources {
     Shader defaultShader = createDefaultShader();
     Texture2D whiteTexture;
+    Texture2D neutralNormalTexture;
 
     Renderer3DResources()
         : whiteTexture(
@@ -182,10 +209,19 @@ struct Renderer3DResources {
               whitePixel.data(),
               TextureFilter::Nearest,
               TextureWrap::ClampToEdge
+          ),
+          neutralNormalTexture(
+              1,
+              1,
+              TextureFormat::RGBA8,
+              neutralNormalPixel.data(),
+              TextureFilter::Nearest,
+              TextureWrap::ClampToEdge
           ) {}
 
 private:
     static constexpr std::array<std::uint8_t, 4> whitePixel{255, 255, 255, 255};
+    static constexpr std::array<std::uint8_t, 4> neutralNormalPixel{128, 128, 255, 255};
 };
 
 [[nodiscard]] Renderer3DResources& resources() {
@@ -320,7 +356,23 @@ void Renderer3D::endScene() {
             std::stable_sort(
                 rendererState.commands.begin(),
                 rendererState.commands.end(),
-                [](const MeshCommand& left, const MeshCommand& right) {
+                [&rendererState](const MeshCommand& left, const MeshCommand& right) {
+                    const bool leftTransparent =
+                        left.material.alphaMode() == MaterialAlphaMode::Blend;
+                    const bool rightTransparent =
+                        right.material.alphaMode() == MaterialAlphaMode::Blend;
+                    if (leftTransparent != rightTransparent) {
+                        return !leftTransparent;
+                    }
+                    if (leftTransparent) {
+                        const float leftViewZ =
+                            (rendererState.view * left.model * math::Vec4{0.0F, 0.0F, 0.0F, 1.0F}).z;
+                        const float rightViewZ =
+                            (rendererState.view * right.model * math::Vec4{0.0F, 0.0F, 0.0F, 1.0F}).z;
+                        if (leftViewZ != rightViewZ) {
+                            return leftViewZ < rightViewZ;
+                        }
+                    }
                     const std::uint32_t leftShader = left.material.hasShader()
                         ? left.material.shader()->rendererId()
                         : 0;
@@ -332,6 +384,18 @@ void Renderer3D::endScene() {
             );
 
             for (const MeshCommand& command : rendererState.commands) {
+                const bool transparent =
+                    command.material.alphaMode() == MaterialAlphaMode::Blend;
+                Renderer::setBlending(transparent);
+                if (transparent) {
+                    Renderer::setBlendFunction(
+                        BlendFactor::SourceAlpha,
+                        BlendFactor::OneMinusSourceAlpha
+                    );
+                }
+                Renderer::setDepthWrite(!transparent);
+                Renderer::setFaceCulling(!command.material.doubleSided());
+
                 Shader& shader = command.material.hasShader()
                     ? *command.material.shader()
                     : rendererResources.defaultShader;
@@ -341,6 +405,12 @@ void Renderer3D::endScene() {
                 shader.setFloat(uniform::roughness, command.material.roughness());
                 shader.setFloat(uniform::metallic, command.material.metallic());
                 shader.setInt(
+                    uniform::alphaMode,
+                    static_cast<int>(command.material.alphaMode())
+                );
+                shader.setFloat(uniform::alphaCutoff, command.material.alphaCutoff());
+                shader.setFloat(uniform::normalScale, command.material.normalScale());
+                shader.setInt(
                     uniform::litMaterial,
                     command.material.shading() == MaterialShading::Lit ? 1 : 0
                 );
@@ -348,9 +418,14 @@ void Renderer3D::endScene() {
                 shader.setVec3(uniform::lightColor, rendererState.light.color);
                 shader.setFloat(uniform::lightIntensity, rendererState.light.intensity);
                 shader.setInt(uniform::albedoTexture, 0);
+                shader.setInt(uniform::normalTexture, 1);
                 shader.setInt(
                     uniform::hasAlbedoTexture,
                     command.material.hasAlbedoTexture() ? 1 : 0
+                );
+                shader.setInt(
+                    uniform::hasNormalTexture,
+                    command.material.hasNormalTexture() ? 1 : 0
                 );
 
                 const Texture2D& texture = command.material.hasAlbedoTexture()
@@ -358,7 +433,12 @@ void Renderer3D::endScene() {
                     : rendererResources.whiteTexture;
                 texture.bind(0);
 
-                std::uint32_t nextTextureSlot = 1;
+                const Texture2D& normalTexture = command.material.hasNormalTexture()
+                    ? *command.material.normalTexture()
+                    : rendererResources.neutralNormalTexture;
+                normalTexture.bind(1);
+
+                std::uint32_t nextTextureSlot = 2;
                 applyParameters(shader, command.material.parameters(), nextTextureSlot);
                 applyParameters(shader, command.parameters, nextTextureSlot);
 

@@ -45,6 +45,29 @@ bool Material::hasAlbedoTexture() const noexcept {
     return m_albedoTexture != nullptr;
 }
 
+const std::shared_ptr<Texture2D>& Material::normalTexture() const noexcept {
+    return m_normalTexture;
+}
+
+void Material::setNormalTexture(std::shared_ptr<Texture2D> texture) noexcept {
+    m_normalTexture = std::move(texture);
+}
+
+bool Material::hasNormalTexture() const noexcept {
+    return m_normalTexture != nullptr;
+}
+
+float Material::normalScale() const noexcept {
+    return m_normalScale;
+}
+
+void Material::setNormalScale(const float scale) {
+    if (!std::isfinite(scale) || scale < 0.0F) {
+        throw std::invalid_argument("Material normal scale must be finite and non-negative");
+    }
+    m_normalScale = scale;
+}
+
 const math::Vec4& Material::albedoColor() const noexcept {
     return m_albedoColor;
 }
@@ -77,6 +100,31 @@ MaterialShading Material::shading() const noexcept {
 
 void Material::setShading(const MaterialShading shading) noexcept {
     m_shading = shading;
+}
+
+MaterialAlphaMode Material::alphaMode() const noexcept {
+    return m_alphaMode;
+}
+
+void Material::setAlphaMode(const MaterialAlphaMode mode) noexcept {
+    m_alphaMode = mode;
+}
+
+float Material::alphaCutoff() const noexcept {
+    return m_alphaCutoff;
+}
+
+void Material::setAlphaCutoff(const float cutoff) {
+    validateUnitRange(cutoff, "Material alpha cutoff");
+    m_alphaCutoff = cutoff;
+}
+
+bool Material::doubleSided() const noexcept {
+    return m_doubleSided;
+}
+
+void Material::setDoubleSided(const bool doubleSided) noexcept {
+    m_doubleSided = doubleSided;
 }
 
 const MaterialParameters& Material::parameters() const noexcept {

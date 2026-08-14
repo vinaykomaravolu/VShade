@@ -17,6 +17,8 @@ struct MeshVertex {
     math::Vec3 normal{0.0F, 1.0F, 0.0F};
     /** @brief Two-dimensional texture coordinate. */
     math::Vec2 textureCoordinate{0.0F};
+    /** @brief Tangent direction and handedness used by tangent-space normal maps. */
+    math::Vec4 tangent{1.0F, 0.0F, 0.0F, 1.0F};
 };
 
 /** @brief Renderable geometry backed by a vertex array. */

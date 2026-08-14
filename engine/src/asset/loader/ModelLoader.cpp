@@ -30,6 +30,18 @@ namespace {
 
 using TextureCache = std::vector<std::shared_ptr<renderer::Texture2D>>;
 
+[[nodiscard]] renderer::MaterialAlphaMode alphaMode(const fastgltf::AlphaMode mode) {
+    switch (mode) {
+        case fastgltf::AlphaMode::Opaque:
+            return renderer::MaterialAlphaMode::Opaque;
+        case fastgltf::AlphaMode::Mask:
+            return renderer::MaterialAlphaMode::Mask;
+        case fastgltf::AlphaMode::Blend:
+            return renderer::MaterialAlphaMode::Blend;
+    }
+    throw std::invalid_argument("A glTF material has an unknown alpha mode");
+}
+
 [[nodiscard]] std::span<const std::byte> sourceBytes(
     const fastgltf::DataSource& source
 ) {
@@ -183,12 +195,23 @@ using TextureCache = std::vector<std::shared_ptr<renderer::Texture2D>>;
     });
     material->setRoughness(static_cast<float>(source.pbrData.roughnessFactor));
     material->setMetallic(static_cast<float>(source.pbrData.metallicFactor));
+    material->setAlphaMode(alphaMode(source.alphaMode));
+    material->setAlphaCutoff(static_cast<float>(source.alphaCutoff));
+    material->setDoubleSided(source.doubleSided);
     if (source.pbrData.baseColorTexture.has_value()) {
         material->setAlbedoTexture(loadTexture(
             asset,
             source.pbrData.baseColorTexture->textureIndex,
             textureCache
         ));
+    }
+    if (source.normalTexture.has_value()) {
+        material->setNormalTexture(loadTexture(
+            asset,
+            source.normalTexture->textureIndex,
+            textureCache
+        ));
+        material->setNormalScale(static_cast<float>(source.normalTexture->scale));
     }
     return material;
 }

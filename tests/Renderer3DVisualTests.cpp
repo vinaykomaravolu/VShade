@@ -71,6 +71,7 @@ namespace {
         {"position", vshade::renderer::ShaderDataType::Float3},
         {"normal", vshade::renderer::ShaderDataType::Float3},
         {"textureCoordinate", vshade::renderer::ShaderDataType::Float2},
+        {"tangent", vshade::renderer::ShaderDataType::Float4},
     });
     auto indexBuffer = std::make_shared<vshade::renderer::IndexBuffer>(
         indices.data(),
@@ -216,6 +217,60 @@ TEST_CASE("Renderer3D loaded model matches its golden image", "[renderer3d][visu
     vshade::tests::visual::checkGoldenImage(
         actual,
         "renderer3d_gltf_model",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
+        VSHADE_RENDER3D_OUTPUT_DIR
+    );
+}
+
+TEST_CASE("Renderer3D eye materials match their golden image", "[renderer3d][visual][opengl][asset]") {
+    vshade::tests::visual::HiddenRenderContext context;
+    vshade::renderer::Framebuffer framebuffer(
+        vshade::tests::visual::defaultRenderWidth,
+        vshade::tests::visual::defaultRenderHeight
+    );
+    vshade::tests::visual::beginOffscreenFrame(
+        framebuffer,
+        {0.025F, 0.035F, 0.06F, 1.0F}
+    );
+
+    vshade::asset::AssetManager assets;
+    const auto handle = assets.load<vshade::renderer::Model>(
+        std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "eye.glb"
+    );
+    const std::shared_ptr<vshade::renderer::Model> model = assets.get(handle);
+    REQUIRE(model);
+
+    vshade::renderer::Camera camera;
+    camera.setPerspective(0.785398163F, 1.0F, 0.1F, 100.0F);
+    camera.lookAt(
+        {2.8F, 1.8F, 3.8F},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+    vshade::renderer::Renderer3D::setDirectionalLight({
+        .direction = {-0.55F, -1.0F, -0.35F},
+        .color = {1.0F, 0.94F, 0.82F},
+        .intensity = 1.0F,
+    });
+
+    vshade::renderer::Renderer3D::beginScene(camera);
+    vshade::renderer::Renderer3D::drawModel(
+        vshade::math::Transform(
+            {0.0F, 0.0F, 0.0F},
+            vshade::math::Quat{1.0F, 0.0F, 0.0F, 0.0F},
+            {0.01F, 0.01F, 0.01F}
+        ),
+        *model
+    );
+    vshade::renderer::Renderer3D::endScene();
+
+    CHECK(vshade::renderer::Renderer3D::stats().meshCount == 2);
+    CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 2);
+    const vshade::tests::visual::Image actual =
+        vshade::tests::visual::captureFramebuffer(framebuffer);
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer3d_eye_materials",
         std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
         VSHADE_RENDER3D_OUTPUT_DIR
     );

@@ -20,6 +20,8 @@ TEST_CASE("Material exposes safe defaults and validated properties", "[material]
 
     CHECK_FALSE(material.hasShader());
     CHECK_FALSE(material.hasAlbedoTexture());
+    CHECK_FALSE(material.hasNormalTexture());
+    CHECK(material.normalScale() == Catch::Approx(1.0F));
     CHECK(material.albedoColor().r == Catch::Approx(1.0F));
     CHECK(material.albedoColor().g == Catch::Approx(1.0F));
     CHECK(material.albedoColor().b == Catch::Approx(1.0F));
@@ -27,16 +29,27 @@ TEST_CASE("Material exposes safe defaults and validated properties", "[material]
     CHECK(material.roughness() == Catch::Approx(0.5F));
     CHECK(material.metallic() == Catch::Approx(0.0F));
     CHECK(material.shading() == vshade::renderer::MaterialShading::Unlit);
+    CHECK(material.alphaMode() == vshade::renderer::MaterialAlphaMode::Opaque);
+    CHECK(material.alphaCutoff() == Catch::Approx(0.5F));
+    CHECK_FALSE(material.doubleSided());
 
     material.setAlbedoColor({0.2F, 0.4F, 0.6F, 0.8F});
     material.setRoughness(0.75F);
     material.setMetallic(0.25F);
     material.setShading(vshade::renderer::MaterialShading::Lit);
+    material.setNormalScale(0.65F);
+    material.setAlphaMode(vshade::renderer::MaterialAlphaMode::Mask);
+    material.setAlphaCutoff(0.35F);
+    material.setDoubleSided(true);
 
     CHECK(material.albedoColor().b == Catch::Approx(0.6F));
     CHECK(material.roughness() == Catch::Approx(0.75F));
     CHECK(material.metallic() == Catch::Approx(0.25F));
     CHECK(material.shading() == vshade::renderer::MaterialShading::Lit);
+    CHECK(material.normalScale() == Catch::Approx(0.65F));
+    CHECK(material.alphaMode() == vshade::renderer::MaterialAlphaMode::Mask);
+    CHECK(material.alphaCutoff() == Catch::Approx(0.35F));
+    CHECK(material.doubleSided());
 
     CHECK_THROWS_AS(material.setRoughness(-0.01F), std::invalid_argument);
     CHECK_THROWS_AS(material.setRoughness(1.01F), std::invalid_argument);
@@ -44,6 +57,8 @@ TEST_CASE("Material exposes safe defaults and validated properties", "[material]
         material.setMetallic(std::numeric_limits<float>::quiet_NaN()),
         std::invalid_argument
     );
+    CHECK_THROWS_AS(material.setNormalScale(-0.01F), std::invalid_argument);
+    CHECK_THROWS_AS(material.setAlphaCutoff(1.01F), std::invalid_argument);
 }
 
 TEST_CASE("Material stores typed custom shader parameters", "[material]") {
@@ -87,15 +102,19 @@ TEST_CASE("Material retains shared texture resources", "[material][opengl]") {
 
     vshade::renderer::Material material;
     material.setAlbedoTexture(texture);
+    material.setNormalTexture(texture);
     material.setShader(shader);
     texture.reset();
     shader.reset();
 
     CHECK(material.hasAlbedoTexture());
+    CHECK(material.hasNormalTexture());
     CHECK(material.hasShader());
     CHECK_FALSE(observedTexture.expired());
     CHECK_FALSE(observedShader.expired());
     REQUIRE(material.albedoTexture());
     CHECK(material.albedoTexture()->width() == 1);
     CHECK(material.albedoTexture()->height() == 1);
+    REQUIRE(material.normalTexture());
+    CHECK(material.normalTexture()->width() == 1);
 }

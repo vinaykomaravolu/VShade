@@ -297,3 +297,32 @@ TEST_CASE("Default model loader imports the sandbox Damaged Helmet", "[asset][op
     }
     CHECK(foundBaseColorTexture);
 }
+
+TEST_CASE("Model loader imports eye alpha and normal-map materials", "[asset][opengl]") {
+    vshade::tests::visual::HiddenRenderContext context(64, 64);
+    vshade::asset::AssetManager assets;
+
+    const auto handle = assets.load<vshade::renderer::Model>(
+        std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "eye.glb"
+    );
+    const std::shared_ptr<vshade::renderer::Model> model = assets.get(handle);
+
+    REQUIRE(model);
+    REQUIRE(model->primitives().size() == 2);
+    const auto& glass = model->primitives()[0].material;
+    const auto& eye = model->primitives()[1].material;
+    REQUIRE(glass);
+    REQUIRE(eye);
+    CHECK(glass->alphaMode() == vshade::renderer::MaterialAlphaMode::Blend);
+    CHECK(glass->doubleSided());
+    CHECK(glass->albedoColor().a == Catch::Approx(0.1085521F));
+    CHECK_FALSE(glass->hasNormalTexture());
+    CHECK(eye->alphaMode() == vshade::renderer::MaterialAlphaMode::Opaque);
+    CHECK(eye->doubleSided());
+    CHECK(eye->hasAlbedoTexture());
+    CHECK(eye->hasNormalTexture());
+    CHECK(eye->normalScale() == Catch::Approx(1.0F));
+    REQUIRE(eye->normalTexture());
+    CHECK(eye->normalTexture()->width() > 0);
+    CHECK(eye->normalTexture()->height() > 0);
+}

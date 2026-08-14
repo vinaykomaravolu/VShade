@@ -35,7 +35,7 @@ struct Renderer3DStats {
 /**
  * @brief Required names and vertex locations for Renderer3D shader overrides.
  *
- * Position, normal, and texture-coordinate inputs use locations 0, 1, and 2.
+ * Position, normal, texture-coordinate, and tangent inputs use locations 0-3.
  * The three matrix uniforms are the renderer-owned contract. Material and
  * per-draw parameters provide all other user-defined uniforms.
  */
@@ -43,6 +43,7 @@ struct Renderer3DShaderInterface {
     static constexpr std::uint32_t positionLocation = 0;
     static constexpr std::uint32_t normalLocation = 1;
     static constexpr std::uint32_t textureCoordinateLocation = 2;
+    static constexpr std::uint32_t tangentLocation = 3;
     static constexpr std::string_view model = "model";
     static constexpr std::string_view view = "view";
     static constexpr std::string_view projection = "projection";
@@ -52,8 +53,8 @@ struct Renderer3DShaderInterface {
  * @brief High-level 3D API for meshes, materials, cameras, and directional light.
  *
  * Mesh geometry is supplied by the caller. The renderer provides depth
- * testing, back-face culling, unlit materials, and basic lit materials. PBR,
- * tangents, and normal mapping are intentionally deferred.
+ * testing, material-controlled culling and alpha, unlit materials, basic lit
+ * materials, and tangent-space normal maps.
  *
  */
 class Renderer3D final {

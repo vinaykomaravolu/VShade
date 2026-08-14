@@ -115,6 +115,24 @@ std::shared_ptr<renderer::Mesh> loadGltfPrimitive(
         );
     }
 
+    if (const auto* tangentAttribute = primitive.findAttribute("TANGENT");
+        tangentAttribute != primitive.attributes.end()) {
+        const fastgltf::Accessor& tangentAccessor =
+            asset.accessors.at(tangentAttribute->accessorIndex);
+        if (tangentAccessor.count != vertices.size()) {
+            throw std::invalid_argument("glTF TANGENT and POSITION counts must match");
+        }
+        fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec4>(
+            asset,
+            tangentAccessor,
+            [&vertices](const fastgltf::math::fvec4 tangent, const std::size_t index) {
+                vertices[index].tangent = {
+                    tangent.x(), tangent.y(), tangent.z(), tangent.w()
+                };
+            }
+        );
+    }
+
     if (!primitive.indicesAccessor.has_value()) {
         throw std::invalid_argument("Failed to generate indices for glTF mesh primitive");
     }
@@ -137,6 +155,7 @@ std::shared_ptr<renderer::Mesh> loadGltfPrimitive(
         {"position", renderer::ShaderDataType::Float3},
         {"normal", renderer::ShaderDataType::Float3},
         {"textureCoordinate", renderer::ShaderDataType::Float2},
+        {"tangent", renderer::ShaderDataType::Float4},
     });
     auto indexBuffer = std::make_shared<renderer::IndexBuffer>(
         indices.data(),

@@ -33,6 +33,7 @@ namespace {
         {"position", vshade::renderer::ShaderDataType::Float3},
         {"normal", vshade::renderer::ShaderDataType::Float3},
         {"textureCoordinate", vshade::renderer::ShaderDataType::Float2},
+        {"tangent", vshade::renderer::ShaderDataType::Float4},
     });
     auto indexBuffer = std::make_shared<vshade::renderer::IndexBuffer>(
         indices.data(),

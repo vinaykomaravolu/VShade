@@ -17,6 +17,16 @@ enum class MaterialShading {
     Lit,
 };
 
+/** @brief Controls how a material's alpha channel affects rasterization. */
+enum class MaterialAlphaMode {
+    /** @brief Ignores alpha for coverage and writes every fragment. */
+    Opaque,
+    /** @brief Discards fragments below the configured alpha cutoff. */
+    Mask,
+    /** @brief Blends fragments with the color already in the framebuffer. */
+    Blend,
+};
+
 /** @brief Owns the resources and surface properties used to draw a mesh. */
 class Material final {
 public:
@@ -64,6 +74,24 @@ public:
      * @return True when albedoTexture() is non-null.
      */
     [[nodiscard]] bool hasAlbedoTexture() const noexcept;
+
+    /** @brief Returns the optional tangent-space normal texture. */
+    [[nodiscard]] const std::shared_ptr<Texture2D>& normalTexture() const noexcept;
+
+    /** @brief Replaces or clears the tangent-space normal texture. */
+    void setNormalTexture(std::shared_ptr<Texture2D> texture) noexcept;
+
+    /** @brief Reports whether a normal texture is assigned. */
+    [[nodiscard]] bool hasNormalTexture() const noexcept;
+
+    /** @brief Returns the multiplier applied to normal-map X and Y channels. */
+    [[nodiscard]] float normalScale() const noexcept;
+
+    /**
+     * @brief Replaces the tangent-space normal strength.
+     * @throws std::invalid_argument If @p scale is negative or not finite.
+     */
+    void setNormalScale(float scale);
 
     /**
      * @brief Returns the color multiplied with the albedo texture.
@@ -115,6 +143,27 @@ public:
      */
     void setShading(MaterialShading shading) noexcept;
 
+    /** @brief Returns how the material handles fragment alpha. */
+    [[nodiscard]] MaterialAlphaMode alphaMode() const noexcept;
+
+    /** @brief Replaces the fragment-alpha behavior. */
+    void setAlphaMode(MaterialAlphaMode mode) noexcept;
+
+    /** @brief Returns the alpha threshold used by masked materials. */
+    [[nodiscard]] float alphaCutoff() const noexcept;
+
+    /**
+     * @brief Replaces the masked-material alpha threshold.
+     * @throws std::invalid_argument If @p cutoff is outside zero through one.
+     */
+    void setAlphaCutoff(float cutoff);
+
+    /** @brief Reports whether both sides of triangles should be rasterized. */
+    [[nodiscard]] bool doubleSided() const noexcept;
+
+    /** @brief Enables or disables rendering both sides of triangles. */
+    void setDoubleSided(bool doubleSided) noexcept;
+
     /** @brief Returns custom shader values shared by every draw using this material. */
     [[nodiscard]] const MaterialParameters& parameters() const noexcept;
 
@@ -124,10 +173,15 @@ public:
 private:
     std::shared_ptr<Shader> m_shader;
     std::shared_ptr<Texture2D> m_albedoTexture;
+    std::shared_ptr<Texture2D> m_normalTexture;
     math::Vec4 m_albedoColor{1.0F};
     float m_roughness = 0.5F;
     float m_metallic = 0.0F;
+    float m_normalScale = 1.0F;
+    float m_alphaCutoff = 0.5F;
     MaterialShading m_shading = MaterialShading::Unlit;
+    MaterialAlphaMode m_alphaMode = MaterialAlphaMode::Opaque;
+    bool m_doubleSided = false;
     MaterialParameters m_parameters;
 };
 
