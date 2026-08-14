@@ -74,6 +74,39 @@ void validateNonNegativeFinite(const float value, const char* message) {
     }
 }
 
+void queueMesh(
+    const math::Mat4& model,
+    const Mesh& mesh,
+    const Material& material,
+    const DrawParameters& parameters
+) {
+    Renderer3DState& rendererState = state();
+    rendererState.commands.push_back({
+        .model = model,
+        .mesh = &mesh,
+        .material = material,
+        .parameters = parameters,
+    });
+    ++rendererState.currentStats.meshCount;
+}
+
+void queueModelNode(
+    const Model& model,
+    const std::size_t nodeIndex,
+    const math::Mat4& parentTransform,
+    const DrawParameters& parameters
+) {
+    const ModelNode& node = model.nodes()[nodeIndex];
+    const math::Mat4 nodeTransform = parentTransform * node.localTransform.matrix();
+    for (const std::size_t primitiveIndex : node.primitives) {
+        const ModelPrimitive& primitive = model.primitives()[primitiveIndex];
+        queueMesh(nodeTransform, *primitive.mesh, *primitive.material, parameters);
+    }
+    for (const std::size_t child : node.children) {
+        queueModelNode(model, child, nodeTransform, parameters);
+    }
+}
+
 [[nodiscard]] Shader createDefaultShader() {
     return Shader(
         "vshade-renderer3d",
@@ -262,14 +295,19 @@ void Renderer3D::drawMesh(
     const DrawParameters& parameters
 ) {
     requireActiveScene();
-    Renderer3DState& rendererState = state();
-    rendererState.commands.push_back({
-        .model = transform.matrix(),
-        .mesh = &mesh,
-        .material = material,
-        .parameters = parameters,
-    });
-    ++rendererState.currentStats.meshCount;
+    queueMesh(transform.matrix(), mesh, material, parameters);
+}
+
+void Renderer3D::drawModel(
+    const math::Transform& transform,
+    const Model& model,
+    const DrawParameters& parameters
+) {
+    requireActiveScene();
+    const math::Mat4 worldTransform = transform.matrix();
+    for (const std::size_t root : model.rootNodes()) {
+        queueModelNode(model, root, worldTransform, parameters);
+    }
 }
 
 void Renderer3D::endScene() {

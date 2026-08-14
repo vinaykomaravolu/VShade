@@ -14,7 +14,7 @@ option(VSHADE_BUILD_DOCS "Build the VShade Doxygen API reference" OFF)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
 option(VSHADE_ENABLE_COVERAGE "Instrument VShadeEngine for GCC coverage reports" OFF)
 
-foreach(dependency IN ITEMS spdlog glfw glm)
+foreach(dependency IN ITEMS spdlog glfw glm simdjson fastgltf)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/${dependency}/CMakeLists.txt")
         message(FATAL_ERROR
             "Missing dependency: external/${dependency}. "
@@ -70,10 +70,16 @@ set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
 set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
 set(CATCH_DEVELOPMENT_BUILD OFF CACHE BOOL "" FORCE)
+set(FASTGLTF_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(FASTGLTF_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(FASTGLTF_ENABLE_DOCS OFF CACHE BOOL "" FORCE)
+set(SIMDJSON_DEVELOPER_MODE OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(external/spdlog EXCLUDE_FROM_ALL)
 add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
+add_subdirectory(external/simdjson EXCLUDE_FROM_ALL)
+add_subdirectory(external/fastgltf EXCLUDE_FROM_ALL)
 
 # reflect-cpp supplies automatic C++20 field reflection for game components.
 # Only its JSON backend is enabled; bundled dependencies keep configuration

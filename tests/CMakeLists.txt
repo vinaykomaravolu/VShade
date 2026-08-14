@@ -1,5 +1,6 @@
 add_executable(VShadeTests
     application_tests.cpp
+    asset_tests.cpp
     cameracontroller_tests.cpp
     filesystem_tests.cpp
     log_tests.cpp
@@ -41,6 +42,7 @@ target_compile_definitions(VShadeTests PRIVATE
     VSHADE_SCENE_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/scene"
     VSHADE_SANDBOX_SHADER_DIR="${PROJECT_SOURCE_DIR}/sandbox/shaders"
     VSHADE_SANDBOX_TEXTURE_DIR="${PROJECT_SOURCE_DIR}/sandbox/textures"
+    VSHADE_SANDBOX_ASSET_DIR="${PROJECT_SOURCE_DIR}/sandbox/assets"
 )
 
 if(MSVC)

@@ -25,3 +25,9 @@
 [submodule "external/reflect-cpp"]
 	path = external/reflect-cpp
 	url = https://github.com/getml/reflect-cpp.git
+[submodule "external/fastgltf"]
+	path = external/fastgltf
+	url = https://github.com/spnda/fastgltf.git
+[submodule "external/simdjson"]
+	path = external/simdjson
+	url = https://github.com/simdjson/simdjson.git

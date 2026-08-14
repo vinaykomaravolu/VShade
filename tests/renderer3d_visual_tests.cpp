@@ -2,11 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <asset/AssetManager.hpp>
 #include <math/quaternion.hpp>
 #include <math/transform.hpp>
 #include <renderer/buffer.hpp>
 #include <renderer/camera.hpp>
 #include <renderer/framebuffer.hpp>
+#include <renderer/model.hpp>
 #include <renderer/renderer2d.hpp>
 #include <renderer/renderer3d.hpp>
 #include <renderer/texture.hpp>
@@ -177,6 +179,43 @@ TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual][
     vshade::tests::visual::checkGoldenImage(
         actual,
         "renderer3d_lit_cube",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
+        VSHADE_RENDER3D_OUTPUT_DIR
+    );
+}
+
+TEST_CASE("Renderer3D loaded model matches its golden image", "[renderer3d][visual][opengl][asset]") {
+    vshade::tests::visual::HiddenRenderContext context;
+    vshade::renderer::Framebuffer framebuffer(
+        vshade::tests::visual::defaultRenderWidth,
+        vshade::tests::visual::defaultRenderHeight
+    );
+    vshade::tests::visual::beginOffscreenFrame(
+        framebuffer,
+        {0.025F, 0.035F, 0.06F, 1.0F}
+    );
+
+    vshade::asset::AssetManager assets;
+    const auto handle = assets.load<vshade::renderer::Model>(
+        std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "visual_model.gltf"
+    );
+    const std::shared_ptr<vshade::renderer::Model> model = assets.get(handle);
+    REQUIRE(model);
+
+    vshade::renderer::Camera camera;
+    camera.setOrthographic(-1.5F, 1.5F, -1.5F, 1.5F, -1.0F, 1.0F);
+
+    vshade::renderer::Renderer3D::beginScene(camera);
+    vshade::renderer::Renderer3D::drawModel(vshade::math::Transform{}, *model);
+    vshade::renderer::Renderer3D::endScene();
+
+    CHECK(vshade::renderer::Renderer3D::stats().meshCount == 2);
+    CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 2);
+    const vshade::tests::visual::Image actual =
+        vshade::tests::visual::captureFramebuffer(framebuffer);
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer3d_gltf_model",
         std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
         VSHADE_RENDER3D_OUTPUT_DIR
     );

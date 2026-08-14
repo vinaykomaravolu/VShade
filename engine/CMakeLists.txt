@@ -1,4 +1,12 @@
 set(VSHADE_SOURCES
+    src/asset/AssetManager.cpp
+    src/asset/AssetRegistry.cpp
+    src/asset/loader/MeshLoader.cpp
+    src/asset/loader/ModelLoader.cpp
+    src/asset/loader/GltfLoaderUtils.cpp
+    src/asset/loader/SceneLoader.cpp
+    src/asset/loader/ShaderLoader.cpp
+    src/asset/loader/TextureLoader.cpp
     src/core/application.cpp
     src/core/filesystem.cpp
     src/core/log.cpp
@@ -16,6 +24,7 @@ set(VSHADE_SOURCES
     src/renderer/material.cpp
     src/renderer/materialparameters.cpp
     src/renderer/mesh.cpp
+    src/renderer/model.cpp
     src/renderer/opengl/openglutils.cpp
     src/renderer/opengl/generated/src/gl.c
     src/renderer/renderer.cpp
@@ -65,6 +74,7 @@ target_link_libraries(VShadeEngine
         nlohmann_json::nlohmann_json
         reflectcpp::reflectcpp
     PRIVATE
+        fastgltf::fastgltf
         glfw
         OpenGL::GL
 )

@@ -6,6 +6,7 @@
 #include <renderer/buffer.hpp>
 #include <renderer/camera.hpp>
 #include <renderer/framebuffer.hpp>
+#include <renderer/model.hpp>
 #include <renderer/renderer3d.hpp>
 #include <renderer/shader.hpp>
 #include <renderer/vertexarray.hpp>
@@ -76,6 +77,51 @@ TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d][open
             vshade::renderer::Material{}
         ),
         std::logic_error
+    );
+}
+
+TEST_CASE("Renderer3D submits model node hierarchies", "[renderer3d][opengl]") {
+    vshade::tests::visual::HiddenRenderContext context(64, 64);
+    auto mesh = std::make_shared<vshade::renderer::Mesh>(createTriangleMesh());
+    auto material = std::make_shared<vshade::renderer::Material>();
+    const vshade::renderer::Model model(
+        {{mesh, material}},
+        {
+            {
+                .name = "Root",
+                .primitives = {0},
+                .children = {1},
+            },
+            {
+                .name = "Child",
+                .localTransform = vshade::math::Transform({0.25F, 0.0F, 0.0F}),
+                .primitives = {0},
+            },
+        },
+        {0}
+    );
+    vshade::renderer::Camera camera;
+
+    vshade::renderer::Renderer3D::beginScene(camera);
+    vshade::renderer::Renderer3D::drawModel(vshade::math::Transform{}, model);
+    vshade::renderer::Renderer3D::endScene();
+
+    CHECK(vshade::renderer::Renderer3D::stats().meshCount == 2);
+    CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 2);
+    CHECK_THROWS_AS(
+        vshade::renderer::Renderer3D::drawModel(vshade::math::Transform{}, model),
+        std::logic_error
+    );
+}
+
+TEST_CASE("Model rejects cyclic node hierarchies", "[renderer3d]") {
+    CHECK_THROWS_AS(
+        vshade::renderer::Model(
+            {},
+            {{.name = "Cycle", .children = {0}}},
+            {0}
+        ),
+        std::invalid_argument
     );
 }
 

@@ -5,6 +5,7 @@
 #include "renderer/camera.hpp"
 #include "renderer/material.hpp"
 #include "renderer/mesh.hpp"
+#include "renderer/model.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -90,6 +91,19 @@ public:
         const math::Transform& transform,
         const Mesh& mesh,
         const Material& material,
+        const DrawParameters& parameters = {}
+    );
+
+    /**
+     * @brief Queues every primitive in a model's selected node hierarchy.
+     * @param transform Local-to-world transformation applied above the model roots.
+     * @param model Model containing mesh, material, and local node transforms.
+     * @param parameters Optional per-object values applied to every model primitive.
+     * @throws std::logic_error If no 3D scene is active.
+     */
+    static void drawModel(
+        const math::Transform& transform,
+        const Model& model,
         const DrawParameters& parameters = {}
     );
 
