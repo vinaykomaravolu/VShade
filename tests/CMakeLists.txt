@@ -53,4 +53,4 @@ endif()
 # names and lets CTest run one case at a time when a failure is investigated.
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/external/Catch2/extras")
 include(Catch)
-catch_discover_tests(VShadeTests)
+catch_discover_tests(VShadeTests ADD_TAGS_AS_LABELS)

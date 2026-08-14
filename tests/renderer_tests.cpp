@@ -100,7 +100,7 @@ TEST_CASE("Camera rejects degenerate views and projections", "[renderer][camera]
     );
 }
 
-TEST_CASE("Framebuffer restores its previous target viewport", "[renderer][framebuffer]") {
+TEST_CASE("Framebuffer restores its previous target viewport", "[renderer][framebuffer][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Renderer::setViewport(3, 4, 40, 32);
     const auto originalViewport = vshade::renderer::Renderer::viewport();
@@ -125,7 +125,7 @@ TEST_CASE("Framebuffer restores its previous target viewport", "[renderer][frame
     CHECK(framebuffer.height() == 24);
 }
 
-TEST_CASE("Pipeline state guards restore once across moves", "[renderer][state]") {
+TEST_CASE("Pipeline state guards restore once across moves", "[renderer][state][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Renderer::setBlending(false);
     vshade::renderer::Renderer::setDepthTesting(true);

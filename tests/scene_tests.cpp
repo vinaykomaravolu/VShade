@@ -360,10 +360,12 @@ TEST_CASE("Scene serialization matches its golden JSON file", "[scene]") {
     REQUIRE(serializer.deserialize(goldenPath));
     REQUIRE(serializer.serialize(actualPath));
 
-    const std::string expected =
-        vshade::core::filesystem::readTextFile(goldenPath);
-    const std::string actual =
-        vshade::core::filesystem::readTextFile(actualPath);
+    const nlohmann::json expected = nlohmann::json::parse(
+        vshade::core::filesystem::readTextFile(goldenPath)
+    );
+    const nlohmann::json actual = nlohmann::json::parse(
+        vshade::core::filesystem::readTextFile(actualPath)
+    );
     CHECK(actual == expected);
 
 }

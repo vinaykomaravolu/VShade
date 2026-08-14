@@ -45,7 +45,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d]") {
+TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Framebuffer framebuffer(64, 64);
     vshade::tests::visual::beginOffscreenFrame(framebuffer, {0.0F, 0.0F, 0.0F, 1.0F});
@@ -94,7 +94,7 @@ TEST_CASE("Renderer3D validates directional lights", "[renderer3d]") {
     );
 }
 
-TEST_CASE("Renderer3D reuses resources and restores pipeline state", "[renderer3d]") {
+TEST_CASE("Renderer3D reuses resources and restores pipeline state", "[renderer3d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     const vshade::renderer::Mesh mesh = createTriangleMesh();
     vshade::renderer::Camera camera;
@@ -118,7 +118,7 @@ TEST_CASE("Renderer3D reuses resources and restores pipeline state", "[renderer3
     }
 }
 
-TEST_CASE("Renderer3D rejects shader overrides without its matrix contract", "[renderer3d]") {
+TEST_CASE("Renderer3D rejects shader overrides without its matrix contract", "[renderer3d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     const vshade::renderer::Mesh mesh = createTriangleMesh();
     auto shader = std::make_shared<vshade::renderer::Shader>(
@@ -145,7 +145,7 @@ void main() { fragmentColor = vec4(1.0); }
     CHECK(vshade::renderer::Renderer::pipelineState() != sceneState);
 }
 
-TEST_CASE("Renderer3D snapshots custom material and draw parameters", "[renderer3d]") {
+TEST_CASE("Renderer3D snapshots custom material and draw parameters", "[renderer3d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Framebuffer framebuffer(64, 64);
     vshade::tests::visual::beginOffscreenFrame(framebuffer, {0.0F, 0.0F, 0.0F, 1.0F});

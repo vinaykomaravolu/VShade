@@ -164,7 +164,7 @@ void checkGoldenImage(
 
 } // namespace
 
-TEST_CASE("Offscreen colored triangle matches its golden image", "[renderer][visual]") {
+TEST_CASE("Offscreen colored triangle matches its golden image", "[renderer][visual][opengl]") {
     HiddenRenderContext context;
 
     constexpr std::array<TriangleVertex, 3> vertices{{
@@ -232,7 +232,7 @@ void main() {
     checkGoldenImage(actual, "colored_triangle");
 }
 
-TEST_CASE("Offscreen textured quad matches its golden image", "[renderer][visual]") {
+TEST_CASE("Offscreen textured quad matches its golden image", "[renderer][visual][opengl]") {
     HiddenRenderContext context;
 
     const vshade::renderer::Texture2D sandboxTexture =
@@ -332,7 +332,7 @@ void main() {
     checkGoldenImage(actual, "textured_quad");
 }
 
-TEST_CASE("Offscreen rotating cube snapshot matches its golden image", "[renderer][visual]") {
+TEST_CASE("Offscreen rotating cube snapshot matches its golden image", "[renderer][visual][opengl]") {
     HiddenRenderContext context;
 
     constexpr std::array<ColoredVertex, 8> vertices{{

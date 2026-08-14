@@ -65,7 +65,7 @@ TEST_CASE("Material stores typed custom shader parameters", "[material]") {
     CHECK_THROWS_AS(material.parameters().set("", 1.0F), std::invalid_argument);
 }
 
-TEST_CASE("Material retains shared texture resources", "[material]") {
+TEST_CASE("Material retains shared texture resources", "[material][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     constexpr std::array<std::uint8_t, 4> pixel{120, 160, 220, 255};
     auto texture = std::make_shared<vshade::renderer::Texture2D>(

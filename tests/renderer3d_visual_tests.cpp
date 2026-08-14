@@ -82,7 +82,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual]") {
+TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual][opengl]") {
     vshade::tests::visual::HiddenRenderContext context;
     vshade::renderer::Framebuffer framebuffer(
         vshade::tests::visual::defaultRenderWidth,

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "visual/imagecomparison.hpp"
+#include "imagecomparison.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -48,7 +48,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Unlit textured material matches its golden image", "[material][visual]") {
+TEST_CASE("Unlit textured material matches its golden image", "[material][visual][opengl]") {
     vshade::tests::visual::HiddenRenderContext context;
     vshade::renderer::Framebuffer framebuffer(
         vshade::tests::visual::defaultRenderWidth,

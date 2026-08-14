@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <memory>
 
-TEST_CASE("Renderer2D scene matches its golden image", "[renderer2d][visual]") {
+TEST_CASE("Renderer2D scene matches its golden image", "[renderer2d][visual][opengl]") {
     vshade::tests::visual::HiddenRenderContext context;
     vshade::renderer::Framebuffer framebuffer(
         vshade::tests::visual::defaultRenderWidth,

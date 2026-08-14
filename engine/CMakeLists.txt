@@ -74,6 +74,13 @@ target_link_libraries(VShadeEngine
 # logger levels still decide which messages are printed.
 target_compile_definitions(VShadeEngine PUBLIC SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
+# Apple marks its system OpenGL API deprecated. VShade intentionally supports
+# that backend, so keep unrelated warnings-as-errors enabled while silencing
+# only Apple's OpenGL deprecation annotations.
+if(APPLE)
+    target_compile_definitions(VShadeEngine PRIVATE GL_SILENCE_DEPRECATION)
+endif()
+
 if(VSHADE_ENABLE_COVERAGE)
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message(FATAL_ERROR "VSHADE_ENABLE_COVERAGE currently requires GCC")
