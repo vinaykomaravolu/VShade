@@ -27,6 +27,7 @@ set(VSHADE_SOURCES
     src/renderer/vertexarray.cpp
     src/scene/Entity.cpp
     src/scene/Scene.cpp
+    src/scene/SceneComponentRegistry.cpp
     src/scene/SceneSerializer.cpp
 )
 
@@ -61,6 +62,8 @@ target_link_libraries(VShadeEngine
         spdlog::spdlog
         glm::glm
         EnTT::EnTT
+        nlohmann_json::nlohmann_json
+        reflectcpp::reflectcpp
     PRIVATE
         glfw
         OpenGL::GL
@@ -70,6 +73,13 @@ target_link_libraries(VShadeEngine
 # level publicly keeps trace/debug calls available in consumers too; runtime
 # logger levels still decide which messages are printed.
 target_compile_definitions(VShadeEngine PUBLIC SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+
+# Apple marks its system OpenGL API deprecated. VShade intentionally supports
+# that backend, so keep unrelated warnings-as-errors enabled while silencing
+# only Apple's OpenGL deprecation annotations.
+if(APPLE)
+    target_compile_definitions(VShadeEngine PRIVATE GL_SILENCE_DEPRECATION)
+endif()
 
 if(VSHADE_ENABLE_COVERAGE)
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

@@ -1,11 +1,8 @@
 name: Build and test
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
     branches: [main, dev]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,8 +37,8 @@ jobs:
         run: cmake -S . -B build -DVSHADE_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build --config Debug --parallel
-      - name: Test non-visual cases
-        run: ctest --test-dir build -C Debug --output-on-failure -E "matches its golden image"
+      - name: Test without an OpenGL context
+        run: ctest --test-dir build -C Debug --output-on-failure -LE opengl
 
   macos:
     name: macOS AppleClang
@@ -54,5 +51,5 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DVSHADE_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build --parallel
-      - name: Test non-visual cases
-        run: ctest --test-dir build --output-on-failure -E "matches its golden image"
+      - name: Test without an OpenGL context
+        run: ctest --test-dir build --output-on-failure -LE opengl

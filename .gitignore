@@ -3,6 +3,7 @@
 /build-docs/
 /out/
 /coverage.xml
+/tests/output/
 /.vs/
 /.vscode/
 /.idea/

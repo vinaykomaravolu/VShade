@@ -228,17 +228,10 @@ ComparisonResult compareAgainstGolden(
 ) {
     const Image expected = loadPng(goldenPath);
     const ComparisonResult result = compareImages(actual, expected, tolerance);
+    writePng(outputDirectory / "actual.png", actual);
     if (!result.passed) {
-        writePng(outputDirectory / "actual.png", actual);
         writePng(outputDirectory / "expected.png", expected);
         writePng(outputDirectory / "difference.png", differenceImage(actual, expected));
-    } else {
-        std::error_code error;
-        std::filesystem::remove(outputDirectory / "actual.png", error);
-        error.clear();
-        std::filesystem::remove(outputDirectory / "expected.png", error);
-        error.clear();
-        std::filesystem::remove(outputDirectory / "difference.png", error);
     }
     return result;
 }

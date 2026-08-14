@@ -32,9 +32,15 @@ target_include_directories(VShadeTests PRIVATE
 
 target_compile_definitions(VShadeTests PRIVATE
     VSHADE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
+    VSHADE_TEST_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    VSHADE_FILESYSTEM_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/filesystem"
+    VSHADE_MATERIAL_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/material"
+    VSHADE_RENDER_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render"
+    VSHADE_RENDER2D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render2d"
+    VSHADE_RENDER3D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render3d"
+    VSHADE_SCENE_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/scene"
     VSHADE_SANDBOX_SHADER_DIR="${PROJECT_SOURCE_DIR}/sandbox/shaders"
     VSHADE_SANDBOX_TEXTURE_DIR="${PROJECT_SOURCE_DIR}/sandbox/textures"
-    VSHADE_VISUAL_OUTPUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/visual-output"
 )
 
 if(MSVC)
@@ -47,4 +53,4 @@ endif()
 # names and lets CTest run one case at a time when a failure is investigated.
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/external/Catch2/extras")
 include(Catch)
-catch_discover_tests(VShadeTests)
+catch_discover_tests(VShadeTests ADD_TAGS_AS_LABELS)

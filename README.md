@@ -11,6 +11,8 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - an OpenGL 3.3 renderer with buffers, shaders, textures, framebuffers, cameras, and meshes;
 - high-level 2D quad/sprite and 3D mesh/material rendering;
 - a fly-camera controller with cursor capture;
+- EnTT scenes with stable entity UUIDs, duplication, and reflect-cpp-powered
+  automatic JSON serialization for custom components;
 - a static engine library;
 - a minimal sandbox application.
 
@@ -19,6 +21,8 @@ published with GitHub Pages. Documentation source and local build instructions
 are in [docs/api.md](docs/api.md). The renderer architecture and lifecycle are
 described in [docs/renderer.md](docs/renderer.md). Offscreen golden-image tests
 are documented in [docs/visual-testing.md](docs/visual-testing.md).
+Scene entities and the JSON format are documented in
+[docs/scene.md](docs/scene.md).
 
 ## Get the dependencies
 
@@ -30,8 +34,8 @@ git submodule update --init --recursive
 
 ## Build
 
-The same commands work with Visual Studio on Windows, GCC or Clang on Linux,
-and Apple Clang on macOS:
+CMake 3.23 or newer is required. The same commands work with Visual Studio on
+Windows, GCC or Clang on Linux, and Apple Clang on macOS:
 
 ```sh
 cmake -S . -B build

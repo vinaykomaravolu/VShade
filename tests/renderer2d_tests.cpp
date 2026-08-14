@@ -9,7 +9,7 @@
 
 #include <stdexcept>
 
-TEST_CASE("Renderer2D submits colored quads and reports statistics", "[renderer2d]") {
+TEST_CASE("Renderer2D submits colored quads and reports statistics", "[renderer2d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Framebuffer framebuffer(64, 64);
     vshade::tests::visual::beginOffscreenFrame(framebuffer, {0.0F, 0.0F, 0.0F, 1.0F});
@@ -35,7 +35,7 @@ TEST_CASE("Renderer2D submits colored quads and reports statistics", "[renderer2
     );
 }
 
-TEST_CASE("Renderer2D rejects nested scenes and supports an empty scene", "[renderer2d]") {
+TEST_CASE("Renderer2D rejects nested scenes and supports an empty scene", "[renderer2d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Camera camera;
     camera.setOrthographic(-1.0F, 1.0F, -1.0F, 1.0F, -1.0F, 1.0F);
@@ -48,7 +48,7 @@ TEST_CASE("Renderer2D rejects nested scenes and supports an empty scene", "[rend
     CHECK(vshade::renderer::Renderer2D::stats().drawCalls == 0);
 }
 
-TEST_CASE("Renderer2D reuses resources and restores pipeline state", "[renderer2d]") {
+TEST_CASE("Renderer2D reuses resources and restores pipeline state", "[renderer2d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Camera camera;
     camera.setOrthographic(-1.0F, 1.0F, -1.0F, 1.0F, -1.0F, 1.0F);

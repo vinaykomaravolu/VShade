@@ -56,7 +56,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: visual-test-artifacts
-          path: build-coverage/tests/visual-output
+          path: tests/output
           if-no-files-found: ignore
           retention-days: 7
 

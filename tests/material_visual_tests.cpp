@@ -48,7 +48,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Unlit textured material matches its golden image", "[material][visual]") {
+TEST_CASE("Unlit textured material matches its golden image", "[material][visual][opengl]") {
     vshade::tests::visual::HiddenRenderContext context;
     vshade::renderer::Framebuffer framebuffer(
         vshade::tests::visual::defaultRenderWidth,
@@ -99,5 +99,10 @@ TEST_CASE("Unlit textured material matches its golden image", "[material][visual
 
     const vshade::tests::visual::Image actual =
         vshade::tests::visual::captureFramebuffer(framebuffer);
-    vshade::tests::visual::checkGoldenImage(actual, "material_unlit_quad");
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "material_unlit_quad",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "material",
+        VSHADE_MATERIAL_OUTPUT_DIR
+    );
 }

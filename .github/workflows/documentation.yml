@@ -44,6 +44,14 @@ jobs:
       - name: Generate API reference
         run: cmake --build build-docs --target VShadeDocs
 
+      - name: Verify API indexes
+        run: |
+          test -s build-docs/docs/html/annotated.html
+          test -s build-docs/docs/html/classes.html
+          test -s build-docs/docs/html/namespaces.html
+          test -s build-docs/docs/html/files.html
+          test -s build-docs/docs/html/topics.html
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:

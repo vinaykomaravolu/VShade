@@ -82,7 +82,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual]") {
+TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual][opengl]") {
     vshade::tests::visual::HiddenRenderContext context;
     vshade::renderer::Framebuffer framebuffer(
         vshade::tests::visual::defaultRenderWidth,
@@ -174,5 +174,10 @@ TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual]"
         vshade::tests::visual::captureFramebuffer(framebuffer);
     CHECK(vshade::renderer::Renderer3D::stats().meshCount == 1);
     CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 1);
-    vshade::tests::visual::checkGoldenImage(actual, "renderer3d_lit_cube");
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer3d_lit_cube",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
+        VSHADE_RENDER3D_OUTPUT_DIR
+    );
 }

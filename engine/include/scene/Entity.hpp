@@ -1,14 +1,26 @@
 #pragma once
 
+#include "scene/Components.hpp"
+
 #include <entt/entity/entity.hpp>
 #include <entt/entity/registry.hpp>
 
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <utility>
 
 namespace vshade::scene {
+
+namespace detail {
+
+template<typename Component>
+inline constexpr bool requiredComponent =
+    std::same_as<std::remove_cv_t<Component>, UUIDComponent> ||
+    std::same_as<std::remove_cv_t<Component>, TagComponent> ||
+    std::same_as<std::remove_cv_t<Component>, TransformComponent>;
+} // namespace detail
 
 class Scene;
 
@@ -21,6 +33,10 @@ public:
     /** @brief Adds a component constructed from the supplied arguments. */
     template<typename Component, typename... Arguments>
     Component& addComponent(Arguments&&... arguments) {
+        static_assert(
+            !detail::requiredComponent<Component>,
+            "UUID, tag, and transform components are owned by Scene"
+        );
         return registry().emplace<Component>(
             m_handle,
             std::forward<Arguments>(arguments)...
@@ -29,6 +45,7 @@ public:
 
     /** @brief Returns a mutable component attached to this entity. */
     template<typename Component>
+        requires (!std::same_as<std::remove_cv_t<Component>, UUIDComponent>)
     [[nodiscard]] Component& component() {
         return registry().get<Component>(m_handle);
     }
@@ -49,6 +66,10 @@ public:
     /** @brief Removes a component and reports whether it existed. */
     template<typename Component>
     bool removeComponent() {
+        static_assert(
+            !detail::requiredComponent<Component>,
+            "UUID, tag, and transform components cannot be removed"
+        );
         return valid() && registry().remove<Component>(m_handle) != 0;
     }
 
@@ -61,6 +82,9 @@ public:
     /** @brief Returns the numeric portion of the EnTT identifier. */
     [[nodiscard]] std::uint32_t id() const noexcept;
 
+    /** @brief Returns the stable identifier saved with this entity. */
+    [[nodiscard]] std::uint64_t uuid() const;
+
     explicit operator bool() const noexcept;
 
     bool operator==(const Entity&) const = default;
@@ -68,13 +92,14 @@ public:
 private:
     friend class Scene;
 
-    Entity(entt::entity handle, Scene& scene) noexcept;
+    Entity(entt::entity handle, Scene& scene, std::uint64_t sceneGeneration) noexcept;
 
     [[nodiscard]] entt::registry& registry();
     [[nodiscard]] const entt::registry& registry() const;
 
     entt::entity m_handle{entt::null};
     Scene* m_scene = nullptr;
+    std::uint64_t m_sceneGeneration = 0;
 };
 
 } // namespace vshade::scene
