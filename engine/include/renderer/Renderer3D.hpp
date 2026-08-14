@@ -3,6 +3,7 @@
 #include "math/Transform.hpp"
 #include "math/Vector.hpp"
 #include "renderer/Camera.hpp"
+#include "renderer/Lighting.hpp"
 #include "renderer/Material.hpp"
 #include "renderer/Mesh.hpp"
 #include "renderer/Model.hpp"
@@ -11,16 +12,6 @@
 #include <string_view>
 
 namespace vshade::renderer {
-
-/** @brief Directional light used by the initial lit material. */
-struct DirectionalLight {
-    /** @brief World-space direction in which the light rays travel. */
-    math::Vec3 direction{-0.5F, -1.0F, -0.25F};
-    /** @brief Red, green, and blue light color. */
-    math::Vec3 color{1.0F};
-    /** @brief Scalar brightness multiplier. */
-    float intensity = 1.0F;
-};
 
 /** @brief Statistics collected by the basic 3D renderer. */
 struct Renderer3DStats {
