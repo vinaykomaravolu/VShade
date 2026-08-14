@@ -4,7 +4,7 @@
 
 namespace vshade::scene {
 
-/** @brief Attaches an ambient, directional, or point light to an entity. */
+/** @brief Attaches a directional or point light to an entity. */
 struct LightComponent {
     renderer::Light light{renderer::PointLight{}};
     bool enabled = true;

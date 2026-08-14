@@ -15,7 +15,9 @@ void SceneComponentRegistry::add(Handler handler) {
         throw std::invalid_argument("A serialized component name cannot be empty");
     }
     if (handler.name == "UUID" || handler.name == "Tag" ||
-        handler.name == "Transform" || handler.name == "SpriteRenderer") {
+        handler.name == "Transform" || handler.name == "SpriteRenderer" ||
+        handler.name == "AudioSource" || handler.name == "AudioListener" ||
+        handler.name == "Light") {
         throw std::invalid_argument("A custom component cannot use a built-in component name");
     }
 

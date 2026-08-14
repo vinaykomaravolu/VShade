@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <variant>
@@ -36,16 +37,26 @@ constexpr std::string_view litMaterial = "litMaterial";
 constexpr std::string_view lightDirection = "lightDirection";
 constexpr std::string_view lightColor = "lightColor";
 constexpr std::string_view lightIntensity = "lightIntensity";
+constexpr std::string_view ambientLightColor = "ambientLightColor";
+constexpr std::string_view ambientLightIntensity = "ambientLightIntensity";
+constexpr std::string_view directionalLightCount = "directionalLightCount";
+constexpr std::string_view pointLightCount = "pointLightCount";
 constexpr std::string_view roughness = "roughness";
 constexpr std::string_view metallic = "metallic";
 } // namespace uniform
 
 struct Renderer3DResources;
 
+[[nodiscard]] Lighting defaultLighting() {
+    Lighting lighting;
+    lighting.addDirectionalLight(DirectionalLight{});
+    return lighting;
+}
+
 struct Renderer3DState {
     math::Mat4 view{1.0F};
     math::Mat4 projection{1.0F};
-    DirectionalLight light{};
+    Lighting lighting = defaultLighting();
     std::vector<MeshCommand> commands;
     Renderer3DStats currentStats{};
     Renderer3DStats completedStats{};
@@ -71,12 +82,6 @@ void discardCurrentScene() noexcept {
     rendererState.commands.clear();
     rendererState.currentStats = {};
     rendererState.sceneActive = false;
-}
-
-void validateNonNegativeFinite(const float value, const char* message) {
-    if (!std::isfinite(value) || value < 0.0F) {
-        throw std::invalid_argument(message);
-    }
 }
 
 void queueMesh(
@@ -127,6 +132,7 @@ uniform mat4 projection;
 
 out mat3 vTangentBasis;
 out vec2 vTexCoord;
+out vec3 vWorldPosition;
 
 void main() {
     mat3 normalMatrix = mat3(transpose(inverse(model)));
@@ -136,12 +142,31 @@ void main() {
     vec3 bitangent = cross(normal, tangent) * aTangent.w;
     vTangentBasis = mat3(tangent, bitangent, normal);
     vTexCoord = aTexCoord;
-    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    vec4 worldPosition = model * vec4(aPos, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    gl_Position = projection * view * worldPosition;
 }
 )glsl",
         R"glsl(#version 330 core
 in mat3 vTangentBasis;
 in vec2 vTexCoord;
+in vec3 vWorldPosition;
+
+const int maximumDirectionalLights = 4;
+const int maximumPointLights = 16;
+
+struct DirectionalLightData {
+    vec3 direction;
+    vec3 color;
+    float intensity;
+};
+
+struct PointLightData {
+    vec3 position;
+    vec3 color;
+    float intensity;
+    float range;
+};
 
 uniform sampler2D albedoTexture;
 uniform int hasAlbedoTexture;
@@ -155,6 +180,12 @@ uniform vec4 albedoColor;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
 uniform float lightIntensity;
+uniform vec3 ambientLightColor;
+uniform float ambientLightIntensity;
+uniform int directionalLightCount;
+uniform DirectionalLightData directionalLights[maximumDirectionalLights];
+uniform int pointLightCount;
+uniform PointLightData pointLights[maximumPointLights];
 uniform float roughness;
 uniform float metallic;
 
@@ -183,13 +214,35 @@ void main() {
     if (!gl_FrontFacing) {
         normalDirection = -normalDirection;
     }
-    vec3 directionToLight = normalize(-lightDirection);
-    float diffuse = max(dot(normalDirection, directionToLight), 0.0);
     // This is intentionally a small, non-PBR material model. Rough surfaces
     // scatter more light while metallic surfaces reduce diffuse response.
-    diffuse *= mix(1.15, 0.85, roughness);
-    diffuse *= mix(1.0, 0.85, metallic);
-    vec3 lighting = vec3(0.15) + lightColor * lightIntensity * diffuse;
+    float materialResponse = mix(1.15, 0.85, roughness);
+    materialResponse *= mix(1.0, 0.85, metallic);
+    vec3 lighting = ambientLightColor * ambientLightIntensity;
+
+    for (int index = 0; index < directionalLightCount; ++index) {
+        vec3 directionToLight = normalize(-directionalLights[index].direction);
+        float diffuse = max(dot(normalDirection, directionToLight), 0.0);
+        lighting += directionalLights[index].color *
+            directionalLights[index].intensity * diffuse * materialResponse;
+    }
+
+    for (int index = 0; index < pointLightCount; ++index) {
+        vec3 offsetToLight = pointLights[index].position - vWorldPosition;
+        float distanceToLight = length(offsetToLight);
+        vec3 directionToLight = distanceToLight > 0.000001
+            ? offsetToLight / distanceToLight
+            : normalDirection;
+        float diffuse = max(dot(normalDirection, directionToLight), 0.0);
+        float attenuation = clamp(
+            1.0 - distanceToLight / pointLights[index].range,
+            0.0,
+            1.0
+        );
+        attenuation *= attenuation;
+        lighting += pointLights[index].color * pointLights[index].intensity *
+            diffuse * attenuation * materialResponse;
+    }
     fragmentColor = vec4(albedo.rgb * lighting, albedo.a);
 }
 )glsl"
@@ -279,6 +332,52 @@ void applyParameters(
     }
 }
 
+[[nodiscard]] std::string indexedLightUniform(
+    const std::string_view array,
+    const std::size_t index,
+    const std::string_view field
+) {
+    return std::string(array) + "[" + std::to_string(index) + "]." + std::string(field);
+}
+
+void applyLighting(Shader& shader, const Lighting& lighting) {
+    const AmbientLight ambient = lighting.ambientLight().value_or(
+        AmbientLight{.color = {0.0F, 0.0F, 0.0F}, .intensity = 0.0F}
+    );
+    shader.setVec3(uniform::ambientLightColor, ambient.color);
+    shader.setFloat(uniform::ambientLightIntensity, ambient.intensity);
+
+    const auto& directionalLights = lighting.directionalLights();
+    shader.setInt(
+        uniform::directionalLightCount,
+        static_cast<int>(directionalLights.size())
+    );
+    for (std::size_t index = 0; index < directionalLights.size(); ++index) {
+        const DirectionalLight& light = directionalLights[index];
+        shader.setVec3(indexedLightUniform("directionalLights", index, "direction"), light.direction);
+        shader.setVec3(indexedLightUniform("directionalLights", index, "color"), light.color);
+        shader.setFloat(indexedLightUniform("directionalLights", index, "intensity"), light.intensity);
+    }
+
+    const auto& pointLights = lighting.pointLights();
+    shader.setInt(uniform::pointLightCount, static_cast<int>(pointLights.size()));
+    for (std::size_t index = 0; index < pointLights.size(); ++index) {
+        const PointLight& light = pointLights[index];
+        shader.setVec3(indexedLightUniform("pointLights", index, "position"), light.position);
+        shader.setVec3(indexedLightUniform("pointLights", index, "color"), light.color);
+        shader.setFloat(indexedLightUniform("pointLights", index, "intensity"), light.intensity);
+        shader.setFloat(indexedLightUniform("pointLights", index, "range"), light.range);
+    }
+
+    // Preserve the original custom-shader uniforms using the first directional light.
+    const DirectionalLight legacy = directionalLights.empty()
+        ? DirectionalLight{.color = {0.0F, 0.0F, 0.0F}, .intensity = 0.0F}
+        : directionalLights.front();
+    shader.setVec3(uniform::lightDirection, legacy.direction);
+    shader.setVec3(uniform::lightColor, legacy.color);
+    shader.setFloat(uniform::lightIntensity, legacy.intensity);
+}
+
 } // namespace
 
 void Renderer3D::beginScene(const Camera& camera) {
@@ -309,19 +408,14 @@ void Renderer3D::beginScene(const Camera& camera) {
 }
 
 void Renderer3D::setDirectionalLight(const DirectionalLight& light) {
-    if (!std::isfinite(light.direction.x) || !std::isfinite(light.direction.y) ||
-        !std::isfinite(light.direction.z) ||
-        math::lengthSquared(light.direction) <= 0.000001F) {
-        throw std::invalid_argument("Directional light direction must not be zero");
-    }
-    validateNonNegativeFinite(light.color.r, "Directional light red must be finite and non-negative");
-    validateNonNegativeFinite(light.color.g, "Directional light green must be finite and non-negative");
-    validateNonNegativeFinite(light.color.b, "Directional light blue must be finite and non-negative");
-    validateNonNegativeFinite(light.intensity, "Directional light intensity must be finite and non-negative");
+    Lighting lighting = state().lighting;
+    lighting.clearDirectionalLights();
+    lighting.addDirectionalLight(light);
+    state().lighting = std::move(lighting);
+}
 
-    Renderer3DState& rendererState = state();
-    rendererState.light = light;
-    rendererState.light.direction = math::normalize(light.direction);
+void Renderer3D::setLighting(const Lighting& lighting) {
+    state().lighting = lighting;
 }
 
 void Renderer3D::drawMesh(
@@ -414,9 +508,7 @@ void Renderer3D::endScene() {
                     uniform::litMaterial,
                     command.material.shading() == MaterialShading::Lit ? 1 : 0
                 );
-                shader.setVec3(uniform::lightDirection, rendererState.light.direction);
-                shader.setVec3(uniform::lightColor, rendererState.light.color);
-                shader.setFloat(uniform::lightIntensity, rendererState.light.intensity);
+                applyLighting(shader, rendererState.lighting);
                 shader.setInt(uniform::albedoTexture, 0);
                 shader.setInt(uniform::normalTexture, 1);
                 shader.setInt(
@@ -474,6 +566,11 @@ void Renderer3D::shutdown() noexcept {
     rendererState.resources.reset();
     rendererState.completedStats = {};
     rendererState.resourceInitializationCount = 0;
+    try {
+        rendererState.lighting = defaultLighting();
+    } catch (...) {
+        rendererState.lighting.clear();
+    }
 }
 
 } // namespace vshade::renderer

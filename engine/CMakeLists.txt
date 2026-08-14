@@ -28,6 +28,7 @@ set(VSHADE_SOURCES
     src/renderer/Camera.cpp
     src/renderer/CameraController.cpp
     src/renderer/Framebuffer.cpp
+    src/renderer/Lighting.cpp
     src/renderer/Material.cpp
     src/renderer/MaterialParameters.cpp
     src/renderer/Mesh.cpp
@@ -44,6 +45,7 @@ set(VSHADE_SOURCES
     src/scene/Entity.cpp
     src/scene/Scene.cpp
     src/scene/SceneComponentRegistry.cpp
+    src/scene/SceneLightingSystem.cpp
     src/scene/SceneSerializer.cpp
 )
 

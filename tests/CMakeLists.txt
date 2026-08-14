@@ -4,6 +4,7 @@ add_executable(VShadeTests
     AudioTests.cpp
     CameraControllerTests.cpp
     FilesystemTests.cpp
+    LightingTests.cpp
     LogTests.cpp
     MaterialTests.cpp
     MaterialVisualTests.cpp
@@ -19,6 +20,7 @@ add_executable(VShadeTests
     RendererTests.cpp
     RendererVisualTests.cpp
     SceneTests.cpp
+    SceneLightingTests.cpp
     visual/ImageComparison.cpp
 )
 

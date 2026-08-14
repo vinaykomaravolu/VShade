@@ -13,6 +13,9 @@
 #include <renderer/Renderer3D.hpp>
 #include <renderer/Texture.hpp>
 #include <renderer/VertexArray.hpp>
+#include <scene/Components.hpp>
+#include <scene/Scene.hpp>
+#include <scene/SceneLightingSystem.hpp>
 
 #include <array>
 #include <cstdint>
@@ -180,6 +183,98 @@ TEST_CASE("Renderer3D lit mesh matches its golden image", "[renderer3d][visual][
     vshade::tests::visual::checkGoldenImage(
         actual,
         "renderer3d_lit_cube",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
+        VSHADE_RENDER3D_OUTPUT_DIR
+    );
+}
+
+TEST_CASE("Renderer3D scene environment and lights match their golden image", "[renderer3d][scene][lighting][visual][opengl]") {
+    vshade::tests::visual::HiddenRenderContext context;
+    vshade::renderer::Framebuffer framebuffer(
+        vshade::tests::visual::defaultRenderWidth,
+        vshade::tests::visual::defaultRenderHeight
+    );
+    vshade::tests::visual::beginOffscreenFrame(
+        framebuffer,
+        {0.018F, 0.022F, 0.04F, 1.0F}
+    );
+
+    const vshade::renderer::Mesh cube = createCubeMesh();
+    vshade::renderer::Camera camera;
+    camera.setPerspective(0.785398163F, 1.0F, 0.1F, 100.0F);
+    camera.lookAt(
+        {3.2F, 2.4F, 4.2F},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+
+    vshade::scene::Scene scene("Renderer3D environment visual");
+    scene.setEnvironment({
+        .ambientColor = {0.2F, 0.25F, 0.45F},
+        .ambientIntensity = 0.18F,
+    });
+    const auto addDirectional = [&scene](
+        const char* name,
+        const vshade::renderer::DirectionalLight& light
+    ) {
+        vshade::scene::Entity entity = scene.createEntity(name);
+        entity.addComponent<vshade::scene::LightComponent>(light, true);
+    };
+    addDirectional("Warm sun", {
+        .direction = {-0.7F, -1.0F, -0.3F},
+        .color = {1.0F, 0.72F, 0.48F},
+        .intensity = 0.55F,
+    });
+    addDirectional("Cool fill", {
+        .direction = {0.8F, -0.35F, 0.2F},
+        .color = {0.35F, 0.55F, 1.0F},
+        .intensity = 0.35F,
+    });
+    const auto addPoint = [&scene](
+        const char* name,
+        const vshade::math::Vec3& position,
+        const vshade::renderer::PointLight& light
+    ) {
+        vshade::scene::Entity entity = scene.createEntity(name);
+        entity.component<vshade::scene::TransformComponent>()
+            .transform.setPosition(position);
+        entity.addComponent<vshade::scene::LightComponent>(light, true);
+    };
+    addPoint("Warm point", {-1.5F, 0.8F, 2.0F}, {
+        .color = {1.0F, 0.2F, 0.12F},
+        .intensity = 2.2F,
+        .range = 5.0F,
+    });
+    addPoint("Cool point", {1.8F, -0.4F, 1.4F}, {
+        .color = {0.12F, 0.45F, 1.0F},
+        .intensity = 2.0F,
+        .range = 5.0F,
+    });
+    vshade::renderer::Renderer3D::setLighting(
+        vshade::scene::SceneLightingSystem::collect(scene)
+    );
+
+    vshade::renderer::Material material(vshade::renderer::MaterialShading::Lit);
+    material.setAlbedoColor({0.72F, 0.76F, 0.82F, 1.0F});
+    material.setRoughness(0.45F);
+
+    vshade::renderer::Renderer3D::beginScene(camera);
+    vshade::renderer::Renderer3D::drawMesh(
+        vshade::math::Transform(
+            {0.0F, 0.0F, 0.0F},
+            vshade::math::fromEuler({0.38F, 0.62F, 0.10F}),
+            {1.0F, 1.0F, 1.0F}
+        ),
+        cube,
+        material
+    );
+    vshade::renderer::Renderer3D::endScene();
+
+    const vshade::tests::visual::Image actual =
+        vshade::tests::visual::captureFramebuffer(framebuffer);
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer3d_multiple_lights",
         std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
         VSHADE_RENDER3D_OUTPUT_DIR
     );

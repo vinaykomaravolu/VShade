@@ -71,6 +71,9 @@ public:
      */
     static void setDirectionalLight(const DirectionalLight& light);
 
+    /** @brief Replaces all ambient, directional, and point lights. */
+    static void setLighting(const Lighting& lighting);
+
     /**
      * @brief Queues a mesh with a model transform and material.
      * @param transform Local-to-world transformation for the mesh.

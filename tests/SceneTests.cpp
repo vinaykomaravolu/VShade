@@ -13,6 +13,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <variant>
 
 namespace {
 
@@ -132,6 +133,26 @@ TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
         vshade::math::Vec2{2.0F, 1.0F},
         4
     );
+    original.addComponent<vshade::scene::AudioListenerComponent>(false);
+    original.addComponent<vshade::scene::AudioSourceComponent>(
+        vshade::audio::AudioClipHandle::fromId(42),
+        vshade::audio::AudioBus::SFX,
+        vshade::audio::AudioLoadMode::Decode,
+        0.75F,
+        1.0F,
+        false,
+        false,
+        true
+    );
+    original.addComponent<vshade::scene::LightComponent>(
+        vshade::renderer::PointLight{
+            .position = {1.0F, 2.0F, 3.0F},
+            .color = {0.4F, 0.6F, 1.0F},
+            .intensity = 2.0F,
+            .range = 8.0F,
+        },
+        false
+    );
 
     const vshade::scene::Entity duplicate = scene.duplicateEntity(original);
     REQUIRE(duplicate.valid());
@@ -141,12 +162,27 @@ TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
           Catch::Approx(1.0F));
     CHECK(duplicate.component<vshade::scene::SpriteRendererComponent>().texturePath ==
           playerTexturePath);
+    CHECK_FALSE(duplicate.component<vshade::scene::AudioListenerComponent>().active);
+    const auto& duplicatedAudio =
+        duplicate.component<vshade::scene::AudioSourceComponent>();
+    CHECK(duplicatedAudio.clip.id() == 42);
+    CHECK(duplicatedAudio.spatial);
+    const auto& duplicatedLight =
+        duplicate.component<vshade::scene::LightComponent>();
+    CHECK_FALSE(duplicatedLight.enabled);
+    REQUIRE(std::holds_alternative<vshade::renderer::PointLight>(duplicatedLight.light));
+    CHECK(std::get<vshade::renderer::PointLight>(duplicatedLight.light).range ==
+          Catch::Approx(8.0F));
 }
 
 TEST_CASE("Scene serialization round trips stable components", "[scene]") {
     const std::filesystem::path path = sceneOutputPath("roundtrip.json");
 
     vshade::scene::Scene source("Example");
+    source.setEnvironment({
+        .ambientColor = {0.25F, 0.5F, 0.75F},
+        .ambientIntensity = 0.2F,
+    });
     vshade::scene::Entity player = source.createEntity("Player");
     const std::uint64_t playerUuid = player.uuid();
     auto& transform = player.component<vshade::scene::TransformComponent>().transform;
@@ -172,6 +208,8 @@ TEST_CASE("Scene serialization round trips stable components", "[scene]") {
     CHECK_FALSE(replaced.valid());
 
     CHECK(loaded.name() == "Example");
+    CHECK(loaded.environment().ambientColor.g == Catch::Approx(0.5F));
+    CHECK(loaded.environment().ambientIntensity == Catch::Approx(0.2F));
     const vshade::scene::Entity loadedPlayer = loaded.findEntity(playerUuid);
     REQUIRE(loadedPlayer.valid());
     CHECK(loadedPlayer.component<vshade::scene::TagComponent>().tag == "Player");
@@ -208,6 +246,116 @@ TEST_CASE("Scene loading is transactional for malformed files", "[scene]") {
     CHECK(scene.name() == "Keep me");
     CHECK(scene.findEntity(survivorUuid).valid());
 
+}
+
+TEST_CASE("Scene serialization round trips audio environment and entity lights", "[scene][audio][lighting]") {
+    const std::filesystem::path path = sceneOutputPath("new-components.json");
+    vshade::scene::Scene source("Audio and lighting");
+    source.setEnvironment({
+        .ambientColor = {0.2F, 0.3F, 0.5F},
+        .ambientIntensity = 0.25F,
+    });
+
+    vshade::scene::Entity audio = source.createEntity("Music source");
+    const std::uint64_t audioUuid = audio.uuid();
+    audio.addComponent<vshade::scene::AudioSourceComponent>(
+        vshade::audio::AudioClipHandle::fromId(987654),
+        vshade::audio::AudioBus::Music,
+        vshade::audio::AudioLoadMode::Stream,
+        0.65F,
+        1.1F,
+        true,
+        true,
+        false
+    );
+    audio.addComponent<vshade::scene::AudioListenerComponent>(false);
+
+    vshade::scene::Entity directional = source.createEntity("Directional light");
+    const std::uint64_t directionalUuid = directional.uuid();
+    directional.addComponent<vshade::scene::LightComponent>(
+        vshade::renderer::DirectionalLight{
+            .direction = {0.0F, -1.0F, 0.0F},
+            .color = {1.0F, 0.8F, 0.6F},
+            .intensity = 1.5F,
+        },
+        false
+    );
+
+    vshade::scene::Entity point = source.createEntity("Point light");
+    const std::uint64_t pointUuid = point.uuid();
+    point.addComponent<vshade::scene::LightComponent>(
+        vshade::renderer::PointLight{
+            .position = {2.0F, 3.0F, 4.0F},
+            .color = {0.1F, 0.4F, 1.0F},
+            .intensity = 3.0F,
+            .range = 12.0F,
+        },
+        true
+    );
+
+    vshade::scene::SceneSerializer writer(source);
+    REQUIRE(writer.serialize(path));
+
+    const nlohmann::json serialized = nlohmann::json::parse(
+        vshade::core::filesystem::readTextFile(path)
+    );
+    REQUIRE(serialized.at("Entities").size() == 3);
+    CHECK(serialized.at("Environment").at("AmbientIntensity").get<double>() ==
+          Catch::Approx(0.25));
+
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserialize(path));
+
+    const auto loadedAudio = loaded.findEntity(audioUuid);
+    REQUIRE(loadedAudio.valid());
+    const auto& audioSource =
+        loadedAudio.component<vshade::scene::AudioSourceComponent>();
+    CHECK(audioSource.clip.id() == 987654);
+    CHECK(audioSource.bus == vshade::audio::AudioBus::Music);
+    CHECK(audioSource.loadMode == vshade::audio::AudioLoadMode::Stream);
+    CHECK(audioSource.volume == Catch::Approx(0.65F));
+    CHECK(audioSource.pitch == Catch::Approx(1.1F));
+    CHECK(audioSource.looping);
+    CHECK(audioSource.playOnStart);
+    CHECK_FALSE(audioSource.spatial);
+    CHECK_FALSE(
+        loadedAudio.component<vshade::scene::AudioListenerComponent>().active
+    );
+
+    CHECK(loaded.environment().ambientColor.b == Catch::Approx(0.5F));
+    CHECK(loaded.environment().ambientIntensity == Catch::Approx(0.25F));
+
+    const auto& directionalLight = loaded.findEntity(directionalUuid)
+        .component<vshade::scene::LightComponent>();
+    CHECK_FALSE(directionalLight.enabled);
+    REQUIRE(std::holds_alternative<vshade::renderer::DirectionalLight>(
+        directionalLight.light
+    ));
+    CHECK(std::get<vshade::renderer::DirectionalLight>(directionalLight.light)
+              .direction.y == Catch::Approx(-1.0F));
+
+    const auto& pointLight =
+        loaded.findEntity(pointUuid).component<vshade::scene::LightComponent>();
+    REQUIRE(std::holds_alternative<vshade::renderer::PointLight>(pointLight.light));
+    CHECK(std::get<vshade::renderer::PointLight>(pointLight.light).position.z ==
+          Catch::Approx(4.0F));
+    CHECK(std::get<vshade::renderer::PointLight>(pointLight.light).range ==
+          Catch::Approx(12.0F));
+}
+
+TEST_CASE("Scene serialization rejects invalid new component values", "[scene][audio][lighting]") {
+    const std::filesystem::path path = sceneOutputPath("invalid-new-component.json");
+    vshade::scene::Scene scene;
+    vshade::scene::Entity entity = scene.createEntity("Invalid light");
+    entity.addComponent<vshade::scene::LightComponent>(
+        vshade::renderer::PointLight{.range = 0.0F},
+        true
+    );
+
+    vshade::scene::SceneSerializer serializer(scene);
+    CHECK_FALSE(serializer.serialize(path));
+    CHECK_FALSE(serializer.lastError().empty());
 }
 
 TEST_CASE("Custom components round trip through a scene file", "[scene]") {

@@ -27,6 +27,11 @@ public:
         return valid();
     }
 
+    /** @brief Reconstructs a serializable handle from its stable identifier. */
+    [[nodiscard]] static constexpr AssetHandle fromId(const AssetId id) noexcept {
+        return AssetHandle(id);
+    }
+
     bool operator==(const AssetHandle&) const = default;
 
 private:

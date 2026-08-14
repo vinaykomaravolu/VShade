@@ -2,6 +2,7 @@
 
 #include "scene/Components.hpp"
 #include "scene/Entity.hpp"
+#include "scene/SceneEnvironment.hpp"
 
 #include <entt/entity/registry.hpp>
 
@@ -60,6 +61,15 @@ public:
     /** @brief Replaces the human-readable scene name. */
     void setName(std::string name);
 
+    /** @brief Returns the scene-wide environment lighting settings. */
+    [[nodiscard]] const SceneEnvironment& environment() const noexcept;
+
+    /** @brief Returns mutable scene-wide environment lighting settings. */
+    [[nodiscard]] SceneEnvironment& environment() noexcept;
+
+    /** @brief Replaces the scene-wide environment lighting settings. */
+    void setEnvironment(const SceneEnvironment& environment) noexcept;
+
 private:
     friend class Entity;
     friend class SceneSerializer;
@@ -70,6 +80,7 @@ private:
     entt::registry m_registry;
     std::unordered_map<std::uint64_t, entt::entity> m_entitiesByUuid;
     std::string m_name;
+    SceneEnvironment m_environment;
     std::uint64_t m_generation = 1;
 };
 

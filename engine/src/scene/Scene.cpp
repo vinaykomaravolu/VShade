@@ -60,6 +60,21 @@ Entity Scene::duplicateEntity(const Entity source) {
                 source.component<SpriteRendererComponent>()
             );
         }
+        if (source.hasComponents<AudioSourceComponent>()) {
+            duplicate.addComponent<AudioSourceComponent>(
+                source.component<AudioSourceComponent>()
+            );
+        }
+        if (source.hasComponents<AudioListenerComponent>()) {
+            duplicate.addComponent<AudioListenerComponent>(
+                source.component<AudioListenerComponent>()
+            );
+        }
+        if (source.hasComponents<LightComponent>()) {
+            duplicate.addComponent<LightComponent>(
+                source.component<LightComponent>()
+            );
+        }
         for (const auto& handler : SceneComponentRegistry::handlers()) {
             handler.clone(m_registry, source.m_handle, m_registry, duplicate.m_handle);
         }
@@ -98,6 +113,18 @@ const std::string& Scene::name() const noexcept {
 
 void Scene::setName(std::string name) {
     m_name = std::move(name);
+}
+
+const SceneEnvironment& Scene::environment() const noexcept {
+    return m_environment;
+}
+
+SceneEnvironment& Scene::environment() noexcept {
+    return m_environment;
+}
+
+void Scene::setEnvironment(const SceneEnvironment& environment) noexcept {
+    m_environment = environment;
 }
 
 std::uint64_t Scene::generateUuid() {

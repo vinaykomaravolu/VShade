@@ -21,6 +21,7 @@
 #include <scene/Components.hpp>
 #include <scene/Entity.hpp>
 #include <scene/Scene.hpp>
+#include <scene/SceneLightingSystem.hpp>
 
 #include <array>
 #include <cstdint>
@@ -51,6 +52,15 @@ const std::array<vshade::math::Vec3, 6> ballInitialVelocities{
     vshade::math::Vec3{0.25F, 0.0F, -0.25F},
     vshade::math::Vec3{0.5F, 0.0F, 0.2F},
     vshade::math::Vec3{0.75F, 0.0F, -0.15F},
+};
+
+const std::array<vshade::math::Vec3, 6> ballLightColors{
+    vshade::math::Vec3{1.0F, 0.18F, 0.12F},
+    vshade::math::Vec3{1.0F, 0.55F, 0.12F},
+    vshade::math::Vec3{0.3F, 1.0F, 0.25F},
+    vshade::math::Vec3{0.15F, 0.65F, 1.0F},
+    vshade::math::Vec3{0.45F, 0.25F, 1.0F},
+    vshade::math::Vec3{1.0F, 0.2F, 0.75F},
 };
 
 class SandboxApplication final : public vshade::core::Application {
@@ -114,14 +124,9 @@ protected:
             }
         );
 
-        vshade::renderer::Renderer3D::setDirectionalLight({
-            .direction = {-0.45F, -1.0F, -0.35F},
-            .color = {1.0F, 0.95F, 0.86F},
-            .intensity = 1.2F,
-        });
-
         GAME_INFO(
-            "Loaded ball.glb, round_platform.glb, and streaming retroloop.mp3"
+            "Loaded six moving point lights, ball.glb, round_platform.glb, "
+            "and streaming retroloop.mp3"
         );
         GAME_INFO(
             "Controls: WASD move, right mouse look, R resets balls, "
@@ -176,6 +181,17 @@ protected:
         pipeline.dithering = false;
         vshade::renderer::Renderer::applyPipelineState(pipeline);
 
+        // SceneLightingSystem is the boundary between persistent scene data
+        // and temporary renderer data. Physics has already updated the ball
+        // transforms, so collect() converts the current SceneEnvironment and
+        // every enabled LightComponent into one world-space lighting snapshot.
+        const vshade::renderer::Lighting frameLighting =
+            vshade::scene::SceneLightingSystem::collect(m_scene);
+        vshade::renderer::Renderer3D::setLighting(frameLighting);
+
+        // Renderer3D does not inspect entities or components. It only consumes
+        // frameLighting and uploads its ambient, directional, and point lights
+        // while drawing the models below.
         vshade::renderer::Renderer3D::beginScene(m_camera);
         vshade::renderer::Renderer3D::drawModel(
             m_platform.component<vshade::scene::TransformComponent>().transform,
@@ -223,6 +239,26 @@ protected:
 
 private:
     void createPhysicsScene() {
+        // Ambient illumination belongs to the scene itself because it has no
+        // meaningful position or direction. There can be exactly one scene
+        // environment, and it is serialized at the root of the scene file.
+        m_scene.setEnvironment({
+            .ambientColor = {0.28F, 0.34F, 0.52F},
+            .ambientIntensity = 0.16F,
+        });
+
+        // Directional and point lights are entity components. Their entity
+        // transforms let editor or game code move and rotate them naturally.
+        vshade::scene::Entity sun = m_scene.createEntity("Directional Light");
+        sun.addComponent<vshade::scene::LightComponent>(
+            vshade::renderer::DirectionalLight{
+                .direction = {-0.45F, -1.0F, -0.35F},
+                .color = {1.0F, 0.95F, 0.86F},
+                .intensity = 0.8F,
+            },
+            true
+        );
+
         m_platform = m_scene.createEntity("Round Platform");
         auto& platformTransform =
             m_platform.component<vshade::scene::TransformComponent>().transform;
@@ -261,6 +297,17 @@ private:
                     .shape = vshade::physics::SphereShape3D{ballRadius},
                     .material = {.friction = 0.45F, .restitution = 0.55F},
                 }
+            );
+            ball.addComponent<vshade::scene::LightComponent>(
+                vshade::renderer::PointLight{
+                    // This is an entity-local offset. Zero keeps the light at
+                    // the center of the physics-driven ball transform.
+                    .position = {0.0F, 0.0F, 0.0F},
+                    .color = ballLightColors[index],
+                    .intensity = 4.5F,
+                    .range = 4.5F,
+                },
+                true
             );
             m_balls.push_back(ball);
         }
