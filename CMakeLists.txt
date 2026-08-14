@@ -14,7 +14,7 @@ option(VSHADE_BUILD_DOCS "Build the VShade Doxygen API reference" OFF)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
 option(VSHADE_ENABLE_COVERAGE "Instrument VShadeEngine for GCC coverage reports" OFF)
 
-foreach(dependency IN ITEMS spdlog glfw glm simdjson fastgltf)
+foreach(dependency IN ITEMS spdlog glfw glm simdjson fastgltf box2d)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/${dependency}/CMakeLists.txt")
         message(FATAL_ERROR
             "Missing dependency: external/${dependency}. "
@@ -22,6 +22,13 @@ foreach(dependency IN ITEMS spdlog glfw glm simdjson fastgltf)
         )
     endif()
 endforeach()
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/jolt/Build/CMakeLists.txt")
+    message(FATAL_ERROR
+        "Missing dependency: external/jolt. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
 
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/entt/src/entt/entt.hpp")
     message(FATAL_ERROR
@@ -74,12 +81,34 @@ set(FASTGLTF_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(FASTGLTF_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(FASTGLTF_ENABLE_DOCS OFF CACHE BOOL "" FORCE)
 set(SIMDJSON_DEVELOPER_MODE OFF CACHE BOOL "" FORCE)
+set(BOX2D_SAMPLES OFF CACHE BOOL "" FORCE)
+set(BOX2D_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BOX2D_DOCS OFF CACHE BOOL "" FORCE)
+set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BOX2D_COMPILE_WARNING_AS_ERROR OFF CACHE BOOL "" FORCE)
+
+# Jolt is a private engine backend. Keep its subproject from replacing VShade's
+# compiler flags/runtime selection or building optional tooling and GPU backends.
+set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(PROFILER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE)
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(external/spdlog EXCLUDE_FROM_ALL)
 add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 add_subdirectory(external/simdjson EXCLUDE_FROM_ALL)
 add_subdirectory(external/fastgltf EXCLUDE_FROM_ALL)
+add_subdirectory(external/box2d EXCLUDE_FROM_ALL)
+add_subdirectory(external/jolt/Build external/jolt-build EXCLUDE_FROM_ALL)
 
 # reflect-cpp supplies automatic C++20 field reflection for game components.
 # Only its JSON backend is enabled; bundled dependencies keep configuration

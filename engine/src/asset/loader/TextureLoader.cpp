@@ -1,6 +1,6 @@
 #include "asset/loader/TextureLoader.hpp"
 
-#include "renderer/texture.hpp"
+#include "renderer/Texture.hpp"
 
 #include <memory>
 

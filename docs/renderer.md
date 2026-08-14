@@ -8,20 +8,20 @@ the runtime API is still evolving.
 
 ```text
 engine/include/renderer/
-|-- buffer.hpp
-|-- camera.hpp
-|-- cameracontroller.hpp
-|-- framebuffer.hpp
-|-- material.hpp
-|-- materialparameters.hpp
-|-- mesh.hpp
-|-- renderer.hpp
-|-- renderer2d.hpp
-|-- renderer3d.hpp
-|-- rendertypes.hpp
-|-- shader.hpp
-|-- texture.hpp
-`-- vertexarray.hpp
+|-- Buffer.hpp
+|-- Camera.hpp
+|-- CameraController.hpp
+|-- Framebuffer.hpp
+|-- Material.hpp
+|-- MaterialParameters.hpp
+|-- Mesh.hpp
+|-- Renderer.hpp
+|-- Renderer2D.hpp
+|-- Renderer3D.hpp
+|-- RenderTypes.hpp
+|-- Shader.hpp
+|-- Texture.hpp
+`-- VertexArray.hpp
 ```
 
 - `Renderer` owns initialization, pipeline state, viewport state, clears,

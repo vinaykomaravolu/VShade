@@ -1,6 +1,6 @@
 #include "scene/SceneSerializer.hpp"
 
-#include "math/quaternion.hpp"
+#include "math/Quaternion.hpp"
 #include "scene/Components.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneComponentRegistry.hpp"

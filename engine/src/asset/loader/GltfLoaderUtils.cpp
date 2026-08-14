@@ -1,8 +1,8 @@
-#include "GltfLoaderUtils.hpp"
+#include "asset/loader/GltfLoaderUtils.hpp"
 
-#include "renderer/buffer.hpp"
-#include "renderer/mesh.hpp"
-#include "renderer/vertexarray.hpp"
+#include "renderer/Buffer.hpp"
+#include "renderer/Mesh.hpp"
+#include "renderer/VertexArray.hpp"
 
 #include <fastgltf/core.hpp>
 #include <fastgltf/tools.hpp>

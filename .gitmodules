@@ -31,3 +31,9 @@
 [submodule "external/simdjson"]
 	path = external/simdjson
 	url = https://github.com/simdjson/simdjson.git
+[submodule "external/box2d"]
+	path = external/box2d
+	url = https://github.com/erincatto/box2d.git
+[submodule "external/jolt"]
+	path = external/jolt
+	url = https://github.com/jrouwe/JoltPhysics.git

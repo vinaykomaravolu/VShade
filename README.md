@@ -84,8 +84,8 @@ target_link_libraries(MyGame PRIVATE VShade::Engine)
 Then include the public API with:
 
 ```cpp
-#include <core/application.hpp>
-#include <core/entrypoint.hpp>
+#include <core/Application.hpp>
+#include <core/EntryPoint.hpp>
 ```
 
 A game supplies behavior by deriving from `Application`:
@@ -122,33 +122,33 @@ three states.
 Other core systems have focused headers:
 
 ```cpp
-#include <core/assert.hpp>
-#include <core/entrypoint.hpp>
-#include <core/filesystem.hpp>
-#include <core/log.hpp>
-#include <core/time.hpp>
-#include <math/math.hpp>
-#include <math/matrix.hpp>
-#include <math/quaternion.hpp>
-#include <math/transform.hpp>
-#include <math/vector.hpp>
-#include <input/input.hpp>
-#include <input/keycode.hpp>
-#include <input/mousecode.hpp>
-#include <platform/window.hpp>
-#include <renderer/buffer.hpp>
-#include <renderer/camera.hpp>
-#include <renderer/cameracontroller.hpp>
-#include <renderer/framebuffer.hpp>
-#include <renderer/material.hpp>
-#include <renderer/mesh.hpp>
-#include <renderer/renderer.hpp>
-#include <renderer/renderer2d.hpp>
-#include <renderer/renderer3d.hpp>
-#include <renderer/rendertypes.hpp>
-#include <renderer/shader.hpp>
-#include <renderer/texture.hpp>
-#include <renderer/vertexarray.hpp>
+#include <core/Assert.hpp>
+#include <core/EntryPoint.hpp>
+#include <core/Filesystem.hpp>
+#include <core/Log.hpp>
+#include <core/Time.hpp>
+#include <math/Math.hpp>
+#include <math/Matrix.hpp>
+#include <math/Quaternion.hpp>
+#include <math/Transform.hpp>
+#include <math/Vector.hpp>
+#include <input/Input.hpp>
+#include <input/KeyCode.hpp>
+#include <input/MouseCode.hpp>
+#include <platform/Window.hpp>
+#include <renderer/Buffer.hpp>
+#include <renderer/Camera.hpp>
+#include <renderer/CameraController.hpp>
+#include <renderer/Framebuffer.hpp>
+#include <renderer/Material.hpp>
+#include <renderer/Mesh.hpp>
+#include <renderer/Renderer.hpp>
+#include <renderer/Renderer2D.hpp>
+#include <renderer/Renderer3D.hpp>
+#include <renderer/RenderTypes.hpp>
+#include <renderer/Shader.hpp>
+#include <renderer/Texture.hpp>
+#include <renderer/VertexArray.hpp>
 ```
 
 GLAD loads OpenGL 3.3 core functions after the window creates its context. The

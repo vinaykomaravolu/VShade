@@ -1,9 +1,9 @@
 #include "asset/loader/ModelLoader.hpp"
 
-#include "GltfLoaderUtils.hpp"
-#include "renderer/material.hpp"
-#include "renderer/model.hpp"
-#include "renderer/texture.hpp"
+#include "asset/loader/GltfLoaderUtils.hpp"
+#include "renderer/Material.hpp"
+#include "renderer/Model.hpp"
+#include "renderer/Texture.hpp"
 
 #include <fastgltf/types.hpp>
 

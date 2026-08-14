@@ -1,6 +1,6 @@
 #include "asset/loader/ShaderLoader.hpp"
 
-#include "renderer/shader.hpp"
+#include "renderer/Shader.hpp"
 
 #include <memory>
 #include <stdexcept>

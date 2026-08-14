@@ -7,33 +7,37 @@ set(VSHADE_SOURCES
     src/asset/loader/SceneLoader.cpp
     src/asset/loader/ShaderLoader.cpp
     src/asset/loader/TextureLoader.cpp
-    src/core/application.cpp
-    src/core/filesystem.cpp
-    src/core/log.cpp
-    src/core/time.cpp
-    src/input/input.cpp
-    src/math/matrix.cpp
-    src/math/quaternion.cpp
-    src/math/transform.cpp
-    src/math/vector.cpp
-    src/platform/window.cpp
-    src/renderer/buffer.cpp
-    src/renderer/camera.cpp
-    src/renderer/cameracontroller.cpp
-    src/renderer/framebuffer.cpp
-    src/renderer/material.cpp
-    src/renderer/materialparameters.cpp
-    src/renderer/mesh.cpp
-    src/renderer/model.cpp
-    src/renderer/opengl/openglutils.cpp
+    src/core/Application.cpp
+    src/core/Filesystem.cpp
+    src/core/Log.cpp
+    src/core/Time.cpp
+    src/input/Input.cpp
+    src/math/Matrix.cpp
+    src/math/Quaternion.cpp
+    src/math/Transform.cpp
+    src/math/Vector.cpp
+    src/platform/Window.cpp
+    src/physics/box2d/PhysicsSystem2D.cpp
+    src/physics/box2d/PhysicsWorld2D.cpp
+    src/physics/jolt/PhysicsSystem3D.cpp
+    src/physics/jolt/PhysicsWorld3D.cpp
+    src/renderer/Buffer.cpp
+    src/renderer/Camera.cpp
+    src/renderer/CameraController.cpp
+    src/renderer/Framebuffer.cpp
+    src/renderer/Material.cpp
+    src/renderer/MaterialParameters.cpp
+    src/renderer/Mesh.cpp
+    src/renderer/Model.cpp
+    src/renderer/opengl/OpenGLUtils.cpp
     src/renderer/opengl/generated/src/gl.c
-    src/renderer/renderer.cpp
-    src/renderer/renderer2d.cpp
-    src/renderer/renderer3d.cpp
-    src/renderer/rendertypes.cpp
-    src/renderer/shader.cpp
-    src/renderer/texture.cpp
-    src/renderer/vertexarray.cpp
+    src/renderer/Renderer.cpp
+    src/renderer/Renderer2D.cpp
+    src/renderer/Renderer3D.cpp
+    src/renderer/RenderTypes.cpp
+    src/renderer/Shader.cpp
+    src/renderer/Texture.cpp
+    src/renderer/VertexArray.cpp
     src/scene/Entity.cpp
     src/scene/Scene.cpp
     src/scene/SceneComponentRegistry.cpp
@@ -64,7 +68,7 @@ target_include_directories(VShadeEngine SYSTEM PRIVATE
 
 find_package(OpenGL REQUIRED)
 
-# spdlog appears in log.hpp and GLM is part of the engine-facing math API.
+# spdlog appears in Log.hpp and GLM is part of the engine-facing math API.
 # GLFW and the native OpenGL library remain implementation details.
 target_link_libraries(VShadeEngine
     PUBLIC
@@ -73,8 +77,10 @@ target_link_libraries(VShadeEngine
         EnTT::EnTT
         nlohmann_json::nlohmann_json
         reflectcpp::reflectcpp
-    PRIVATE
         fastgltf::fastgltf
+    PRIVATE
+        box2d::box2d
+        Jolt
         glfw
         OpenGL::GL
 )

@@ -1,6 +1,6 @@
 #include "asset/loader/MeshLoader.hpp"
 
-#include "GltfLoaderUtils.hpp"
+#include "asset/loader/GltfLoaderUtils.hpp"
 
 #include <stdexcept>
 

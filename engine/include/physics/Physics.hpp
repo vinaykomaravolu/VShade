@@ -1,0 +1,15 @@
+#pragma once
+
+#include "physics/PhysicsTypes.hpp"
+#include "physics/physics2d/Collision2D.hpp"
+#include "physics/physics2d/PhysicsBody2D.hpp"
+#include "physics/physics2d/PhysicsMaterial2D.hpp"
+#include "physics/physics2d/PhysicsShape2D.hpp"
+#include "physics/physics2d/PhysicsSystem2D.hpp"
+#include "physics/physics2d/PhysicsWorld2D.hpp"
+#include "physics/physics3d/Collision3D.hpp"
+#include "physics/physics3d/PhysicsBody3D.hpp"
+#include "physics/physics3d/PhysicsMaterial3D.hpp"
+#include "physics/physics3d/PhysicsShape3D.hpp"
+#include "physics/physics3d/PhysicsSystem3D.hpp"
+#include "physics/physics3d/PhysicsWorld3D.hpp"

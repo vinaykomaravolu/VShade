@@ -1,0 +1,42 @@
+{
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "clangd",
+            "displayName": "clangd compilation database",
+            "description": "Generates compile_commands.json for editor tooling.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-clangd",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+                "CMAKE_MAKE_PROGRAM": "$env{ProgramFiles}/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
+                "VSHADE_BUILD_SANDBOX": true,
+                "VSHADE_BUILD_TESTS": true
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "clangd",
+            "configurePreset": "clangd",
+            "description": "",
+            "displayName": ""
+        }
+    ]
+}

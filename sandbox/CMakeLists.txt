@@ -8,7 +8,7 @@ set(VSHADE_SANDBOX_TEXTURES
 )
 
 set(VSHADE_SANDBOX_ASSETS
-    assets/DamagedHelmet.glb
+    assets/ABeautifulGame.glb
 )
 
 add_executable(VShadeSandbox
@@ -58,8 +58,8 @@ add_custom_command(TARGET VShadeSandbox POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/textures/checkerboard.ppm"
         "$<TARGET_FILE_DIR:VShadeSandbox>/textures"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/DamagedHelmet.glb"
-        "$<TARGET_FILE_DIR:VShadeSandbox>/assets/DamagedHelmet.glb"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/ABeautifulGame.glb"
+        "$<TARGET_FILE_DIR:VShadeSandbox>/assets/ABeautifulGame.glb"
     COMMENT "Copying sandbox shaders, textures, and models"
 )
 

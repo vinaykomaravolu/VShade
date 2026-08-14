@@ -17,10 +17,10 @@ tests/
 |   |-- rotating_cube.png
 |   `-- textured_quad.png
 |-- visual/
-|   |-- imagecomparison.cpp
-|   |-- imagecomparison.hpp
-|   `-- renderfixture.hpp
-`-- *_visual_tests.cpp
+|   |-- ImageComparison.cpp
+|   |-- ImageComparison.hpp
+|   `-- RenderFixture.hpp
+`-- *VisualTests.cpp
 
 build/tests/visual-output/   # generated only when comparison fails
 ```

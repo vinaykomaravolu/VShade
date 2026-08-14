@@ -5,10 +5,10 @@
 #include "asset/loader/SceneLoader.hpp"
 #include "asset/loader/ShaderLoader.hpp"
 #include "asset/loader/TextureLoader.hpp"
-#include "renderer/mesh.hpp"
-#include "renderer/model.hpp"
-#include "renderer/shader.hpp"
-#include "renderer/texture.hpp"
+#include "renderer/Mesh.hpp"
+#include "renderer/Model.hpp"
+#include "renderer/Shader.hpp"
+#include "renderer/Texture.hpp"
 #include "scene/Scene.hpp"
 
 #include <stdexcept>
