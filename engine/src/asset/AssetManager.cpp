@@ -1,10 +1,12 @@
 #include "asset/AssetManager.hpp"
 
+#include "asset/loader/AudioLoader.hpp"
 #include "asset/loader/MeshLoader.hpp"
 #include "asset/loader/ModelLoader.hpp"
 #include "asset/loader/SceneLoader.hpp"
 #include "asset/loader/ShaderLoader.hpp"
 #include "asset/loader/TextureLoader.hpp"
+#include "audio/AudioClip.hpp"
 #include "renderer/Mesh.hpp"
 #include "renderer/Model.hpp"
 #include "renderer/Shader.hpp"
@@ -42,6 +44,7 @@ namespace {
 } // namespace
 
 AssetManager::AssetManager() {
+    registerAssetLoader<audio::AudioClip>(std::make_shared<AudioLoader>());
     registerAssetLoader<renderer::Texture2D>(std::make_shared<TextureLoader>());
     registerAssetLoader<renderer::Shader>(std::make_shared<ShaderLoader>());
     registerAssetLoader<renderer::Mesh>(std::make_shared<MeshLoader>());

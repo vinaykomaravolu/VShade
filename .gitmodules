@@ -37,3 +37,6 @@
 [submodule "external/jolt"]
 	path = external/jolt
 	url = https://github.com/jrouwe/JoltPhysics.git
+[submodule "external/miniaudio"]
+	path = external/miniaudio
+	url = https://github.com/mackron/miniaudio.git

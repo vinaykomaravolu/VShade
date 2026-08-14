@@ -8,7 +8,9 @@ set(VSHADE_SANDBOX_TEXTURES
 )
 
 set(VSHADE_SANDBOX_ASSETS
-    assets/ABeautifulGame.glb
+    assets/ball.glb
+    assets/retroloop.mp3
+    assets/round_platform.glb
 )
 
 add_executable(VShadeSandbox
@@ -58,9 +60,11 @@ add_custom_command(TARGET VShadeSandbox POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/textures/checkerboard.ppm"
         "$<TARGET_FILE_DIR:VShadeSandbox>/textures"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/ABeautifulGame.glb"
-        "$<TARGET_FILE_DIR:VShadeSandbox>/assets/ABeautifulGame.glb"
-    COMMENT "Copying sandbox shaders, textures, and models"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/ball.glb"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/retroloop.mp3"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/round_platform.glb"
+        "$<TARGET_FILE_DIR:VShadeSandbox>/assets"
+    COMMENT "Copying sandbox shaders, textures, models, and music"
 )
 
 set_target_properties(VShadeSandbox PROPERTIES

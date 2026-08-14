@@ -1,9 +1,12 @@
 set(VSHADE_SOURCES
+    src/audio/AudioClip.cpp
+    src/audio/AudioEngine.cpp
     src/asset/AssetManager.cpp
     src/asset/AssetRegistry.cpp
     src/asset/loader/MeshLoader.cpp
     src/asset/loader/ModelLoader.cpp
     src/asset/loader/GltfLoaderUtils.cpp
+    src/asset/loader/AudioLoader.cpp
     src/asset/loader/SceneLoader.cpp
     src/asset/loader/ShaderLoader.cpp
     src/asset/loader/TextureLoader.cpp
@@ -82,6 +85,8 @@ target_link_libraries(VShadeEngine
         box2d::box2d
         Jolt
         glfw
+        miniaudio
+        miniaudio_common_options
         OpenGL::GL
 )
 

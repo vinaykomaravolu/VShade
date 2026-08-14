@@ -65,6 +65,13 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/stb/stb_image.h")
     )
 endif()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio/miniaudio.h")
+    message(FATAL_ERROR
+        "Missing dependency: external/miniaudio. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
 # Keep dependency builds small and avoid installing their examples and tests.
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -86,6 +93,11 @@ set(BOX2D_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BOX2D_DOCS OFF CACHE BOOL "" FORCE)
 set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX2D_COMPILE_WARNING_AS_ERROR OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_INSTALL OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
 
 # Jolt is a private engine backend. Keep its subproject from replacing VShade's
 # compiler flags/runtime selection or building optional tooling and GPU backends.
@@ -108,6 +120,7 @@ add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 add_subdirectory(external/simdjson EXCLUDE_FROM_ALL)
 add_subdirectory(external/fastgltf EXCLUDE_FROM_ALL)
 add_subdirectory(external/box2d EXCLUDE_FROM_ALL)
+add_subdirectory(external/miniaudio EXCLUDE_FROM_ALL)
 add_subdirectory(external/jolt/Build external/jolt-build EXCLUDE_FROM_ALL)
 
 # reflect-cpp supplies automatic C++20 field reflection for game components.

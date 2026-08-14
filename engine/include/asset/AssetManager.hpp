@@ -24,7 +24,7 @@ public:
     /**
      * @brief Creates a manager with the engine's built-in loaders installed.
      *
-     * Texture2D, Shader, Mesh, Model, and Scene assets can be loaded immediately.
+     * AudioClip, Texture2D, Shader, Mesh, Model, and Scene assets can be loaded immediately.
      * Registering another loader for one of those types replaces its default.
      */
     AssetManager();
