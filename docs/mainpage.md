@@ -19,9 +19,13 @@ built.
 - `vshade::renderer::Renderer3D` submits meshes, materials, cameras, and directional lighting.
 - Renderer resource classes own buffers, vertex arrays, shaders, textures, framebuffers, and meshes.
 - `vshade::renderer::CameraController` provides testable fly-camera behavior.
+- `vshade::scene::Scene` owns entities and serializable components through EnTT.
 
 See [Renderer foundation](renderer.md) for the renderer architecture,
 lifecycle, file responsibilities, and current scope.
+
+See [Scenes and serialization](scene.md) for entities, stable UUIDs,
+duplication, asset paths, and the JSON scene format.
 
 See [Golden-image renderer testing](visual-testing.md) for hidden-context
 visual regression tests, comparison tolerances, and failure artifacts.
@@ -47,5 +51,13 @@ protected:
 SHADE_ENGINE_MAIN(Game)
 ```
 
-Use the Classes, Namespaces, Files, and Topics sections in the navigation panel
-to explore the complete public API.
+## API indexes
+
+- [Class list](annotated.html)
+- [Alphabetical class index](classes.html)
+- [Namespaces](namespaces.html)
+- [Files](files.html)
+- [Topics](topics.html)
+
+These direct links also work when JavaScript is unavailable. The same indexes
+remain available from the navigation panel.

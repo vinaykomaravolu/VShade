@@ -22,11 +22,14 @@ set(DOXYGEN_RECURSIVE YES)
 set(DOXYGEN_STRIP_FROM_PATH "${PROJECT_SOURCE_DIR}/engine/include")
 set(DOXYGEN_USE_MDFILE_AS_MAINPAGE "${CMAKE_CURRENT_SOURCE_DIR}/mainpage.md")
 set(DOXYGEN_GENERATE_TREEVIEW YES)
+set(DOXYGEN_HTML_DYNAMIC_MENUS NO)
 
 doxygen_add_docs(VShadeDocs
     "${PROJECT_SOURCE_DIR}/engine/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/mainpage.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/namespaces.dox"
     "${CMAKE_CURRENT_SOURCE_DIR}/renderer.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scene.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/visual-testing.md"
     COMMENT "Generating the VShade API reference"
 )

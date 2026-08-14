@@ -1,0 +1,39 @@
+/**
+ * @namespace vshade
+ * @brief Public API for the VShade game engine.
+ */
+
+/**
+ * @namespace vshade::core
+ * @brief Application lifecycle, timing, logging, and core utilities.
+ */
+
+/**
+ * @namespace vshade::core::filesystem
+ * @brief File-reading helpers used by the engine and games.
+ */
+
+/**
+ * @namespace vshade::input
+ * @brief Keyboard and mouse input state.
+ */
+
+/**
+ * @namespace vshade::math
+ * @brief Vector, matrix, quaternion, and transform types and operations.
+ */
+
+/**
+ * @namespace vshade::platform
+ * @brief Window and graphics-context integration.
+ */
+
+/**
+ * @namespace vshade::renderer
+ * @brief Rendering resources and high-level 2D and 3D drawing APIs.
+ */
+
+/**
+ * @namespace vshade::scene
+ * @brief Entity, component, scene, and scene-serialization APIs.
+ */

@@ -54,10 +54,11 @@ void writePng(const std::filesystem::path& path, const Image& image);
 );
 
 /**
- * @brief Compares against a golden PNG and writes artifacts only on failure.
+ * @brief Compares against a golden PNG and writes persistent test artifacts.
  *
- * Failure artifacts are written beneath @p outputDirectory as actual.png,
- * expected.png, and difference.png. The golden image is never modified.
+ * actual.png is written on every run. A failed comparison also writes
+ * expected.png and difference.png. Fixed filenames make later runs overwrite
+ * older artifacts, and the golden image is never modified.
  */
 [[nodiscard]] ComparisonResult compareAgainstGolden(
     const Image& actual,

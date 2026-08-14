@@ -1,16 +1,22 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 
 namespace vshade::scene {
 
 class Scene;
 
+/** @brief Controls whitespace in serialized JSON scene files. */
+enum class SceneJsonFormat {
+    /** @brief Human-readable JSON with indentation and line breaks. */
+    Pretty,
+    /** @brief Minified JSON without optional whitespace. */
+    Compact,
+};
+
 /**
- * @brief Future file serializer for Scene data.
- *
- * Only the interface is declared for now; the scene file format and method
- * definitions will be added when serialization work begins.
+ * @brief Saves and loads built-in and registered scene components as readable JSON.
  */
 class SceneSerializer final {
 public:
@@ -18,18 +24,29 @@ public:
 
     /**
      * @brief Writes the attached scene to a file.
-     * @throws std::logic_error Until the scene file format is implemented.
+     * @param format Pretty by default; use Compact for minified JSON.
+     * @return True on success; false if the file cannot be written.
      */
-    [[nodiscard]] bool serialize(const std::filesystem::path& path) const;
+    [[nodiscard]] bool serialize(
+        const std::filesystem::path& path,
+        SceneJsonFormat format = SceneJsonFormat::Pretty
+    ) const;
 
     /**
      * @brief Replaces the attached scene with data loaded from a file.
-     * @throws std::logic_error Until the scene file format is implemented.
+     * @return True on success; false for missing, malformed, or unsupported data.
+     * @note The attached scene is unchanged when loading fails.
      */
     [[nodiscard]] bool deserialize(const std::filesystem::path& path);
 
+    /** @brief Returns the diagnostic from the most recent failed operation. */
+    [[nodiscard]] const std::string& lastError() const noexcept;
+
 private:
+    void setError(std::string error) const;
+
     Scene& m_scene;
+    mutable std::string m_lastError;
 };
 
 } // namespace vshade::scene

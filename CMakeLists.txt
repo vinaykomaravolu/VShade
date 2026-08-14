@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23)
 
 project(
     VShade
@@ -26,6 +26,20 @@ endforeach()
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/entt/src/entt/entt.hpp")
     message(FATAL_ERROR
         "Missing dependency: external/entt. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/json/single_include/nlohmann/json.hpp")
+    message(FATAL_ERROR
+        "Missing dependency: external/json. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/reflect-cpp/include/rfl/json.hpp")
+    message(FATAL_ERROR
+        "Missing dependency: external/reflect-cpp. "
         "Run: git submodule update --init --recursive"
     )
 endif()
@@ -61,12 +75,37 @@ add_subdirectory(external/spdlog EXCLUDE_FROM_ALL)
 add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
-# EnTT is header-only. Defining its interface target here preserves VShade's
-# CMake 3.20 baseline even when EnTT's own development build requires newer CMake.
+# reflect-cpp supplies automatic C++20 field reflection for game components.
+# Only its JSON backend is enabled; bundled dependencies keep configuration
+# self-contained and avoid downloading packages during normal builds.
+set(REFLECTCPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(REFLECTCPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(REFLECTCPP_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(REFLECTCPP_CHECK_HEADERS OFF CACHE BOOL "" FORCE)
+set(REFLECTCPP_ALL_FORMATS OFF CACHE BOOL "" FORCE)
+set(REFLECTCPP_JSON ON CACHE BOOL "" FORCE)
+set(REFLECTCPP_USE_BUNDLED_DEPENDENCIES ON CACHE BOOL "" FORCE)
+set(REFLECTCPP_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/reflect-cpp EXCLUDE_FROM_ALL)
+target_include_directories(reflectcpp SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/reflect-cpp/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/reflect-cpp/include/rfl/thirdparty"
+)
+
+# EnTT is header-only. Defining its interface target avoids configuring EnTT's
+# development-only targets and keeps the dependency surface small.
 add_library(VShadeEnTT INTERFACE)
 add_library(EnTT::EnTT ALIAS VShadeEnTT)
 target_include_directories(VShadeEnTT SYSTEM INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/external/entt/src"
+)
+
+# JSON backs SceneSerializer and the public custom-component registration API.
+# Avoid its tests/install rules by exposing only its header directory.
+add_library(VShadeJson INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS VShadeJson)
+target_include_directories(VShadeJson SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/json/single_include"
 )
 
 if(BUILD_TESTING)

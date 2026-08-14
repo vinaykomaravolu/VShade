@@ -16,6 +16,10 @@
 #include <renderer/shader.hpp>
 #include <renderer/texture.hpp>
 #include <renderer/vertexarray.hpp>
+#include <scene/Components.hpp>
+#include <scene/Entity.hpp>
+#include <scene/Scene.hpp>
+#include <scene/SceneComponentRegistry.hpp>
 
 #include <array>
 #include <cmath>
@@ -25,6 +29,12 @@
 #include <utility>
 
 namespace {
+
+struct RotationComponent {
+    float yawSpeed = 1.0F;
+    float pitchFactor = 0.0F;
+    float roll = 0.0F;
+};
 
 [[nodiscard]] std::unique_ptr<vshade::renderer::Mesh> createCubeMesh() {
     using vshade::renderer::MeshVertex;
@@ -108,6 +118,12 @@ public:
 
 protected:
     void onStart() override {
+        // reflect-cpp discovers RotationComponent's fields automatically.
+        // The explicit name remains stable if the C++ type is renamed later.
+        vshade::scene::SceneComponentRegistry::registerComponent<RotationComponent>(
+            "Rotation"
+        );
+
         // Meshes connect CPU vertex/index data to the engine's vertex-array API.
         m_cubeMesh = createCubeMesh();
 
@@ -151,8 +167,15 @@ protected:
 
         // Both cubes share the mesh, material, shader, and textures. Only
         // their transforms and optional per-draw parameters differ.
-        m_leftCubeTransform.setPosition({-0.9F, 0.0F, 0.0F});
-        m_rightCubeTransform.setPosition({0.9F, 0.0F, 0.0F});
+        m_leftCube = m_scene.createEntity("Left cube");
+        m_leftCube.component<vshade::scene::TransformComponent>()
+            .transform.setPosition({-0.9F, 0.0F, 0.0F});
+        m_leftCube.addComponent<RotationComponent>(1.0F, 0.45F, 0.08F);
+
+        m_rightCube = m_scene.createEntity("Right cube");
+        m_rightCube.component<vshade::scene::TransformComponent>()
+            .transform.setPosition({0.9F, 0.0F, 0.0F});
+        m_rightCube.addComponent<RotationComponent>(-1.0F, -0.35F, -0.08F);
 
         // Start focused on the cube, then let the fly controller update this
         // view from keyboard and mouse input.
@@ -199,12 +222,20 @@ protected:
         // Game state is updated separately from rendering. The render method
         // below only reads this transform and submits it.
         m_cubeAngle += deltaTime * 0.65F;
-        m_leftCubeTransform.setRotation(
-            vshade::math::fromEuler({m_cubeAngle * 0.45F, m_cubeAngle, 0.08F})
-        );
-        m_rightCubeTransform.setRotation(
-            vshade::math::fromEuler({-m_cubeAngle * 0.35F, -m_cubeAngle, -0.08F})
-        );
+        auto rotatingCubes = m_scene.view<
+            const RotationComponent,
+            vshade::scene::TransformComponent
+        >();
+        rotatingCubes.each([this](
+            const RotationComponent& rotation,
+            vshade::scene::TransformComponent& transform
+        ) {
+            transform.transform.setRotation(vshade::math::fromEuler({
+                m_cubeAngle * rotation.pitchFactor,
+                m_cubeAngle * rotation.yawSpeed,
+                rotation.roll,
+            }));
+        });
     }
 
     void onRender() override {
@@ -231,7 +262,7 @@ protected:
         // The left cube uses all custom values stored on the shared material.
         vshade::renderer::Renderer3D::beginScene(m_camera3D);
         vshade::renderer::Renderer3D::drawMesh(
-            m_leftCubeTransform,
+            m_leftCube.component<vshade::scene::TransformComponent>().transform,
             *m_cubeMesh,
             m_cubeMaterial
         );
@@ -250,7 +281,7 @@ protected:
         );
         rightCubeParameters.set("detailStrength", 0.28F);
         vshade::renderer::Renderer3D::drawMesh(
-            m_rightCubeTransform,
+            m_rightCube.component<vshade::scene::TransformComponent>().transform,
             *m_cubeMesh,
             m_cubeMaterial,
             rightCubeParameters
@@ -295,8 +326,9 @@ private:
     std::unique_ptr<vshade::renderer::CameraController> m_cameraController;
     vshade::renderer::Material m_cubeMaterial;
     vshade::renderer::Camera m_camera3D;
-    vshade::math::Transform m_leftCubeTransform;
-    vshade::math::Transform m_rightCubeTransform;
+    vshade::scene::Scene m_scene{"Sandbox"};
+    vshade::scene::Entity m_leftCube;
+    vshade::scene::Entity m_rightCube;
     float m_cubeAngle = 0.0F;
     bool m_wireframe = false;
 };

@@ -27,6 +27,7 @@ set(VSHADE_SOURCES
     src/renderer/vertexarray.cpp
     src/scene/Entity.cpp
     src/scene/Scene.cpp
+    src/scene/SceneComponentRegistry.cpp
     src/scene/SceneSerializer.cpp
 )
 
@@ -61,6 +62,8 @@ target_link_libraries(VShadeEngine
         spdlog::spdlog
         glm::glm
         EnTT::EnTT
+        nlohmann_json::nlohmann_json
+        reflectcpp::reflectcpp
     PRIVATE
         glfw
         OpenGL::GL

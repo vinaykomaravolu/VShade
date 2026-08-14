@@ -113,9 +113,9 @@ void checkGoldenImage(
 ) {
     const std::string filename(imageName);
     const std::filesystem::path goldenPath =
-        std::filesystem::path(VSHADE_GOLDEN_DIR) / (filename + ".png");
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render" / (filename + ".png");
     const std::filesystem::path outputDirectory =
-        std::filesystem::path(VSHADE_VISUAL_OUTPUT_DIR) / filename;
+        std::filesystem::path(VSHADE_RENDER_OUTPUT_DIR) / filename;
 
     if (!std::filesystem::exists(goldenPath)) {
         vshade::tests::visual::writePng(outputDirectory / "actual.png", actual);
@@ -141,7 +141,7 @@ void checkGoldenImage(
     );
 
     INFO(result.summary());
-    INFO("Failure artifacts: " << outputDirectory.string());
+    INFO("Test artifacts: " << outputDirectory.string());
     CHECK(result.passed);
 }
 
@@ -296,9 +296,8 @@ void main() {
 
     const auto pixels = checkerboardPixels();
     const std::filesystem::path textureInputDirectory =
-        std::filesystem::path(VSHADE_VISUAL_OUTPUT_DIR) / "texture_input";
+        std::filesystem::path(VSHADE_RENDER_OUTPUT_DIR) / "texture_input";
     const std::filesystem::path texturePath = textureInputDirectory / "checkerboard.png";
-    std::filesystem::remove_all(textureInputDirectory);
     CHECK_THROWS_AS(
         vshade::renderer::Texture2D::fromFile(textureInputDirectory / "missing.png"),
         std::runtime_error
@@ -317,8 +316,6 @@ void main() {
         vshade::renderer::TextureFilter::Nearest,
         vshade::renderer::TextureWrap::ClampToEdge
     );
-    std::filesystem::remove_all(textureInputDirectory);
-
     CHECK(texture.width() == 8);
     CHECK(texture.height() == 8);
     CHECK(texture.format() == vshade::renderer::TextureFormat::RGBA8);
@@ -429,9 +426,8 @@ void main() {
 
 TEST_CASE("Image comparison reports errors and writes failure artifacts", "[renderer][visual]") {
     const std::filesystem::path outputDirectory =
-        std::filesystem::path(VSHADE_VISUAL_OUTPUT_DIR) / "comparison_utility";
+        std::filesystem::path(VSHADE_RENDER_OUTPUT_DIR) / "comparison_utility";
     const std::filesystem::path temporaryGolden = outputDirectory / "golden.png";
-    std::filesystem::remove_all(outputDirectory);
 
     const vshade::tests::visual::Image expected{
         2,
@@ -475,5 +471,4 @@ TEST_CASE("Image comparison reports errors and writes failure artifacts", "[rend
     CHECK(std::filesystem::exists(outputDirectory / "expected.png"));
     CHECK(std::filesystem::exists(outputDirectory / "difference.png"));
 
-    std::filesystem::remove_all(outputDirectory);
 }

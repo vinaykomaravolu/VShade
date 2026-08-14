@@ -72,12 +72,15 @@ inline void beginOffscreenFrame(
     return image;
 }
 
-inline void checkGoldenImage(const Image& actual, const std::string_view imageName) {
+inline void checkGoldenImage(
+    const Image& actual,
+    const std::string_view imageName,
+    const std::filesystem::path& goldenRoot,
+    const std::filesystem::path& outputRoot
+) {
     const std::string filename(imageName);
-    const std::filesystem::path goldenPath =
-        std::filesystem::path(VSHADE_GOLDEN_DIR) / (filename + ".png");
-    const std::filesystem::path outputDirectory =
-        std::filesystem::path(VSHADE_VISUAL_OUTPUT_DIR) / filename;
+    const std::filesystem::path goldenPath = goldenRoot / (filename + ".png");
+    const std::filesystem::path outputDirectory = outputRoot / filename;
 
     if (!std::filesystem::exists(goldenPath)) {
         writePng(outputDirectory / "actual.png", actual);
@@ -102,7 +105,7 @@ inline void checkGoldenImage(const Image& actual, const std::string_view imageNa
     );
 
     INFO(result.summary());
-    INFO("Failure artifacts: " << outputDirectory.string());
+    INFO("Test artifacts: " << outputDirectory.string());
     CHECK(result.passed);
 }
 

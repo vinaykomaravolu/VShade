@@ -83,5 +83,10 @@ TEST_CASE("Renderer2D scene matches its golden image", "[renderer2d][visual]") {
 
     CHECK(vshade::renderer::Renderer2D::stats().quadCount == 3);
     CHECK(vshade::renderer::Renderer2D::stats().drawCalls == 3);
-    vshade::tests::visual::checkGoldenImage(actual, "renderer2d_scene");
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer2d_scene",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render2d",
+        VSHADE_RENDER2D_OUTPUT_DIR
+    );
 }
