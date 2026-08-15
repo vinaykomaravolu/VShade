@@ -53,7 +53,7 @@ falling balls. Press R to reset the balls and Escape to exit.
 ## Examples
 
 The [examples](examples/README.md) directory is a progressive, runnable
-tutorial. Its 25 numbered applications start with a window and triangle, then
+tutorial. Its 26 numbered applications start with a window and triangle, then
 build through scenes, 2D and 3D rendering, physics, audio, assets, scripting,
 and small games. Focused feature demos cover textures, transparency, multiple
 lights, normal maps, and rendering to a texture.

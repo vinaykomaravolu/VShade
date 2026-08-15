@@ -58,6 +58,7 @@ the feature is deliberately planned but not yet supported by the engine.
 | 23 | `simple_2d_game` | A tiny integrated 2D game |
 | 24 | `simple_3d_game` | Models, lights, physics, audio, and input |
 | 25 | `rendering_workflows` | Runtime, scoped, and manual rendering paths |
+| 26 | `direct_3d_physics` | Direct renderer, physics world, models, audio, and a user header |
 
 ## Feature references
 

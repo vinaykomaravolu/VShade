@@ -24,6 +24,7 @@ set(VSHADE_NUMBERED_EXAMPLES
     23_simple_2d_game
     24_simple_3d_game
     25_rendering_workflows
+    26_direct_3d_physics
 )
 
 set(VSHADE_FEATURE_EXAMPLES
