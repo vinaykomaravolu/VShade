@@ -10,6 +10,7 @@ project(
 include(CTest)
 
 option(VSHADE_BUILD_SANDBOX "Build the example sandbox application" ON)
+option(VSHADE_BUILD_EXAMPLES "Build standalone learning examples" OFF)
 option(VSHADE_BUILD_DOCS "Build the VShade Doxygen API reference" OFF)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
 option(VSHADE_ENABLE_COVERAGE "Instrument VShadeEngine for GCC coverage reports" OFF)
@@ -164,6 +165,10 @@ add_subdirectory(engine)
 
 if(VSHADE_BUILD_SANDBOX)
     add_subdirectory(sandbox)
+endif()
+
+if(VSHADE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 if(BUILD_TESTING)

@@ -29,6 +29,18 @@
                 "VSHADE_BUILD_SANDBOX": true,
                 "VSHADE_BUILD_TESTS": true
             }
+        },
+        {
+            "name": "examples",
+            "displayName": "Examples (Visual Studio Debug)",
+            "description": "Configures all standalone examples as selectable CMake targets.",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build-examples",
+            "cacheVariables": {
+                "VSHADE_BUILD_EXAMPLES": true,
+                "VSHADE_BUILD_SANDBOX": false,
+                "BUILD_TESTING": false
+            }
         }
     ],
     "buildPresets": [
@@ -37,6 +49,12 @@
             "configurePreset": "clangd",
             "description": "",
             "displayName": ""
+        },
+        {
+            "name": "examples-debug",
+            "configurePreset": "examples",
+            "configuration": "Debug",
+            "displayName": "Build all examples (Debug)"
         }
     ]
 }

@@ -50,6 +50,21 @@ The sandbox loads `ball.glb` and `round_platform.glb`, streams
 `retroloop.mp3`, and lets `SceneRuntime` render and simulate six luminous
 falling balls. Press R to reset the balls and Escape to exit.
 
+## Examples
+
+The [examples](examples/README.md) directory is a progressive, runnable
+tutorial. Its 25 numbered applications start with a window and triangle, then
+build through scenes, 2D and 3D rendering, physics, audio, assets, scripting,
+and small games. Focused feature demos cover textures, transparency, multiple
+lights, normal maps, and rendering to a texture.
+
+Examples are opt-in so normal engine and test builds stay small:
+
+```sh
+cmake -S . -B build-examples -DVSHADE_BUILD_EXAMPLES=ON -DBUILD_TESTING=OFF
+cmake --build build-examples --config Debug
+```
+
 ## Test
 
 Tests are enabled by default and use Catch2 with CTest:
