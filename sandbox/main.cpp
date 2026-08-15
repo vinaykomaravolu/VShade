@@ -15,6 +15,7 @@
 #include <physics/physics3d/PhysicsSystem3D.hpp>
 #include <renderer/Camera.hpp>
 #include <renderer/CameraController.hpp>
+#include <renderer/DebugDraw.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Renderer.hpp>
 #include <renderer/Renderer3D.hpp>
@@ -204,6 +205,29 @@ protected:
             );
         }
         vshade::renderer::Renderer3D::endScene();
+
+        // Visualize only the platform's physical collision volume. The
+        // platform is axis-aligned, so its BoxShape3D maps directly to the
+        // DebugDraw wireframe bounds.
+        const auto& platformTransform =
+            m_platform.component<vshade::scene::TransformComponent>().transform;
+        const auto& platformCollider =
+            m_platform.component<vshade::scene::Collider3DComponent>();
+        const auto* platformBox = std::get_if<vshade::physics::BoxShape3D>(
+            &platformCollider.shape
+        );
+        ENGINE_ASSERT(platformBox != nullptr, "Platform collider must be a box");
+        const vshade::math::Vec3 colliderCenter =
+            platformTransform.position() +
+            platformTransform.transformDirection(platformCollider.offset);
+        vshade::renderer::DebugDraw::box(
+            {
+                .minimum = colliderCenter - platformBox->halfExtents,
+                .maximum = colliderCenter + platformBox->halfExtents,
+            },
+            {0.15F, 1.0F, 0.25F, 1.0F}
+        );
+        vshade::renderer::DebugDraw::flush(m_camera);
     }
 
     void onWindowResize(

@@ -1,6 +1,7 @@
 #include "renderer/Renderer.hpp"
 
 #include "core/Log.hpp"
+#include "renderer/DebugDraw.hpp"
 #include "renderer/Mesh.hpp"
 #include "renderer/Framebuffer.hpp"
 #include "renderer/Renderer2D.hpp"
@@ -158,6 +159,7 @@ void Renderer::shutdown() noexcept {
     if (!initialized) {
         return;
     }
+    DebugDraw::shutdown();
     Renderer2D::shutdown();
     Renderer3D::shutdown();
     Framebuffer::resetBindingStack();
@@ -345,6 +347,9 @@ void Renderer::drawIndexed(
 
     ++renderStats.drawCalls;
     renderStats.indexCount += drawCount;
+    if (topology == PrimitiveTopology::Triangles) {
+        renderStats.triangleCount += drawCount / 3;
+    }
 }
 
 void Renderer::drawArrays(
@@ -382,6 +387,9 @@ void Renderer::drawArrays(
 
     ++renderStats.drawCalls;
     renderStats.vertexCount += vertexCount;
+    if (topology == PrimitiveTopology::Triangles) {
+        renderStats.triangleCount += vertexCount / 3;
+    }
 }
 
 void Renderer::draw(const Mesh& mesh) {

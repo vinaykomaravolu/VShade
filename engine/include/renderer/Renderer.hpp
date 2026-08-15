@@ -2,6 +2,7 @@
 
 #include "math/Vector.hpp"
 #include "renderer/RenderTypes.hpp"
+#include "renderer/RendererStats.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -12,13 +13,6 @@ class Mesh;
 class Texture2D;
 class VertexArray;
 class Renderer;
-
-/** @brief Statistics collected from renderer draw calls during the current frame. */
-struct RenderStats {
-    std::uint64_t drawCalls = 0;
-    std::uint64_t indexCount = 0;
-    std::uint64_t vertexCount = 0;
-};
 
 /** @brief Complete pipeline state managed by the renderer facade. */
 struct PipelineState {

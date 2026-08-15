@@ -27,6 +27,7 @@ set(VSHADE_SOURCES
     src/renderer/Buffer.cpp
     src/renderer/Camera.cpp
     src/renderer/CameraController.cpp
+    src/renderer/DebugDraw.cpp
     src/renderer/Framebuffer.cpp
     src/renderer/Lighting.cpp
     src/renderer/Material.cpp

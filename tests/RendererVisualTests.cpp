@@ -217,6 +217,7 @@ void main() {
 
     CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
     CHECK(vshade::renderer::Renderer::stats().indexCount == 3);
+    CHECK(vshade::renderer::Renderer::stats().triangleCount == 1);
 
     vshade::renderer::Renderer::beginFrame();
     vshade::renderer::Renderer::setDepthWrite(false);
@@ -227,6 +228,7 @@ void main() {
     );
     CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
     CHECK(vshade::renderer::Renderer::stats().vertexCount == 3);
+    CHECK(vshade::renderer::Renderer::stats().triangleCount == 1);
     vshade::renderer::Renderer::setDepthWrite(true);
 
     checkGoldenImage(actual, "colored_triangle");
@@ -329,6 +331,7 @@ void main() {
     const vshade::tests::visual::Image actual = captureFramebuffer(framebuffer);
     CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
     CHECK(vshade::renderer::Renderer::stats().indexCount == 6);
+    CHECK(vshade::renderer::Renderer::stats().triangleCount == 2);
     checkGoldenImage(actual, "textured_quad");
 }
 
@@ -421,6 +424,7 @@ void main() {
     const vshade::tests::visual::Image actual = captureFramebuffer(framebuffer);
     CHECK(vshade::renderer::Renderer::stats().drawCalls == 1);
     CHECK(vshade::renderer::Renderer::stats().indexCount == 36);
+    CHECK(vshade::renderer::Renderer::stats().triangleCount == 12);
     checkGoldenImage(actual, "rotating_cube");
 }
 
