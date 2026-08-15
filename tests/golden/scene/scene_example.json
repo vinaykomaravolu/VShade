@@ -5,10 +5,13 @@
         "Active": true
       },
       "AudioSource": {
+        "Attenuation": "Inverse",
         "Bus": "Music",
         "Clip": "987654",
         "LoadMode": "Stream",
         "Looping": true,
+        "MaximumDistance": 100.0,
+        "MinimumDistance": 1.0,
         "Pitch": 1.0,
         "PlayOnStart": true,
         "Spatial": false,

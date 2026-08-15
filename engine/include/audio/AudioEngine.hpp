@@ -2,6 +2,7 @@
 
 #include "audio/AudioClip.hpp"
 #include "audio/AudioTypes.hpp"
+#include "audio/AudioVoice.hpp"
 
 #include <memory>
 
@@ -33,13 +34,23 @@ public:
     void setMasterVolume(float volume);
 
     /** @brief Starts a decoded or streamed playback instance of an audio clip. */
-    void play(
+    AudioVoice play(
         std::shared_ptr<const AudioClip> clip,
         const AudioPlaybackSettings& settings = {}
     );
 
     /** @brief Stops every active playback instance of an audio clip. */
     void stop(const std::shared_ptr<const AudioClip>& clip);
+
+    /** @brief Updates the single world-space listener used for spatial playback. */
+    void setListenerTransform(
+        const math::Vec3& position,
+        const math::Vec3& forward,
+        const math::Vec3& up
+    );
+
+    /** @brief Sets the gain of a logical mixer bus. */
+    void setBusVolume(AudioBus bus, float volume);
 
 private:
     struct Impl;

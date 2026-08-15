@@ -3,6 +3,7 @@
 #include "asset/Asset.hpp"
 #include "asset/AssetHandle.hpp"
 #include "asset/AssetLoader.hpp"
+#include "asset/AssetRef.hpp"
 #include "asset/AssetRegistry.hpp"
 
 #include <cstddef>
@@ -94,6 +95,42 @@ public:
         return AssetHandle<Resource>(loadErased(typeid(Resource), path));
     }
 
+    /** @brief Catalogs a path and returns a reference that can resolve in a fresh manager. */
+    template<typename Resource>
+    [[nodiscard]] AssetReference<Resource> reference(
+        const std::filesystem::path& path
+    ) {
+        const AssetMetadata metadata = referenceErased(typeid(Resource), path);
+        return {AssetHandle<Resource>::fromId(metadata.id), metadata.sourcePath};
+    }
+
+    /** @brief Loads and returns an owning resource view in one operation. */
+    template<typename Resource>
+    [[nodiscard]] AssetRef<Resource> loadResource(
+        const std::filesystem::path& path
+    ) {
+        const AssetReference<Resource> assetReference = reference<Resource>(path);
+        load(assetReference.handle());
+        return {assetReference, get(assetReference.handle())};
+    }
+
+
+    /** @brief Resolves a serialized reference, registering its source when needed. */
+    template<typename Resource>
+    [[nodiscard]] AssetRef<Resource> loadResource(
+        const AssetReference<Resource>& assetReference
+    ) {
+        if (!assetReference.valid()) {
+            throw std::invalid_argument("Cannot load an invalid asset reference");
+        }
+        registerReferenceErased(
+            typeid(Resource),
+            {assetReference.handle().id(), assetReference.sourcePath()}
+        );
+        load(assetReference.handle());
+        return {assetReference, get(assetReference.handle())};
+    }
+
     /** @brief Loads the resource for a previously registered handle. */
     template<typename Resource>
     void load(const AssetHandle<Resource> handle) {
@@ -137,6 +174,12 @@ public:
     /** @brief Removes every resource while external shared owners remain valid. */
     void clear() noexcept;
 
+    /** @brief Writes the persistent asset ID-to-path catalog. */
+    void saveCatalog(const std::filesystem::path& path) const;
+
+    /** @brief Loads catalog entries used to resolve serialized handles. */
+    void loadCatalog(const std::filesystem::path& path);
+
     /** @brief Returns the number of resources currently cached. */
     [[nodiscard]] std::size_t size() const noexcept;
 
@@ -155,6 +198,11 @@ private:
 
     void registerLoaderErased(std::type_index type, ErasedLoader loader);
     void registerAssetErased(AssetMetadata metadata);
+    [[nodiscard]] AssetMetadata referenceErased(
+        std::type_index type,
+        const std::filesystem::path& path
+    );
+    void registerReferenceErased(std::type_index type, AssetMetadata metadata);
     [[nodiscard]] AssetId loadErased(
         std::type_index type,
         const std::filesystem::path& path

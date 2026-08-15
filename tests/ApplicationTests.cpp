@@ -17,5 +17,5 @@ TEST_CASE("Application validates timing configuration", "[application]") {
 
 TEST_CASE("Application rejects window access before startup", "[application]") {
     vshade::core::Application application;
-    CHECK_THROWS_AS(application.getWindow(), std::logic_error);
+    CHECK_THROWS_AS(application.window(), std::logic_error);
 }

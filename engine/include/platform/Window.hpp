@@ -60,6 +60,7 @@ public:
      * @param blue Blue channel in the range 0 to 1.
      * @param alpha Alpha channel in the range 0 to 1.
      */
+    [[deprecated("Use Renderer::setClearColor() and Renderer::clear()")]]
     void clear(float red, float green, float blue, float alpha = 1.0F) const;
 
     /**

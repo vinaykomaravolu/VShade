@@ -13,6 +13,8 @@
 
 namespace vshade::renderer {
 
+class Renderer3DSceneScope;
+
 /** @brief Statistics collected by the basic 3D renderer. */
 struct Renderer3DStats {
     /** @brief Number of GPU draw calls issued for the completed scene. */
@@ -62,6 +64,9 @@ public:
      * another 3D scene is already active.
      */
     static void beginScene(const Camera& camera);
+
+    /** @brief Begins an exception-safe scene scope that ends on destruction. */
+    [[nodiscard]] static Renderer3DSceneScope scopedScene(const Camera& camera);
 
     /**
      * @brief Sets the directional light used by basic lit materials.
@@ -116,6 +121,35 @@ private:
 
     /** Releases persistent renderer resources while the GL context is active. */
     static void shutdown() noexcept;
+};
+
+/** @brief Movable RAII adapter over Renderer3D begin/draw/end submission. */
+class Renderer3DSceneScope final {
+public:
+    ~Renderer3DSceneScope() noexcept;
+    Renderer3DSceneScope(Renderer3DSceneScope&& other) noexcept;
+    Renderer3DSceneScope& operator=(Renderer3DSceneScope&& other) noexcept;
+    Renderer3DSceneScope(const Renderer3DSceneScope&) = delete;
+    Renderer3DSceneScope& operator=(const Renderer3DSceneScope&) = delete;
+
+    void setLighting(const Lighting& lighting);
+    void draw(
+        const math::Transform& transform,
+        const Model& model,
+        const DrawParameters& parameters = {}
+    );
+    void draw(
+        const math::Transform& transform,
+        const Mesh& mesh,
+        const Material& material,
+        const DrawParameters& parameters = {}
+    );
+    void finish();
+
+private:
+    friend class Renderer3D;
+    explicit Renderer3DSceneScope(const Camera& camera);
+    bool m_active = true;
 };
 
 } // namespace vshade::renderer

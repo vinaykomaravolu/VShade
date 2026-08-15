@@ -54,6 +54,12 @@ public:
     /** @brief Updates the source path while preserving the stable asset ID. */
     void updatePath(AssetId id, std::filesystem::path path);
 
+    /** @brief Writes the stable ID-to-path catalog as deterministic JSON. */
+    void save(const std::filesystem::path& path) const;
+
+    /** @brief Replaces the catalog from a previously saved JSON file. */
+    void load(const std::filesystem::path& path);
+
     /** @brief Removes all registered metadata. */
     void clear() noexcept;
 

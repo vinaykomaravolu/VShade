@@ -22,4 +22,9 @@ struct TransformComponent {
     math::Transform transform;
 };
 
+/** @brief Optional stable parent relationship; transforms remain local-space data. */
+struct ParentComponent {
+    std::uint64_t parentUuid = 0;
+};
+
 } // namespace vshade::scene

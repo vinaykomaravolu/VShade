@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <core/Filesystem.hpp>
+#include <asset/AssetManager.hpp>
 #include <scene/Components.hpp>
 #include <scene/Scene.hpp>
+#include <scene/Prefab.hpp>
 #include <scene/SceneComponentRegistry.hpp>
 #include <scene/SceneSerializer.hpp>
 
@@ -12,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <variant>
 
@@ -57,6 +60,17 @@ TEST_CASE("Scene owns entities and supports custom components", "[scene]") {
 
     player.addComponent<HealthComponent>(75);
     CHECK(player.component<HealthComponent>().points == 75);
+    CHECK(std::string(player.name()) == "Player");
+    player.setName("Hero");
+    CHECK(std::string(player.name()) == "Hero");
+    player.transform().setPosition({1.0F, 2.0F, 3.0F});
+    CHECK(player.transform().position().y == 2.0F);
+    player.set<HealthComponent>(90);
+    CHECK(player.get<HealthComponent>().points == 90);
+    CHECK(player.tryGet<HealthComponent>() != nullptr);
+    CHECK(player.has<HealthComponent>());
+    CHECK(player.remove<HealthComponent>());
+    CHECK_FALSE(player.has<HealthComponent>());
 
     std::size_t entityCount = 0;
     for (const auto handle : scene.view<vshade::scene::TransformComponent>()) {
@@ -118,6 +132,57 @@ TEST_CASE("Scene views support EnTT iteration styles", "[scene]") {
     CHECK(totalVelocity == Catch::Approx(14.0F));
 }
 
+TEST_CASE("Scene hierarchy rejects cycles and survives instancing", "[scene][hierarchy]") {
+    vshade::scene::Scene scene("Hierarchy");
+    auto root = scene.create("Root");
+    auto child = scene.create("Child");
+    auto grandchild = scene.create("Grandchild");
+    scene.setParent(child, root);
+    scene.setParent(grandchild, child);
+
+    CHECK(scene.parent(child) == root);
+    REQUIRE(scene.children(root).size() == 1);
+    CHECK(scene.children(root)[0] == child);
+    CHECK_THROWS_AS(scene.setParent(root, grandchild), std::invalid_argument);
+
+    auto instance = scene.instantiate();
+    const auto instanceChild = instance->findEntity(child.uuid());
+    CHECK(instance->parent(instanceChild).uuid() == root.uuid());
+
+    const auto path = sceneOutputPath("hierarchy.json");
+    vshade::scene::SceneSerializer writer(scene);
+    REQUIRE(writer.serialize(path));
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserialize(path));
+    CHECK(loaded.parent(loaded.findEntity(grandchild.uuid())).uuid() == child.uuid());
+
+    scene.destroyEntity(root);
+    CHECK_FALSE(scene.parent(child));
+}
+
+TEST_CASE("Prefab instantiation remaps entity identity and hierarchy", "[scene][prefab]") {
+    auto templateScene = std::make_shared<vshade::scene::Scene>("Ball prefab");
+    auto root = templateScene->create("Ball");
+    auto child = templateScene->create("Light");
+    templateScene->setParent(child, root);
+    root.add<vshade::scene::LightComponent>();
+    const std::uint64_t templateRootUuid = root.uuid();
+
+    vshade::scene::Prefab prefab(templateScene);
+    vshade::scene::Scene destination("Level");
+    const auto first = destination.instantiate(prefab);
+    const auto second = destination.instantiate(prefab);
+
+    REQUIRE(first);
+    REQUIRE(second);
+    CHECK(first.uuid() != templateRootUuid);
+    CHECK(first.uuid() != second.uuid());
+    CHECK(first.has<vshade::scene::LightComponent>());
+    REQUIRE(destination.children(first).size() == 1);
+    CHECK(destination.parent(destination.children(first)[0]) == first);
+}
+
 TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
     REQUIRE(std::filesystem::is_regular_file(
         std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "player.png"
@@ -153,6 +218,30 @@ TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
         },
         false
     );
+    original.addComponent<vshade::scene::RigidBody2DComponent>(
+        vshade::physics::PhysicsBody2DSettings{
+            .type = vshade::physics::BodyType::Kinematic,
+            .linearVelocity = {2.0F, 3.0F},
+        }
+    );
+    original.addComponent<vshade::scene::Collider2DComponent>(
+        vshade::physics::CircleShape2D{0.75F},
+        vshade::physics::PhysicsMaterial2D{.density = 2.0F},
+        vshade::math::Vec2{0.1F, 0.2F},
+        true
+    );
+    original.addComponent<vshade::scene::RigidBody3DComponent>(
+        vshade::physics::PhysicsBody3DSettings{
+            .type = vshade::physics::BodyType::Dynamic,
+            .linearVelocity = {4.0F, 5.0F, 6.0F},
+        }
+    );
+    original.addComponent<vshade::scene::Collider3DComponent>(
+        vshade::physics::SphereShape3D{1.25F},
+        vshade::physics::PhysicsMaterial3D{.friction = 0.8F},
+        vshade::math::Vec3{0.3F, 0.4F, 0.5F},
+        false
+    );
 
     const vshade::scene::Entity duplicate = scene.duplicateEntity(original);
     REQUIRE(duplicate.valid());
@@ -173,6 +262,116 @@ TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
     REQUIRE(std::holds_alternative<vshade::renderer::PointLight>(duplicatedLight.light));
     CHECK(std::get<vshade::renderer::PointLight>(duplicatedLight.light).range ==
           Catch::Approx(8.0F));
+    CHECK(duplicate.component<vshade::scene::RigidBody2DComponent>().settings.type ==
+          vshade::physics::BodyType::Kinematic);
+    CHECK(std::get<vshade::physics::CircleShape2D>(
+              duplicate.component<vshade::scene::Collider2DComponent>().shape
+          ).radius == Catch::Approx(0.75F));
+    CHECK(duplicate.component<vshade::scene::RigidBody3DComponent>()
+              .settings.linearVelocity.z == Catch::Approx(6.0F));
+    CHECK(std::get<vshade::physics::SphereShape3D>(
+              duplicate.component<vshade::scene::Collider3DComponent>().shape
+          ).radius == Catch::Approx(1.25F));
+}
+
+TEST_CASE("Scene physics components round trip through JSON", "[scene][physics]") {
+    const std::filesystem::path path = sceneOutputPath("physics-components.json");
+    vshade::scene::Scene source("Physics persistence");
+
+    vshade::scene::Entity entity2D = source.createEntity("2D body");
+    const std::uint64_t uuid2D = entity2D.uuid();
+    entity2D.addComponent<vshade::scene::RigidBody2DComponent>(
+        vshade::physics::PhysicsBody2DSettings{
+            .type = vshade::physics::BodyType::Dynamic,
+            .linearVelocity = {3.0F, -2.0F},
+            .angularVelocity = 1.5F,
+            .linearDamping = 0.2F,
+            .angularDamping = 0.3F,
+            .gravityScale = 0.75F,
+            .fixedRotation = true,
+            .continuousCollision = true,
+            .enabled = false,
+            .collision = {.layer = 4, .mask = 12},
+        }
+    );
+    entity2D.addComponent<vshade::scene::Collider2DComponent>(
+        vshade::physics::CapsuleShape2D{.halfHeight = 1.25F, .radius = 0.4F},
+        vshade::physics::PhysicsMaterial2D{
+            .density = 2.0F,
+            .friction = 0.25F,
+            .restitution = 0.6F,
+        },
+        vshade::math::Vec2{0.1F, -0.2F},
+        true
+    );
+
+    vshade::scene::Entity entity3D = source.createEntity("3D body");
+    const std::uint64_t uuid3D = entity3D.uuid();
+    entity3D.addComponent<vshade::scene::RigidBody3DComponent>(
+        vshade::physics::PhysicsBody3DSettings{
+            .type = vshade::physics::BodyType::Kinematic,
+            .linearVelocity = {1.0F, 2.0F, 3.0F},
+            .angularVelocity = {0.1F, 0.2F, 0.3F},
+            .mass = 4.0F,
+            .linearDamping = 0.4F,
+            .angularDamping = 0.5F,
+            .gravityScale = -0.25F,
+            .continuousCollision = true,
+            .enabled = false,
+            .collision = {.layer = 8, .mask = 16},
+        }
+    );
+    entity3D.addComponent<vshade::scene::Collider3DComponent>(
+        vshade::physics::BoxShape3D{{1.0F, 2.0F, 3.0F}},
+        vshade::physics::PhysicsMaterial3D{
+            .friction = 0.7F,
+            .restitution = 0.2F,
+        },
+        vshade::math::Vec3{0.3F, 0.4F, 0.5F},
+        false
+    );
+
+    vshade::scene::SceneSerializer writer(source);
+    REQUIRE(writer.serialize(path));
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserialize(path));
+
+    const auto loaded2D = loaded.findEntity(uuid2D);
+    REQUIRE(loaded2D.hasComponents<
+        vshade::scene::RigidBody2DComponent,
+        vshade::scene::Collider2DComponent
+    >());
+    const auto& body2D = loaded2D.component<vshade::scene::RigidBody2DComponent>().settings;
+    CHECK(body2D.type == vshade::physics::BodyType::Dynamic);
+    CHECK(body2D.linearVelocity.x == Catch::Approx(3.0F));
+    CHECK(body2D.angularVelocity == Catch::Approx(1.5F));
+    CHECK(body2D.fixedRotation);
+    CHECK_FALSE(body2D.enabled);
+    CHECK(body2D.collision.layer == 4);
+    const auto& collider2D = loaded2D.component<vshade::scene::Collider2DComponent>();
+    REQUIRE(std::holds_alternative<vshade::physics::CapsuleShape2D>(collider2D.shape));
+    CHECK(std::get<vshade::physics::CapsuleShape2D>(collider2D.shape).halfHeight ==
+          Catch::Approx(1.25F));
+    CHECK(collider2D.material.restitution == Catch::Approx(0.6F));
+    CHECK(collider2D.sensor);
+
+    const auto loaded3D = loaded.findEntity(uuid3D);
+    REQUIRE(loaded3D.hasComponents<
+        vshade::scene::RigidBody3DComponent,
+        vshade::scene::Collider3DComponent
+    >());
+    const auto& body3D = loaded3D.component<vshade::scene::RigidBody3DComponent>().settings;
+    CHECK(body3D.type == vshade::physics::BodyType::Kinematic);
+    CHECK(body3D.angularVelocity.z == Catch::Approx(0.3F));
+    CHECK(body3D.mass == Catch::Approx(4.0F));
+    CHECK(body3D.gravityScale == Catch::Approx(-0.25F));
+    CHECK(body3D.collision.mask == 16);
+    const auto& collider3D = loaded3D.component<vshade::scene::Collider3DComponent>();
+    REQUIRE(std::holds_alternative<vshade::physics::BoxShape3D>(collider3D.shape));
+    CHECK(std::get<vshade::physics::BoxShape3D>(collider3D.shape).halfExtents.y ==
+          Catch::Approx(2.0F));
+    CHECK(collider3D.offset.z == Catch::Approx(0.5F));
 }
 
 TEST_CASE("Scene serialization round trips stable components", "[scene]") {
@@ -228,6 +427,47 @@ TEST_CASE("Scene serialization round trips stable components", "[scene]") {
 
 }
 
+TEST_CASE("Scene instantiation preserves identity without sharing mutable state", "[scene]") {
+    vshade::scene::Scene sceneAsset("Instanced level");
+    sceneAsset.setEnvironment({.ambientIntensity = 0.4F});
+    vshade::scene::Entity source = sceneAsset.createEntity("Template ball");
+    const std::uint64_t uuid = source.uuid();
+    source.component<vshade::scene::TransformComponent>().transform.setPosition(
+        {1.0F, 2.0F, 3.0F}
+    );
+    source.addComponent<vshade::scene::RigidBody3DComponent>(
+        vshade::physics::PhysicsBody3DSettings{
+            .type = vshade::physics::BodyType::Dynamic,
+        }
+    );
+    source.addComponent<vshade::scene::Collider3DComponent>(
+        vshade::physics::SphereShape3D{0.5F}
+    );
+
+    std::unique_ptr<vshade::scene::Scene> first = sceneAsset.instantiate();
+    std::unique_ptr<vshade::scene::Scene> second = sceneAsset.instantiate();
+    REQUIRE(first);
+    REQUIRE(second);
+    CHECK(first->name() == "Instanced level");
+    CHECK(first->environment().ambientIntensity == Catch::Approx(0.4F));
+
+    auto firstBall = first->findEntity(uuid);
+    auto secondBall = second->findEntity(uuid);
+    REQUIRE(firstBall.valid());
+    REQUIRE(secondBall.valid());
+    REQUIRE(firstBall.hasComponents<
+        vshade::scene::RigidBody3DComponent,
+        vshade::scene::Collider3DComponent
+    >());
+    firstBall.component<vshade::scene::TransformComponent>().transform.setPosition(
+        {9.0F, 9.0F, 9.0F}
+    );
+    CHECK(secondBall.component<vshade::scene::TransformComponent>()
+              .transform.position().x == Catch::Approx(1.0F));
+    CHECK(source.component<vshade::scene::TransformComponent>()
+              .transform.position().x == Catch::Approx(1.0F));
+}
+
 TEST_CASE("Scene loading is transactional for malformed files", "[scene]") {
     const std::filesystem::path path = sceneOutputPath("malformed.json");
     {
@@ -243,6 +483,10 @@ TEST_CASE("Scene loading is transactional for malformed files", "[scene]") {
 
     CHECK_FALSE(serializer.deserialize(path));
     CHECK_FALSE(serializer.lastError().empty());
+    const auto result = serializer.deserializeResult(path);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == "scene.deserialize");
+    CHECK(result.error().path == path);
     CHECK(scene.name() == "Keep me");
     CHECK(scene.findEntity(survivorUuid).valid());
 
@@ -258,8 +502,12 @@ TEST_CASE("Scene serialization round trips audio environment and entity lights",
 
     vshade::scene::Entity audio = source.createEntity("Music source");
     const std::uint64_t audioUuid = audio.uuid();
-    audio.addComponent<vshade::scene::AudioSourceComponent>(
-        vshade::audio::AudioClipHandle::fromId(987654),
+    vshade::asset::AssetManager assets;
+    const auto audioReference = assets.reference<vshade::audio::AudioClip>(
+        "audio/theme.flac"
+    );
+    auto& sourceComponent = audio.addComponent<vshade::scene::AudioSourceComponent>(
+        audioReference.handle(),
         vshade::audio::AudioBus::Music,
         vshade::audio::AudioLoadMode::Stream,
         0.65F,
@@ -268,6 +516,10 @@ TEST_CASE("Scene serialization round trips audio environment and entity lights",
         true,
         false
     );
+    sourceComponent.clipAsset = audioReference;
+    sourceComponent.attenuation = vshade::audio::AttenuationModel::Linear;
+    sourceComponent.minimumDistance = 2.0F;
+    sourceComponent.maximumDistance = 30.0F;
     audio.addComponent<vshade::scene::AudioListenerComponent>(false);
 
     vshade::scene::Entity directional = source.createEntity("Directional light");
@@ -311,7 +563,7 @@ TEST_CASE("Scene serialization round trips audio environment and entity lights",
     REQUIRE(loadedAudio.valid());
     const auto& audioSource =
         loadedAudio.component<vshade::scene::AudioSourceComponent>();
-    CHECK(audioSource.clip.id() == 987654);
+    CHECK(audioSource.clip == audioReference.handle());
     CHECK(audioSource.bus == vshade::audio::AudioBus::Music);
     CHECK(audioSource.loadMode == vshade::audio::AudioLoadMode::Stream);
     CHECK(audioSource.volume == Catch::Approx(0.65F));
@@ -319,6 +571,10 @@ TEST_CASE("Scene serialization round trips audio environment and entity lights",
     CHECK(audioSource.looping);
     CHECK(audioSource.playOnStart);
     CHECK_FALSE(audioSource.spatial);
+    CHECK(audioSource.clipAsset.sourcePath() == "audio/theme.flac");
+    CHECK(audioSource.attenuation == vshade::audio::AttenuationModel::Linear);
+    CHECK(audioSource.minimumDistance == Catch::Approx(2.0F));
+    CHECK(audioSource.maximumDistance == Catch::Approx(30.0F));
     CHECK_FALSE(
         loadedAudio.component<vshade::scene::AudioListenerComponent>().active
     );

@@ -8,6 +8,25 @@ namespace vshade::scene {
 
 Entity::Entity() noexcept = default;
 
+math::Transform& Entity::transform() {
+    return component<TransformComponent>().transform;
+}
+
+const math::Transform& Entity::transform() const {
+    return component<TransformComponent>().transform;
+}
+
+std::string_view Entity::name() const {
+    return component<TagComponent>().tag;
+}
+
+void Entity::setName(std::string name) {
+    if (name.empty()) {
+        throw std::invalid_argument("An entity name cannot be empty");
+    }
+    component<TagComponent>().tag = std::move(name);
+}
+
 Entity::Entity(
     const entt::entity handle,
     Scene& scene,

@@ -5,9 +5,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <core/Application.hpp>
+#include <core/EngineServices.hpp>
 #include <scene/Components.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneComponentRegistry.hpp>
+#include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 #include <script/Scripting.hpp>
 
@@ -56,6 +58,21 @@ public:
     static inline bool createdWithEntity = false;
 };
 
+class ContextScript final : public vshade::script::NativeScript {
+public:
+    void onCreate() override {
+        receivedServices = context().hasServices();
+        sceneName = context().scene().name();
+        spawned = context().scene().create("Spawned by script").valid();
+        physicsAvailable = &context().physics3D() == &context().runtime().physics3D();
+    }
+
+    static inline bool receivedServices = false;
+    static inline bool spawned = false;
+    static inline bool physicsAvailable = false;
+    static inline std::string sceneName;
+};
+
 class ScriptedApplicationTest final : public vshade::core::Application {
 public:
     ScriptedApplicationTest()
@@ -71,7 +88,7 @@ public:
               .fixedDeltaTime = 0.001F,
               .maximumDeltaTime = 0.05F,
           }),
-          m_scripts(m_registry) {}
+          m_runtime(m_registry) {}
 
     [[nodiscard]] const vshade::scene::Scene& scene() const noexcept {
         return m_scene;
@@ -82,7 +99,8 @@ public:
     }
 
     [[nodiscard]] bool scriptsDetached() const noexcept {
-        return !m_scripts.hasAttachedScene();
+        return !m_runtime.isPlaying() &&
+            !m_runtime.nativeScripts().hasAttachedScene();
     }
 
 protected:
@@ -93,11 +111,11 @@ protected:
         entity.addComponent<vshade::scene::ScriptComponent>(
             vshade::scene::ScriptComponent{{{.typeName = "InlineMovement"}}}
         );
-        m_scripts.attachScene(m_scene);
+        m_runtime.play(m_scene);
     }
 
     void onUpdate(const float deltaTime) override {
-        m_scripts.update(deltaTime);
+        m_runtime.update(deltaTime);
         ++m_applicationUpdateCount;
         if (InlineMovementScript::fixedUpdateCount > 0 ||
             m_applicationUpdateCount >= 1000) {
@@ -106,20 +124,56 @@ protected:
     }
 
     void onFixedUpdate(const float fixedDeltaTime) override {
-        m_scripts.fixedUpdate(fixedDeltaTime);
+        m_runtime.fixedUpdate(fixedDeltaTime);
     }
 
     void onShutdown() override {
-        m_scripts.detachScene();
+        m_runtime.stop();
         m_shutdownCalled = true;
     }
 
 private:
     vshade::script::NativeScriptRegistry m_registry;
     vshade::scene::Scene m_scene{"Scripted application"};
-    vshade::script::NativeScriptSystem m_scripts;
+    vshade::scene::SceneRuntime m_runtime;
     std::size_t m_applicationUpdateCount = 0;
     bool m_shutdownCalled = false;
+};
+
+class AutomaticRuntimeApplicationTest final : public vshade::core::Application {
+public:
+    AutomaticRuntimeApplicationTest()
+        : Application({
+              .window = {
+                  .title = "Automatic scene runtime test",
+                  .width = 64,
+                  .height = 64,
+                  .vsync = false,
+                  .visible = false,
+              },
+              .audio = {.enableDevice = false},
+          }) {}
+
+    [[nodiscard]] const vshade::scene::Scene& testScene() const noexcept {
+        return m_scene;
+    }
+
+protected:
+    void onStart() override {
+        InlineMovementScript::reset();
+        scripts().registerType<InlineMovementScript>("AutomaticMovement");
+        m_scene.create("Actor").add<vshade::scene::ScriptComponent>(
+            vshade::scene::ScriptComponent{{{.typeName = "AutomaticMovement"}}}
+        );
+        playScene(m_scene);
+    }
+
+    void onUpdate(float) override {
+        if (InlineMovementScript::updateCount > 0) close();
+    }
+
+private:
+    vshade::scene::Scene m_scene{"Automatic runtime"};
 };
 
 } // namespace
@@ -149,6 +203,15 @@ TEST_CASE("ScriptedApplicationTest dispatches scripts through application hooks"
     }
 }
 
+TEST_CASE("Application automatically forwards its active SceneRuntime",
+          "[scripting][application][scene-runtime][opengl]") {
+    AutomaticRuntimeApplicationTest application;
+    REQUIRE(application.run() == 0);
+    CHECK(InlineMovementScript::createCount == 1);
+    CHECK(InlineMovementScript::updateCount > 0);
+    CHECK(InlineMovementScript::destroyCount == 1);
+}
+
 TEST_CASE("Native script registry creates user script classes", "[scripting]") {
     vshade::script::NativeScriptRegistry registry;
     registry.registerType<InlineMovementScript>("InlineMovement");
@@ -170,6 +233,33 @@ TEST_CASE("Native script registry creates user script classes", "[scripting]") {
         [] { return std::unique_ptr<vshade::script::NativeScript>{}; }
     );
     CHECK_THROWS_AS(registry.create("Null"), std::runtime_error);
+}
+
+TEST_CASE("SceneRuntime supplies scripts with typed gameplay context", "[scripting][scene-runtime]") {
+    ContextScript::receivedServices = false;
+    ContextScript::spawned = false;
+    ContextScript::physicsAvailable = false;
+    ContextScript::sceneName.clear();
+
+    vshade::core::EngineServices services({.enableDevice = false});
+    services.scripts().registerType<ContextScript>("ContextScript");
+    vshade::scene::Scene scene("Context world");
+    scene.create("Controller").add<vshade::scene::ScriptComponent>(
+        vshade::scene::ScriptComponent{{{.typeName = "ContextScript"}}}
+    );
+    vshade::scene::SceneRuntime runtime(services, {
+        .physics2D = false,
+        .physics3D = false,
+        .rendering = false,
+        .audio = false,
+    });
+
+    runtime.play(scene);
+    CHECK(ContextScript::receivedServices);
+    CHECK(ContextScript::spawned);
+    CHECK(ContextScript::physicsAvailable);
+    CHECK(ContextScript::sceneName == "Context world");
+    runtime.stop();
 }
 
 TEST_CASE("Native script system dispatches lifecycle and synchronizes bindings", "[scripting]") {
@@ -195,6 +285,8 @@ TEST_CASE("Native script system dispatches lifecycle and synchronizes bindings",
     system.attachScene(scene);
     CHECK(system.hasAttachedScene());
     CHECK(system.instanceCount() == 1);
+    REQUIRE(system.diagnostics().size() == 1);
+    CHECK(system.diagnostics()[0].code == "script.backend_unavailable");
     CHECK(InlineMovementScript::createCount == 1);
     CHECK(InlineMovementScript::createdWithEntity);
     CHECK_THROWS_AS(system.attachScene(scene), std::logic_error);
@@ -240,6 +332,58 @@ TEST_CASE("Native script attachment rolls back an unknown type", "[scripting]") 
     CHECK_THROWS_AS(system.attachScene(scene), std::out_of_range);
     CHECK_FALSE(system.hasAttachedScene());
     CHECK(system.instanceCount() == 0);
+}
+
+TEST_CASE("SceneRuntime owns one explicit play-mode lifecycle", "[scripting][scene-runtime]") {
+    vshade::script::NativeScriptRegistry registry;
+    vshade::scene::Scene scene("Runtime lifecycle");
+    vshade::scene::SceneRuntime runtime(registry);
+
+    CHECK_FALSE(runtime.isPlaying());
+    CHECK(runtime.scene() == nullptr);
+    CHECK_THROWS_AS(runtime.update(0.0F), std::logic_error);
+    CHECK_THROWS_AS(runtime.fixedUpdate(0.0F), std::logic_error);
+
+    runtime.play(scene);
+    CHECK(runtime.isPlaying());
+    CHECK(runtime.scene() == &scene);
+    CHECK(runtime.nativeScripts().hasAttachedScene());
+    CHECK_THROWS_AS(runtime.play(scene), std::logic_error);
+
+    runtime.update(0.0F);
+    runtime.fixedUpdate(0.001F);
+    runtime.stop();
+    runtime.stop();
+    CHECK_FALSE(runtime.isPlaying());
+    CHECK(runtime.scene() == nullptr);
+    CHECK_FALSE(runtime.nativeScripts().hasAttachedScene());
+}
+
+TEST_CASE("SceneRuntime invokes user systems at deterministic phases", "[scene-runtime]") {
+    vshade::script::NativeScriptRegistry registry;
+    vshade::scene::Scene scene("Phases");
+    vshade::scene::SceneRuntime runtime(registry);
+    std::vector<std::string> phases;
+    const auto record = [&phases](const char* name) {
+        return [&phases, name](vshade::scene::Scene&, float) {
+            phases.emplace_back(name);
+        };
+    };
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::BeforeUpdate, record("before update"));
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::AfterUpdate, record("after update"));
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::BeforePhysics, record("before physics"));
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::AfterPhysics, record("after physics"));
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::BeforeRender, record("before render"));
+    runtime.addSystem(vshade::scene::SceneRuntimePhase::AfterRender, record("after render"));
+
+    runtime.play(scene);
+    runtime.update(0.1F);
+    runtime.fixedUpdate(0.02F);
+    CHECK_FALSE(runtime.render(64, 64));
+    CHECK(phases == std::vector<std::string>{
+        "before update", "after update", "before physics",
+        "after physics", "before render", "after render",
+    });
 }
 
 TEST_CASE("Script components duplicate and round-trip through scene JSON", "[scripting][scene]") {

@@ -27,6 +27,21 @@ Quat fromAxisAngle(const Vec3& axis, const float angleRadians) {
     return glm::angleAxis(angleRadians, glm::normalize(axis));
 }
 
+Quat lookRotation(const Vec3& direction, const Vec3& upDirection) {
+    if (glm::dot(direction, direction) <= std::numeric_limits<float>::epsilon() ||
+        glm::dot(upDirection, upDirection) <= std::numeric_limits<float>::epsilon()) {
+        throw std::invalid_argument("Look direction and up axis must not be zero");
+    }
+    const Vec3 normalizedDirection = glm::normalize(direction);
+    const Vec3 normalizedUp = glm::normalize(upDirection);
+    if (glm::dot(glm::cross(normalizedDirection, normalizedUp),
+                 glm::cross(normalizedDirection, normalizedUp)) <=
+        std::numeric_limits<float>::epsilon()) {
+        throw std::invalid_argument("Look direction and up axis cannot be parallel");
+    }
+    return normalize(glm::quatLookAtRH(normalizedDirection, normalizedUp));
+}
+
 Quat normalize(const Quat& quaternion) {
     if (glm::dot(quaternion, quaternion) <= std::numeric_limits<float>::epsilon()) {
         throw std::invalid_argument("Quaternion must not have zero length");

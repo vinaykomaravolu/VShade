@@ -3,6 +3,7 @@
 #include "asset/loader/AudioLoader.hpp"
 #include "asset/loader/MeshLoader.hpp"
 #include "asset/loader/ModelLoader.hpp"
+#include "asset/loader/PrefabLoader.hpp"
 #include "asset/loader/SceneLoader.hpp"
 #include "asset/loader/ShaderLoader.hpp"
 #include "asset/loader/TextureLoader.hpp"
@@ -12,6 +13,7 @@
 #include "renderer/Shader.hpp"
 #include "renderer/Texture.hpp"
 #include "scene/Scene.hpp"
+#include "scene/Prefab.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -50,6 +52,7 @@ AssetManager::AssetManager() {
     registerAssetLoader<renderer::Mesh>(std::make_shared<MeshLoader>());
     registerAssetLoader<renderer::Model>(std::make_shared<ModelLoader>());
     registerAssetLoader<scene::Scene>(std::make_shared<SceneLoader>());
+    registerAssetLoader<scene::Prefab>(std::make_shared<PrefabLoader>());
 }
 
 void AssetManager::registerLoaderErased(
@@ -63,22 +66,57 @@ void AssetManager::registerAssetErased(AssetMetadata metadata) {
     m_registry.registerAsset(std::move(metadata));
 }
 
-AssetId AssetManager::loadErased(
+AssetMetadata AssetManager::referenceErased(
     const std::type_index type,
     const std::filesystem::path& path
 ) {
     const std::filesystem::path normalizedPath = normalizedAssetPath(path);
-    const std::optional<AssetMetadata> registered = m_registry.find(normalizedPath);
-    const AssetId id = registered.has_value()
-        ? registered->id
-        : assetIdForPath(normalizedPath);
-
-    if (!registered.has_value()) {
-        m_registry.registerAsset({.id = id, .sourcePath = normalizedPath});
+    if (const std::optional<AssetMetadata> registered = m_registry.find(normalizedPath)) {
+        if (const auto loaded = m_assets.find(registered->id);
+            loaded != m_assets.end() && loaded->second.type != type) {
+            throw std::logic_error("An asset path is already used by another resource type");
+        }
+        return *registered;
     }
 
-    loadErased(type, id);
-    return id;
+    AssetMetadata metadata{
+        .id = assetIdForPath(normalizedPath),
+        .sourcePath = normalizedPath,
+    };
+    m_registry.registerAsset(metadata);
+    return metadata;
+}
+
+void AssetManager::registerReferenceErased(
+    const std::type_index type,
+    AssetMetadata metadata
+) {
+    const std::filesystem::path normalizedPath = normalizedAssetPath(metadata.sourcePath);
+    const AssetId expectedId = assetIdForPath(normalizedPath);
+    if (metadata.id != expectedId) {
+        throw std::invalid_argument("Asset reference ID does not match its normalized path");
+    }
+    if (const auto existing = m_registry.find(metadata.id)) {
+        if (existing->sourcePath != normalizedPath) {
+            throw std::logic_error("Asset reference ID collides with another path");
+        }
+    } else {
+        metadata.sourcePath = normalizedPath;
+        m_registry.registerAsset(std::move(metadata));
+    }
+    if (const auto loaded = m_assets.find(expectedId);
+        loaded != m_assets.end() && loaded->second.type != type) {
+        throw std::logic_error("An asset ID is already loaded as another type");
+    }
+}
+
+AssetId AssetManager::loadErased(
+    const std::type_index type,
+    const std::filesystem::path& path
+) {
+    const AssetMetadata metadata = referenceErased(type, path);
+    loadErased(type, metadata.id);
+    return metadata.id;
 }
 
 void AssetManager::loadErased(const std::type_index type, const AssetId id) {
@@ -179,6 +217,17 @@ bool AssetManager::unregisterAssetErased(
 
 void AssetManager::clear() noexcept {
     m_assets.clear();
+}
+
+void AssetManager::saveCatalog(const std::filesystem::path& path) const {
+    m_registry.save(path);
+}
+
+void AssetManager::loadCatalog(const std::filesystem::path& path) {
+    if (!m_assets.empty()) {
+        throw std::logic_error("Cannot replace the asset catalog while resources are loaded");
+    }
+    m_registry.load(path);
 }
 
 std::size_t AssetManager::size() const noexcept {

@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -407,6 +408,10 @@ void Renderer3D::beginScene(const Camera& camera) {
     rendererState.sceneActive = true;
 }
 
+Renderer3DSceneScope Renderer3D::scopedScene(const Camera& camera) {
+    return Renderer3DSceneScope(camera);
+}
+
 void Renderer3D::setDirectionalLight(const DirectionalLight& light) {
     Lighting lighting = state().lighting;
     lighting.clearDirectionalLights();
@@ -557,6 +562,66 @@ void Renderer3D::endScene() {
 
 const Renderer3DStats& Renderer3D::stats() noexcept {
     return state().completedStats;
+}
+
+Renderer3DSceneScope::Renderer3DSceneScope(const Camera& camera) {
+    Renderer3D::beginScene(camera);
+}
+
+Renderer3DSceneScope::~Renderer3DSceneScope() noexcept {
+    if (m_active) {
+        try {
+            Renderer3D::endScene();
+        } catch (...) {
+            // Destructors cannot surface renderer failures during stack unwinding.
+        }
+    }
+}
+
+Renderer3DSceneScope::Renderer3DSceneScope(
+    Renderer3DSceneScope&& other
+) noexcept : m_active(std::exchange(other.m_active, false)) {}
+
+Renderer3DSceneScope& Renderer3DSceneScope::operator=(
+    Renderer3DSceneScope&& other
+) noexcept {
+    if (this != &other) {
+        if (m_active) {
+            try { Renderer3D::endScene(); } catch (...) {}
+        }
+        m_active = std::exchange(other.m_active, false);
+    }
+    return *this;
+}
+
+void Renderer3DSceneScope::setLighting(const Lighting& lighting) {
+    if (!m_active) throw std::logic_error("Renderer3D scene scope is finished");
+    Renderer3D::setLighting(lighting);
+}
+
+void Renderer3DSceneScope::draw(
+    const math::Transform& transform,
+    const Model& model,
+    const DrawParameters& parameters
+) {
+    if (!m_active) throw std::logic_error("Renderer3D scene scope is finished");
+    Renderer3D::drawModel(transform, model, parameters);
+}
+
+void Renderer3DSceneScope::draw(
+    const math::Transform& transform,
+    const Mesh& mesh,
+    const Material& material,
+    const DrawParameters& parameters
+) {
+    if (!m_active) throw std::logic_error("Renderer3D scene scope is finished");
+    Renderer3D::drawMesh(transform, mesh, material, parameters);
+}
+
+void Renderer3DSceneScope::finish() {
+    if (!m_active) throw std::logic_error("Renderer3D scene scope is finished");
+    Renderer3D::endScene();
+    m_active = false;
 }
 
 void Renderer3D::shutdown() noexcept {

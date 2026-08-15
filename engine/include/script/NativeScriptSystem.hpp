@@ -1,17 +1,23 @@
 #pragma once
 
+#include "core/Result.hpp"
+
 #include <cstddef>
 #include <memory>
+#include <vector>
 
 namespace vshade::scene {
 class Entity;
 class Scene;
+class SceneRuntime;
 }
+namespace vshade::core { class EngineServices; }
 
 namespace vshade::script {
 
 class NativeScriptRegistry;
 class NativeScript;
+class ScriptContext;
 
 /**
  * @brief Owns native C++ script instances and dispatches their lifecycle.
@@ -37,6 +43,13 @@ public:
      */
     void attachScene(scene::Scene& scene);
 
+    /** @brief Attaches with the complete game-facing runtime context. */
+    void attachScene(
+        scene::Scene& scene,
+        core::EngineServices& services,
+        scene::SceneRuntime& runtime
+    );
+
     /**
      * @brief Synchronizes bindings and invokes onUpdate() on enabled instances.
      * Newly added bindings receive onCreate() before their first update.
@@ -61,8 +74,11 @@ public:
     /** @brief Returns the number of live native C++ script instances. */
     [[nodiscard]] std::size_t instanceCount() const noexcept;
 
+    /** @brief Reports preserved bindings whose runtime backend is unavailable. */
+    [[nodiscard]] const std::vector<core::Diagnostic>& diagnostics() const noexcept;
+
 private:
-    static void attachInstance(NativeScript& script, scene::Entity entity) noexcept;
+    static void attachInstance(NativeScript& script, ScriptContext context) noexcept;
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

@@ -193,6 +193,22 @@ TEST_CASE("PhysicsSystem3D runs a simple falling-ball scene", "[physics][physics
     // bodies. It is normally called once after a Scene is loaded.
     vshade::physics::PhysicsSystem3D physics({.maxBodies = 1'024});
     physics.rebuild(scene);
+    REQUIRE(physics.body(ball).has_value());
+    CHECK_NOTHROW(physics.applyImpulse(ball, {0.0F, 0.0F, 0.0F}));
+    const auto sceneHit = physics.raycast({
+        .origin = {0.0F, 6.0F, 0.0F},
+        .displacement = {0.0F, -10.0F, 0.0F},
+    });
+    REQUIRE(sceneHit.has_value());
+    CHECK(sceneHit->entity == ball);
+    bool receivedSceneContact = false;
+    physics.setContactListener(
+        [&](const vshade::physics::SceneContactEvent3D& event) {
+            receivedSceneContact =
+                (event.first == ball && event.second == floor) ||
+                (event.first == floor && event.second == ball);
+        }
+    );
 
     // Run physics at a fixed rate. Jolt's dynamic pose is written back into
     // the ball's TransformComponent so the renderer sees the simulated pose.
@@ -204,6 +220,7 @@ TEST_CASE("PhysicsSystem3D runs a simple falling-ball scene", "[physics][physics
         ball.component<vshade::scene::TransformComponent>().transform;
     CHECK(transform.position().y == Catch::Approx(1.0F).margin(0.04F));
     CHECK(transform.position().z == Catch::Approx(0.0F));
+    CHECK(receivedSceneContact);
     // Physics updates position and rotation, but deliberately preserves the
     // visual scale stored by the Scene.
     CHECK(transform.scale().x == Catch::Approx(2.0F));
@@ -212,4 +229,5 @@ TEST_CASE("PhysicsSystem3D runs a simple falling-ball scene", "[physics][physics
 
     ball.removeComponent<vshade::scene::Collider3DComponent>();
     CHECK_NOTHROW(physics.update(scene, fixedTimeStep));
+    CHECK_FALSE(physics.body(ball).has_value());
 }

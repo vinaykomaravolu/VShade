@@ -176,6 +176,22 @@ TEST_CASE("PhysicsSystem2D runs a simple platformer scene", "[physics][physics2d
     // Build runtime Box2D bodies after loading or constructing the Scene.
     vshade::physics::PhysicsSystem2D physics;
     physics.rebuild(scene);
+    REQUIRE(physics.body(player).has_value());
+    CHECK_NOTHROW(physics.applyImpulse(player, {0.0F, 0.0F}));
+    const auto sceneHit = physics.raycast({
+        .origin = {0.0F, 6.0F},
+        .displacement = {0.0F, -10.0F},
+    });
+    REQUIRE(sceneHit.has_value());
+    CHECK(sceneHit->entity == player);
+    bool receivedSceneContact = false;
+    physics.setContactListener(
+        [&](const vshade::physics::SceneContactEvent2D& event) {
+            receivedSceneContact =
+                (event.first == player && event.second == floor) ||
+                (event.first == floor && event.second == player);
+        }
+    );
 
     // A game calls update from its fixed-update loop. Dynamic body transforms
     // are copied back to their Scene entities after each Box2D step.
@@ -187,9 +203,11 @@ TEST_CASE("PhysicsSystem2D runs a simple platformer scene", "[physics][physics2d
         player.component<vshade::scene::TransformComponent>().transform;
     CHECK(transform.position().y == Catch::Approx(1.0F).margin(0.03F));
     CHECK(transform.position().z == Catch::Approx(7.0F));
+    CHECK(receivedSceneContact);
 
     // Removing a required physics component causes update() to remove the
     // corresponding runtime body safely.
     player.removeComponent<vshade::scene::Collider2DComponent>();
     CHECK_NOTHROW(physics.update(scene, fixedTimeStep));
+    CHECK_FALSE(physics.body(player).has_value());
 }

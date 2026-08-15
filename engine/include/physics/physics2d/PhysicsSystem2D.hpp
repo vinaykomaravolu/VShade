@@ -1,14 +1,31 @@
 #pragma once
 
 #include "physics/physics2d/PhysicsWorld2D.hpp"
+#include "scene/Entity.hpp"
 
 #include <memory>
+#include <optional>
 
 namespace vshade::scene {
 class Scene;
 }
 
 namespace vshade::physics {
+
+/** @brief A ray hit mapped back to the scene entity that owns the body. */
+struct SceneRaycastHit2D {
+    scene::Entity entity;
+    RaycastHit2D physics;
+};
+
+struct SceneContactEvent2D {
+    scene::Entity first;
+    scene::Entity second;
+    math::Vec2 normal{0.0F};
+    math::Vec2 point{0.0F};
+    ContactPhase phase = ContactPhase::Began;
+};
+using SceneContactListener2D = std::function<void(const SceneContactEvent2D&)>;
 
 /** @brief Synchronizes scene components with their runtime Box2D bodies. */
 class PhysicsSystem2D final {
@@ -32,6 +49,13 @@ public:
      */
     void update(scene::Scene& scene, float fixedDeltaTime);
     void clear();
+
+    [[nodiscard]] std::optional<PhysicsBody2D> body(scene::Entity entity) const noexcept;
+    void applyImpulse(scene::Entity entity, const math::Vec2& impulse);
+    [[nodiscard]] std::optional<SceneRaycastHit2D> raycast(
+        const RaycastQuery2D& query
+    ) const;
+    void setContactListener(SceneContactListener2D listener);
 
     [[nodiscard]] PhysicsWorld2D& world() noexcept;
     [[nodiscard]] const PhysicsWorld2D& world() const noexcept;

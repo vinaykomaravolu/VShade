@@ -1,16 +1,19 @@
 set(VSHADE_SOURCES
     src/audio/AudioClip.cpp
     src/audio/AudioEngine.cpp
+    src/audio/AudioService.cpp
     src/asset/AssetManager.cpp
     src/asset/AssetRegistry.cpp
     src/asset/loader/MeshLoader.cpp
     src/asset/loader/ModelLoader.cpp
+    src/asset/loader/PrefabLoader.cpp
     src/asset/loader/GltfLoaderUtils.cpp
     src/asset/loader/AudioLoader.cpp
     src/asset/loader/SceneLoader.cpp
     src/asset/loader/ShaderLoader.cpp
     src/asset/loader/TextureLoader.cpp
     src/core/Application.cpp
+    src/core/EngineServices.cpp
     src/core/Filesystem.cpp
     src/core/Log.cpp
     src/core/Time.cpp
@@ -44,11 +47,16 @@ set(VSHADE_SOURCES
     src/renderer/Texture.cpp
     src/renderer/VertexArray.cpp
     src/scene/Entity.cpp
+    src/scene/Prefab.cpp
+    src/scene/SceneAudioSystem.cpp
     src/scene/Scene.cpp
     src/scene/SceneComponentRegistry.cpp
     src/scene/SceneLightingSystem.cpp
+    src/scene/SceneRenderer.cpp
+    src/scene/SceneRuntime.cpp
     src/scene/SceneSerializer.cpp
     src/script/NativeScriptRegistry.cpp
+    src/script/ScriptContext.cpp
     src/script/NativeScriptSystem.cpp
 )
 

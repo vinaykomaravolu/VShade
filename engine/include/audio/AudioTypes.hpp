@@ -1,5 +1,7 @@
 #pragma once
 
+#include "math/Vector.hpp"
+
 namespace vshade::audio {
 
 /** @brief Controls how the audio backend is initialized. */
@@ -45,6 +47,11 @@ struct AudioPlaybackSettings {
     float volume = 1.0F;
     float pitch = 1.0F;
     bool looping = false;
+    bool spatial = false;
+    math::Vec3 position{0.0F};
+    AttenuationModel attenuation = AttenuationModel::Inverse;
+    float minimumDistance = 1.0F;
+    float maximumDistance = 100.0F;
 };
 
 } // namespace vshade::audio

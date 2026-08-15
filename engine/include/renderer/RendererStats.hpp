@@ -24,6 +24,11 @@ struct DebugFrameStats {
     float frameTimeMilliseconds = 0.0F;
     RenderStats rendering{};
     std::uint64_t entityCount = 0;
+    std::uint64_t modelDrawCalls = 0;
+    std::uint64_t meshCount = 0;
+    std::uint64_t spriteDrawCalls = 0;
+    std::uint64_t quadCount = 0;
+    std::uint64_t debugLineCount = 0;
 };
 
 } // namespace vshade::renderer

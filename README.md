@@ -14,7 +14,10 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - EnTT scenes with stable entity UUIDs, duplication, and reflect-cpp-powered
   automatic JSON serialization for custom components;
 - a static engine library;
-- a minimal sandbox application.
+- application-owned assets, global audio, type registration, and scene runtime;
+- component-driven cameras, models, lighting, physics, audio, and native scripts;
+- persistent typed asset references, scene instancing, hierarchy, and prefabs;
+- a minimal falling-ball sandbox using the game-facing API.
 
 The generated [API reference](https://vinaykomaravolu.github.io/VShade/) is
 published with GitHub Pages. Documentation source and local build instructions
@@ -22,7 +25,8 @@ are in [docs/api.md](docs/api.md). The renderer architecture and lifecycle are
 described in [docs/renderer.md](docs/renderer.md). Offscreen golden-image tests
 are documented in [docs/visual-testing.md](docs/visual-testing.md).
 Scene entities and the JSON format are documented in
-[docs/scene.md](docs/scene.md).
+[docs/scene.md](docs/scene.md). The recommended game-author workflow is in
+[docs/game-api.md](docs/game-api.md).
 
 ## Get the dependencies
 
@@ -42,8 +46,9 @@ cmake -S . -B build
 cmake --build build --config Debug
 ```
 
-The sandbox renders a lit, textured cube. Use WASD to move, hold the right
-mouse button to look, scroll to change speed, and press Escape to exit.
+The sandbox loads `ball.glb` and `round_platform.glb`, streams
+`retroloop.mp3`, and lets `SceneRuntime` render and simulate six luminous
+falling balls. Press R to reset the balls and Escape to exit.
 
 ## Test
 
@@ -81,29 +86,32 @@ add_executable(MyGame main.cpp)
 target_link_libraries(MyGame PRIVATE VShade::Engine)
 ```
 
-Then include the public API with:
+For ordinary game code, include the curated API:
 
 ```cpp
-#include <core/Application.hpp>
-#include <core/EntryPoint.hpp>
+#include <vshade/Game.hpp>
 ```
 
 A game supplies behavior by deriving from `Application`:
 
 ```cpp
-class MyGame final : public vshade::core::Application {
+class MyGame final : public vshade::Application {
 protected:
-    void onFixedUpdate(float fixedDeltaTime) override {
-        // Update fixed-step simulation or physics here.
-    }
-
-    void onUpdate(float deltaTime) override {
-        // Update the active scene here.
+    void onStart() override {
+        types().script<PlayerController>("Game.PlayerController");
+        playScene("assets/scenes/level-one.vscene");
+        audio().playMusic("assets/audio/theme.ogg", {.looping = true});
     }
 };
 
-SHADE_ENGINE_MAIN(MyGame)
+VSHADE_GAME(MyGame)
 ```
+
+The application automatically advances scripts, fixed-step physics, scene
+audio, model/sprite rendering, lighting, and debug drawing. Override frame
+hooks only for application-level behavior. Direct renderer, physics-world,
+audio-engine, asset-loader, and EnTT-style scene APIs remain available for
+advanced systems.
 
 Input is stored once per frame, so it does not need a `Window` argument:
 

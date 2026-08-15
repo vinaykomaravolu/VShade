@@ -6,6 +6,7 @@
 #include "scene/Scene.hpp"
 #include "script/NativeScript.hpp"
 #include "script/NativeScriptRegistry.hpp"
+#include "script/ScriptContext.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -54,8 +55,9 @@ struct NativeScriptSystem::Impl {
     explicit Impl(NativeScriptRegistry& initialRegistry) noexcept
         : registry(&initialRegistry) {}
 
-    [[nodiscard]] std::vector<DesiredScript> desiredScripts() const {
+    [[nodiscard]] std::vector<DesiredScript> desiredScripts() {
         std::vector<DesiredScript> desired;
+        diagnostics.clear();
         auto view = attachedScene->view<
             const scene::UUIDComponent,
             const scene::ScriptComponent
@@ -65,6 +67,15 @@ struct NativeScriptSystem::Impl {
             for (std::size_t index = 0; index < component.scripts.size(); ++index) {
                 const scene::ScriptBinding& binding = component.scripts[index];
                 if (binding.backend != ScriptBackend::NativeCpp) {
+                    if (binding.enabled) {
+                        diagnostics.push_back({
+                            .severity = core::DiagnosticSeverity::Warning,
+                            .code = "script.backend_unavailable",
+                            .message = "Script backend is unavailable for binding '" +
+                                binding.typeName + "' on entity " +
+                                std::to_string(uuid.uuid),
+                        });
+                    }
                     continue;
                 }
                 desired.push_back({
@@ -110,7 +121,12 @@ struct NativeScriptSystem::Impl {
             }
 
             std::unique_ptr<NativeScript> script = registry->create(desiredScript.typeName);
-            NativeScriptSystem::attachInstance(*script, desiredScript.entity);
+            NativeScriptSystem::attachInstance(*script, ScriptContext(
+                desiredScript.entity,
+                *attachedScene,
+                services,
+                runtime
+            ));
             script->onCreate();
             instances.push_back({
                 .entityUuid = desiredScript.entityUuid,
@@ -137,7 +153,10 @@ struct NativeScriptSystem::Impl {
 
     NativeScriptRegistry* registry = nullptr;
     scene::Scene* attachedScene = nullptr;
+    core::EngineServices* services = nullptr;
+    scene::SceneRuntime* runtime = nullptr;
     std::vector<ScriptInstance> instances;
+    std::vector<core::Diagnostic> diagnostics;
 };
 
 NativeScriptSystem::NativeScriptSystem(NativeScriptRegistry& registry)
@@ -159,9 +178,25 @@ NativeScriptSystem& NativeScriptSystem::operator=(NativeScriptSystem&& other) no
 
 void NativeScriptSystem::attachInstance(
     NativeScript& script,
-    const scene::Entity entity
+    ScriptContext context
 ) noexcept {
-    script.attach(entity);
+    script.attach(context);
+}
+
+void NativeScriptSystem::attachScene(
+    scene::Scene& scene,
+    core::EngineServices& services,
+    scene::SceneRuntime& runtime
+) {
+    m_impl->services = &services;
+    m_impl->runtime = &runtime;
+    try {
+        attachScene(scene);
+    } catch (...) {
+        m_impl->services = nullptr;
+        m_impl->runtime = nullptr;
+        throw;
+    }
 }
 
 void NativeScriptSystem::attachScene(scene::Scene& scene) {
@@ -225,6 +260,8 @@ void NativeScriptSystem::detachScene() noexcept {
     }
     m_impl->instances.clear();
     m_impl->attachedScene = nullptr;
+    m_impl->services = nullptr;
+    m_impl->runtime = nullptr;
 }
 
 bool NativeScriptSystem::hasAttachedScene() const noexcept {
@@ -233,6 +270,10 @@ bool NativeScriptSystem::hasAttachedScene() const noexcept {
 
 std::size_t NativeScriptSystem::instanceCount() const noexcept {
     return m_impl ? m_impl->instances.size() : 0;
+}
+
+const std::vector<core::Diagnostic>& NativeScriptSystem::diagnostics() const noexcept {
+    return m_impl->diagnostics;
 }
 
 } // namespace vshade::script

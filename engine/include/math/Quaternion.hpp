@@ -42,6 +42,12 @@ using DQuat = glm::dquat;
  */
 [[nodiscard]] Quat fromAxisAngle(const Vec3& axis, float angleRadians);
 
+/** @brief Rotates engine forward (-Z) toward a direction with a chosen up axis. */
+[[nodiscard]] Quat lookRotation(
+    const Vec3& direction,
+    const Vec3& up = {0.0F, 1.0F, 0.0F}
+);
+
 /**
  * @brief Returns a unit-length quaternion.
  * @param quaternion Quaternion to normalize.

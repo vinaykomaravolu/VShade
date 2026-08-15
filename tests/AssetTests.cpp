@@ -18,6 +18,7 @@
 #include <renderer/Shader.hpp>
 #include <renderer/Texture.hpp>
 #include <scene/Scene.hpp>
+#include <scene/Prefab.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -97,6 +98,38 @@ TEST_CASE("Asset manager loads and reuses typed resources", "[asset]") {
 
     // Existing shared owners remain alive after the manager releases its copy.
     CHECK(resource->text == "assets/player.txt");
+}
+
+TEST_CASE("Asset references resolve in a fresh manager and catalogs persist", "[asset]") {
+    const std::filesystem::path catalog =
+        std::filesystem::path(VSHADE_FILESYSTEM_OUTPUT_DIR) / "asset-catalog.json";
+    std::filesystem::create_directories(catalog.parent_path());
+
+    vshade::asset::AssetReference<TextAsset> reference;
+    {
+        vshade::asset::AssetManager assets;
+        assets.registerLoader<TextAsset>([](const std::filesystem::path& path) {
+            return std::make_shared<TextAsset>(TextAsset{path.generic_string()});
+        });
+        const auto resource = assets.loadResource<TextAsset>(
+            "assets/characters/../player.txt"
+        );
+        REQUIRE(resource);
+        CHECK(resource->text == "assets/player.txt");
+        CHECK(resource.handle().valid());
+        reference = resource.reference();
+        assets.saveCatalog(catalog);
+    }
+
+    vshade::asset::AssetManager fresh;
+    fresh.registerLoader<TextAsset>([](const std::filesystem::path& path) {
+        return std::make_shared<TextAsset>(TextAsset{path.generic_string()});
+    });
+    fresh.loadCatalog(catalog);
+    const auto resolved = fresh.loadResource(reference);
+    REQUIRE(resolved);
+    CHECK(resolved.handle() == reference.handle());
+    CHECK(resolved->text == "assets/player.txt");
 }
 
 TEST_CASE("Asset manager validates loaders and resource types", "[asset]") {
@@ -210,6 +243,17 @@ TEST_CASE("Default scene loader deserializes a scene asset", "[asset]") {
     REQUIRE(scene);
     CHECK(scene->name() == "Example");
     CHECK(assets.registeredAssetCount() == 1);
+}
+
+TEST_CASE("Default prefab loader creates reusable scene templates", "[asset][prefab]") {
+    vshade::asset::AssetManager assets;
+    const auto prefab = assets.loadResource<vshade::scene::Prefab>(
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "scene" / "scene_example.json"
+    );
+    REQUIRE(prefab);
+    CHECK(prefab->scene().name() == "Example");
+    vshade::scene::Scene destination("Prefab destination");
+    CHECK(destination.instantiate(*prefab));
 }
 
 TEST_CASE("Default renderer loaders create texture shader and mesh resources", "[asset][opengl]") {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "scene/Entity.hpp"
+#include "script/ScriptContext.hpp"
 
 namespace vshade::script {
 
@@ -40,30 +40,34 @@ public:
 
     /** @brief Returns the entity that owns this script instance. */
     [[nodiscard]] scene::Entity entity() const noexcept {
-        return m_entity;
+        return m_context.entity();
     }
+
+    /** @brief Returns the runtime context for scene and service access. */
+    [[nodiscard]] ScriptContext& context() noexcept { return m_context; }
+    [[nodiscard]] const ScriptContext& context() const noexcept { return m_context; }
 
 protected:
     /** @brief Returns a mutable component belonging to the owning entity. */
     template<typename Component>
     [[nodiscard]] Component& component() {
-        return m_entity.component<Component>();
+        return entity().component<Component>();
     }
 
     /** @brief Returns a read-only component belonging to the owning entity. */
     template<typename Component>
     [[nodiscard]] const Component& component() const {
-        return m_entity.component<Component>();
+        return entity().component<Component>();
     }
 
 private:
     friend class NativeScriptSystem;
 
-    void attach(const scene::Entity entity) noexcept {
-        m_entity = entity;
+    void attach(ScriptContext context) noexcept {
+        m_context = context;
     }
 
-    scene::Entity m_entity;
+    ScriptContext m_context;
 };
 
 } // namespace vshade::script

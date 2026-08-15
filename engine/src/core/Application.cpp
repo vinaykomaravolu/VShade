@@ -1,8 +1,15 @@
 #include "core/Application.hpp"
 
+#include "asset/AssetManager.hpp"
+#include "audio/AudioService.hpp"
+#include "core/EngineServices.hpp"
+#include "core/TypeRegistry.hpp"
 #include "core/Log.hpp"
 #include "core/Time.hpp"
 #include "renderer/Renderer.hpp"
+#include "scene/Scene.hpp"
+#include "scene/SceneRuntime.hpp"
+#include "script/NativeScriptRegistry.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -21,6 +28,12 @@ Application::Application(ApplicationConfig config)
 }
 
 Application::~Application() {
+    stopScene();
+    m_runtime.reset();
+    if (m_services) {
+        m_services->shutdown();
+    }
+    m_services.reset();
     renderer::Renderer::shutdown();
     m_window.reset();
     Log::shutdown();
@@ -44,11 +57,14 @@ int Application::run() {
             onWindowResize(width, height);
         });
 
+        m_services = std::make_unique<EngineServices>(m_config.audio);
+        m_runtime = std::make_unique<scene::SceneRuntime>(*m_services);
+
         Time::reset();
         double fixedAccumulator = 0.0;
         m_running = true;
-        onStart();
         shutdown_needed = true;
+        onStart();
 
         while (m_running && !m_window->shouldClose()) {
             m_window->pollEvents();
@@ -56,34 +72,52 @@ int Application::run() {
             fixedAccumulator += static_cast<double>(Time::deltaTime());
             while (fixedAccumulator >= static_cast<double>(m_config.fixedDeltaTime)) {
                 onFixedUpdate(m_config.fixedDeltaTime);
+                if (m_runtime->isPlaying()) {
+                    m_runtime->fixedUpdate(m_config.fixedDeltaTime);
+                }
                 fixedAccumulator -= static_cast<double>(m_config.fixedDeltaTime);
             }
 
-            // The application will forward these calls to its active scene
-            // once the scene system exists.
             onUpdate(Time::deltaTime());
+            if (m_runtime->isPlaying()) {
+                m_runtime->update(Time::deltaTime());
+            }
 
             renderer::Renderer::beginFrame();
+            if (m_runtime->isPlaying()) {
+                m_runtime->render(m_window->width(), m_window->height());
+            }
             onRender();
             renderer::Renderer::endFrame();
 
             m_window->swapBuffers();
         }
 
+        stopScene();
         shutdown_needed = false;
         onShutdown();
+
+        m_runtime.reset();
+        m_services->shutdown();
+        m_services.reset();
 
         m_running = false;
         ENGINE_INFO("VShade shutdown complete after {} frames", Time::frameCount());
         return 0;
     } catch (...) {
         if (shutdown_needed) {
-            shutdown_needed = false;
+            stopScene();
             try {
                 onShutdown();
             } catch (...) {
                 ENGINE_ERROR("Application shutdown hook threw an exception");
             }
+        }
+
+        m_runtime.reset();
+        if (m_services) {
+            m_services->shutdown();
+            m_services.reset();
         }
 
         m_running = false;
@@ -111,6 +145,74 @@ const platform::Window& Application::getWindow() const {
         throw std::logic_error("Window is only available while the application is running");
     }
     return *m_window;
+}
+
+platform::Window& Application::window() {
+    if (!m_window) {
+        throw std::logic_error("Window is only available while the application is running");
+    }
+    return *m_window;
+}
+
+const platform::Window& Application::window() const {
+    if (!m_window) {
+        throw std::logic_error("Window is only available while the application is running");
+    }
+    return *m_window;
+}
+
+EngineServices& Application::services() {
+    if (!m_services) {
+        throw std::logic_error("Engine services are only available while the application is running");
+    }
+    return *m_services;
+}
+
+asset::AssetManager& Application::assets() {
+    return services().assets();
+}
+
+audio::AudioService& Application::audio() {
+    return services().audio();
+}
+
+script::NativeScriptRegistry& Application::scripts() {
+    return services().scripts();
+}
+
+TypeRegistry& Application::types() { return services().types(); }
+
+scene::SceneRuntime& Application::runtime() {
+    if (!m_runtime) {
+        throw std::logic_error("Scene runtime is only available while the application is running");
+    }
+    return *m_runtime;
+}
+
+scene::Scene& Application::playScene(const std::filesystem::path& path) {
+    const auto sceneAsset = assets().loadResource<scene::Scene>(path);
+    std::unique_ptr<scene::Scene> instance = sceneAsset->instantiate();
+    stopScene();
+    m_ownedScene = std::move(instance);
+    runtime().play(*m_ownedScene);
+    return *m_ownedScene;
+}
+
+void Application::playScene(scene::Scene& sceneToPlay) {
+    stopScene();
+    m_ownedScene.reset();
+    runtime().play(sceneToPlay);
+}
+
+void Application::stopScene() noexcept {
+    if (m_runtime) {
+        m_runtime->stop();
+    }
+    m_ownedScene.reset();
+}
+
+scene::Scene* Application::activeScene() noexcept {
+    return m_runtime ? m_runtime->scene() : nullptr;
 }
 
 } // namespace vshade::core

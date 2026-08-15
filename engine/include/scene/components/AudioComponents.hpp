@@ -2,6 +2,7 @@
 
 #include "audio/AudioClip.hpp"
 #include "audio/AudioTypes.hpp"
+#include "asset/AssetReference.hpp"
 
 namespace vshade::scene {
 
@@ -15,6 +16,11 @@ struct AudioSourceComponent {
     bool looping = false;
     bool playOnStart = false;
     bool spatial = false;
+    /** @brief Preferred resolvable reference; clip remains a legacy ID fallback. */
+    asset::AssetReference<audio::AudioClip> clipAsset;
+    audio::AttenuationModel attenuation = audio::AttenuationModel::Inverse;
+    float minimumDistance = 1.0F;
+    float maximumDistance = 100.0F;
 };
 
 /** @brief Marks an entity transform as an audio listener. */

@@ -1,43 +1,21 @@
-#include <asset/AssetManager.hpp>
-#include <audio/AudioClip.hpp>
-#include <audio/AudioEngine.hpp>
-#include <audio/AudioTypes.hpp>
-#include <core/Application.hpp>
-#include <core/Assert.hpp>
-#include <core/EntryPoint.hpp>
+#include <vshade/Game.hpp>
+
 #include <core/Log.hpp>
-#include <core/Time.hpp>
 #include <input/Input.hpp>
-#include <physics/PhysicsTypes.hpp>
-#include <physics/physics3d/PhysicsBody3D.hpp>
-#include <physics/physics3d/PhysicsMaterial3D.hpp>
-#include <physics/physics3d/PhysicsShape3D.hpp>
-#include <physics/physics3d/PhysicsSystem3D.hpp>
-#include <renderer/Camera.hpp>
-#include <renderer/CameraController.hpp>
 #include <renderer/DebugDraw.hpp>
-#include <renderer/Model.hpp>
-#include <renderer/Renderer.hpp>
-#include <renderer/Renderer3D.hpp>
-#include <scene/Components.hpp>
-#include <scene/Entity.hpp>
-#include <scene/Scene.hpp>
-#include <scene/SceneLightingSystem.hpp>
 
 #include <array>
-#include <cstdint>
 #include <filesystem>
-#include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace {
 
 constexpr float ballRadius = 0.35F;
-// ball.glb has an imported 100x node scale; this produces a 0.35-unit ball.
 constexpr float ballModelScale = ballRadius / 100.0F;
 
-const std::array<vshade::math::Vec3, 6> ballSpawnPositions{
+const std::array<vshade::math::Vec3, 6> spawnPositions{
     vshade::math::Vec3{-1.35F, 2.0F, 0.2F},
     vshade::math::Vec3{-0.75F, 3.1F, -0.35F},
     vshade::math::Vec3{-0.15F, 4.2F, 0.25F},
@@ -46,7 +24,7 @@ const std::array<vshade::math::Vec3, 6> ballSpawnPositions{
     vshade::math::Vec3{1.45F, 7.5F, -0.15F},
 };
 
-const std::array<vshade::math::Vec3, 6> ballInitialVelocities{
+const std::array<vshade::math::Vec3, 6> initialVelocities{
     vshade::math::Vec3{-0.75F, 0.0F, 0.15F},
     vshade::math::Vec3{-0.5F, 0.0F, -0.2F},
     vshade::math::Vec3{-0.25F, 0.0F, 0.25F},
@@ -55,7 +33,7 @@ const std::array<vshade::math::Vec3, 6> ballInitialVelocities{
     vshade::math::Vec3{0.75F, 0.0F, -0.15F},
 };
 
-const std::array<vshade::math::Vec3, 6> ballLightColors{
+const std::array<vshade::math::Vec3, 6> lightColors{
     vshade::math::Vec3{1.0F, 0.18F, 0.12F},
     vshade::math::Vec3{1.0F, 0.55F, 0.12F},
     vshade::math::Vec3{0.3F, 1.0F, 0.25F},
@@ -64,217 +42,75 @@ const std::array<vshade::math::Vec3, 6> ballLightColors{
     vshade::math::Vec3{1.0F, 0.2F, 0.75F},
 };
 
-class SandboxApplication final : public vshade::core::Application {
+class SandboxApplication final : public vshade::Application {
 public:
     SandboxApplication()
-        : Application({
-              .window = {
-                  .title = "VShade - Falling Balls",
-                  .width = 1280,
-                  .height = 720,
-                  .fullscreen = false,
-                  .vsync = true,
-              },
-          }),
+        : Application({.window = {
+              .title = "VShade - Falling Balls",
+              .width = 1280,
+              .height = 720,
+              .fullscreen = false,
+              .vsync = true,
+          }}),
           m_scene("Falling Balls") {}
 
 protected:
     void onStart() override {
-        const std::filesystem::path assetDirectory = VSHADE_SANDBOX_ASSET_DIR;
-
-        const auto ballModelHandle = m_assets.load<vshade::renderer::Model>(
-            assetDirectory / "ball.glb"
+        const std::filesystem::path directory = VSHADE_SANDBOX_ASSET_DIR;
+        const auto ballModel = assets().reference<vshade::renderer::Model>(
+            directory / "ball.glb"
         );
-        const auto platformModelHandle = m_assets.load<vshade::renderer::Model>(
-            assetDirectory / "round_platform.glb"
+        const auto platformModel = assets().reference<vshade::renderer::Model>(
+            directory / "round_platform.glb"
         );
-        const auto musicHandle = m_assets.load<vshade::audio::AudioClip>(
-            assetDirectory / "retroloop.mp3"
-        );
-        m_ballModel = m_assets.get(ballModelHandle);
-        m_platformModel = m_assets.get(platformModelHandle);
-        m_music = m_assets.get(musicHandle);
-        ENGINE_ASSERT(m_ballModel != nullptr, "ball.glb must load");
-        ENGINE_ASSERT(m_platformModel != nullptr, "round_platform.glb must load");
-        ENGINE_ASSERT(m_music != nullptr, "retroloop.mp3 must load");
 
-        createPhysicsScene();
-
-        m_audio.initialize();
-        m_audio.setMasterVolume(0.65F);
-        m_audio.play(m_music, {
-            .bus = vshade::audio::AudioBus::Music,
-            .loadMode = vshade::audio::AudioLoadMode::Stream,
+        buildScene(ballModel, platformModel);
+        audio().setMasterVolume(0.65F);
+        audio().playMusic(directory / "retroloop.mp3", {
             .volume = 0.7F,
             .looping = true,
         });
 
-        m_camera.lookAt(
-            {7.0F, 5.5F, 8.0F},
-            {0.0F, 2.6F, 0.0F},
-            {0.0F, 1.0F, 0.0F}
+        runtime().addSystem(
+            vshade::scene::SceneRuntimePhase::BeforeRender,
+            [this](vshade::Scene&, float) { drawPlatformCollider(); }
         );
-        updateProjection(getWindow().width(), getWindow().height());
-        m_cameraController = std::make_unique<vshade::renderer::CameraController>(
-            m_camera,
-            vshade::renderer::CameraControllerConfig{
-                .movementSpeed = 3.0F,
-                .mouseSensitivity = 0.002F,
-                .scrollSpeedStep = 0.5F,
-                .requireRightMouseButton = true,
-            }
-        );
+        playScene(m_scene);
 
-        GAME_INFO(
-            "Loaded six moving point lights, ball.glb, round_platform.glb, "
-            "and streaming retroloop.mp3"
-        );
-        GAME_INFO(
-            "Controls: WASD move, right mouse look, R resets balls, "
-            "P toggles wireframe, Escape exits"
-        );
+        GAME_INFO("SceneRuntime now owns physics, lighting, models, audio, and debug flush");
+        GAME_INFO("Controls: R resets balls, Escape exits");
     }
 
-    void onUpdate(const float deltaTime) override {
+    void onUpdate(float) override {
         if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::Escape)) {
             close();
-        }
-        if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::P)) {
-            m_wireframe = !m_wireframe;
         }
         if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::R)) {
             resetBalls();
         }
-
-        ENGINE_ASSERT(
-            m_cameraController != nullptr,
-            "Camera controller must exist before updating"
-        );
-        const bool captureMouse = vshade::input::Input::isMouseButtonDown(
-            vshade::input::MouseButton::Right
-        );
-        getWindow().setCursorCaptured(captureMouse);
-        m_cameraController->update(deltaTime);
-    }
-
-    void onFixedUpdate(const float fixedDeltaTime) override {
-        m_physics.update(m_scene, fixedDeltaTime);
-    }
-
-    void onRender() override {
-        ENGINE_ASSERT(m_ballModel != nullptr, "Ball model must exist before rendering");
-        ENGINE_ASSERT(
-            m_platformModel != nullptr,
-            "Platform model must exist before rendering"
-        );
-
-        vshade::renderer::Renderer::setClearColor({0.025F, 0.035F, 0.06F, 1.0F});
-        vshade::renderer::Renderer::clear(
-            vshade::renderer::ClearFlags::Color |
-            vshade::renderer::ClearFlags::Depth
-        );
-
-        auto pipelineGuard = vshade::renderer::Renderer::pushPipelineState();
-        auto pipeline = vshade::renderer::Renderer::pipelineState();
-        pipeline.polygonMode = m_wireframe
-            ? vshade::renderer::PolygonMode::Line
-            : vshade::renderer::PolygonMode::Fill;
-        pipeline.dithering = false;
-        vshade::renderer::Renderer::applyPipelineState(pipeline);
-
-        // SceneLightingSystem is the boundary between persistent scene data
-        // and temporary renderer data. Physics has already updated the ball
-        // transforms, so collect() converts the current SceneEnvironment and
-        // every enabled LightComponent into one world-space lighting snapshot.
-        const vshade::renderer::Lighting frameLighting =
-            vshade::scene::SceneLightingSystem::collect(m_scene);
-        vshade::renderer::Renderer3D::setLighting(frameLighting);
-
-        // Renderer3D does not inspect entities or components. It only consumes
-        // frameLighting and uploads its ambient, directional, and point lights
-        // while drawing the models below.
-        vshade::renderer::Renderer3D::beginScene(m_camera);
-        vshade::renderer::Renderer3D::drawModel(
-            m_platform.component<vshade::scene::TransformComponent>().transform,
-            *m_platformModel
-        );
-        for (const vshade::scene::Entity ball : m_balls) {
-            vshade::renderer::Renderer3D::drawModel(
-                ball.component<vshade::scene::TransformComponent>().transform,
-                *m_ballModel
-            );
-        }
-        vshade::renderer::Renderer3D::endScene();
-
-        // Visualize only the platform's physical collision volume. The
-        // platform is axis-aligned, so its BoxShape3D maps directly to the
-        // DebugDraw wireframe bounds.
-        const auto& platformTransform =
-            m_platform.component<vshade::scene::TransformComponent>().transform;
-        const auto& platformCollider =
-            m_platform.component<vshade::scene::Collider3DComponent>();
-        const auto* platformBox = std::get_if<vshade::physics::BoxShape3D>(
-            &platformCollider.shape
-        );
-        ENGINE_ASSERT(platformBox != nullptr, "Platform collider must be a box");
-        const vshade::math::Vec3 colliderCenter =
-            platformTransform.position() +
-            platformTransform.transformDirection(platformCollider.offset);
-        vshade::renderer::DebugDraw::box(
-            {
-                .minimum = colliderCenter - platformBox->halfExtents,
-                .maximum = colliderCenter + platformBox->halfExtents,
-            },
-            {0.15F, 1.0F, 0.25F, 1.0F}
-        );
-        vshade::renderer::DebugDraw::flush(m_camera);
-    }
-
-    void onWindowResize(
-        const std::uint32_t width,
-        const std::uint32_t height
-    ) override {
-        if (width != 0 && height != 0) {
-            updateProjection(width, height);
-        }
-    }
-
-    void onShutdown() override {
-        getWindow().setCursorCaptured(false);
-        m_physics.clear();
-        if (m_music) {
-            m_audio.stop(m_music);
-        }
-        m_audio.shutdown();
-
-        // Release audio and GPU-backed assets while their systems are alive.
-        m_music.reset();
-        m_ballModel.reset();
-        m_platformModel.reset();
-        m_assets.clear();
-        m_cameraController.reset();
-
-        GAME_INFO(
-            "Sandbox stopped after {} frames ({:.2f} seconds)",
-            vshade::core::Time::frameCount(),
-            vshade::core::Time::elapsedTime()
-        );
     }
 
 private:
-    void createPhysicsScene() {
-        // Ambient illumination belongs to the scene itself because it has no
-        // meaningful position or direction. There can be exactly one scene
-        // environment, and it is serialized at the root of the scene file.
+    void buildScene(
+        const vshade::asset::AssetReference<vshade::renderer::Model>& ballModel,
+        const vshade::asset::AssetReference<vshade::renderer::Model>& platformModel
+    ) {
         m_scene.setEnvironment({
             .ambientColor = {0.28F, 0.34F, 0.52F},
             .ambientIntensity = 0.16F,
         });
 
-        // Directional and point lights are entity components. Their entity
-        // transforms let editor or game code move and rotate them naturally.
-        vshade::scene::Entity sun = m_scene.createEntity("Directional Light");
-        sun.addComponent<vshade::scene::LightComponent>(
+        auto camera = m_scene.create("Camera");
+        const vshade::math::Vec3 cameraPosition{7.0F, 5.5F, 8.0F};
+        camera.transform().setPosition(cameraPosition);
+        camera.transform().setRotation(vshade::math::lookRotation(
+            vshade::math::Vec3{0.0F, 2.6F, 0.0F} - cameraPosition
+        ));
+        camera.add<vshade::scene::CameraComponent>();
+        camera.add<vshade::scene::AudioListenerComponent>();
+
+        auto sun = m_scene.create("Sun");
+        sun.add<vshade::scene::LightComponent>(
             vshade::renderer::DirectionalLight{
                 .direction = {-0.45F, -1.0F, -0.35F},
                 .color = {1.0F, 0.95F, 0.86F},
@@ -283,51 +119,35 @@ private:
             true
         );
 
-        m_platform = m_scene.createEntity("Round Platform");
-        auto& platformTransform =
-            m_platform.component<vshade::scene::TransformComponent>().transform;
-        // round_platform.glb already contains its own 0.01 import scale and
-        // renders about five units across without another correction here.
-        platformTransform.setScale({1.0F, 1.0F, 1.0F});
-        m_platform.addComponent<vshade::scene::RigidBody3DComponent>().settings.type =
+        m_platform = m_scene.create("Round Platform");
+        m_platform.add<vshade::scene::ModelRendererComponent>(platformModel, true);
+        m_platform.add<vshade::scene::RigidBody3DComponent>().settings.type =
             vshade::physics::BodyType::Static;
-        m_platform.addComponent<vshade::scene::Collider3DComponent>(
+        m_platform.add<vshade::scene::Collider3DComponent>(
             vshade::scene::Collider3DComponent{
                 .shape = vshade::physics::BoxShape3D{{2.45F, 0.09F, 2.45F}},
                 .material = {.friction = 0.8F, .restitution = 0.1F},
             }
         );
 
-        m_balls.reserve(ballSpawnPositions.size());
-        for (std::size_t index = 0; index < ballSpawnPositions.size(); ++index) {
-            vshade::scene::Entity ball = m_scene.createEntity(
-                "Ball " + std::to_string(index + 1)
-            );
-            auto& transform =
-                ball.component<vshade::scene::TransformComponent>().transform;
-            transform.setPosition(ballSpawnPositions[index]);
-            transform.setScale({ballModelScale, ballModelScale, ballModelScale});
-
-            auto& rigidBody =
-                ball.addComponent<vshade::scene::RigidBody3DComponent>().settings;
-            rigidBody.type = vshade::physics::BodyType::Dynamic;
-            rigidBody.mass = 1.0F;
-            rigidBody.linearVelocity = ballInitialVelocities[index];
-            rigidBody.linearDamping = 0.05F;
-            rigidBody.angularDamping = 0.1F;
-            rigidBody.continuousCollision = true;
-            ball.addComponent<vshade::scene::Collider3DComponent>(
+        for (std::size_t index = 0; index < spawnPositions.size(); ++index) {
+            auto ball = m_scene.create("Ball " + std::to_string(index + 1));
+            ball.transform().setPosition(spawnPositions[index]);
+            ball.transform().setScale(vshade::math::Vec3{ballModelScale});
+            ball.add<vshade::scene::ModelRendererComponent>(ballModel, true);
+            auto& body = ball.add<vshade::scene::RigidBody3DComponent>().settings;
+            body.type = vshade::physics::BodyType::Dynamic;
+            body.linearVelocity = initialVelocities[index];
+            body.continuousCollision = true;
+            ball.add<vshade::scene::Collider3DComponent>(
                 vshade::scene::Collider3DComponent{
                     .shape = vshade::physics::SphereShape3D{ballRadius},
                     .material = {.friction = 0.45F, .restitution = 0.55F},
                 }
             );
-            ball.addComponent<vshade::scene::LightComponent>(
+            ball.add<vshade::scene::LightComponent>(
                 vshade::renderer::PointLight{
-                    // This is an entity-local offset. Zero keeps the light at
-                    // the center of the physics-driven ball transform.
-                    .position = {0.0F, 0.0F, 0.0F},
-                    .color = ballLightColors[index],
+                    .color = lightColors[index],
                     .intensity = 4.5F,
                     .range = 4.5F,
                 },
@@ -335,41 +155,33 @@ private:
             );
             m_balls.push_back(ball);
         }
-
-        m_physics.rebuild(m_scene);
     }
 
     void resetBalls() {
         for (std::size_t index = 0; index < m_balls.size(); ++index) {
-            auto& transform = m_balls[index]
-                .component<vshade::scene::TransformComponent>()
-                .transform;
-            transform.setPosition(ballSpawnPositions[index]);
-            transform.setRotation({1.0F, 0.0F, 0.0F, 0.0F});
+            m_balls[index].transform().setPosition(spawnPositions[index]);
+            m_balls[index].transform().setRotation(vshade::math::identity());
         }
-        m_physics.rebuild(m_scene);
+        runtime().physics3D().rebuild(m_scene);
     }
 
-    void updateProjection(const std::uint32_t width, const std::uint32_t height) {
-        const float aspectRatio = static_cast<float>(width) /
-            static_cast<float>(height);
-        m_camera.setPerspective(0.785398163F, aspectRatio, 0.05F, 100.0F);
+    void drawPlatformCollider() const {
+        const auto& collider = m_platform.get<vshade::scene::Collider3DComponent>();
+        const auto* box = std::get_if<vshade::physics::BoxShape3D>(&collider.shape);
+        if (box == nullptr) return;
+        const auto center = m_platform.transform().position() + collider.offset;
+        vshade::renderer::DebugDraw::box(
+            {.minimum = center - box->halfExtents,
+             .maximum = center + box->halfExtents},
+            {0.15F, 1.0F, 0.25F, 1.0F}
+        );
     }
 
-    vshade::asset::AssetManager m_assets;
-    vshade::scene::Scene m_scene;
-    vshade::physics::PhysicsSystem3D m_physics;
-    vshade::audio::AudioEngine m_audio;
-    std::shared_ptr<vshade::renderer::Model> m_ballModel;
-    std::shared_ptr<vshade::renderer::Model> m_platformModel;
-    std::shared_ptr<vshade::audio::AudioClip> m_music;
-    vshade::scene::Entity m_platform;
-    std::vector<vshade::scene::Entity> m_balls;
-    std::unique_ptr<vshade::renderer::CameraController> m_cameraController;
-    vshade::renderer::Camera m_camera;
-    bool m_wireframe = false;
+    vshade::Scene m_scene;
+    vshade::Entity m_platform;
+    std::vector<vshade::Entity> m_balls;
 };
 
 } // namespace
 
-SHADE_ENGINE_MAIN(SandboxApplication)
+VSHADE_GAME(SandboxApplication)

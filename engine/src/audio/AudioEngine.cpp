@@ -33,31 +33,41 @@ void validatePitch(const float pitch) {
     }
 }
 
-struct PlayingSound final {
-    std::shared_ptr<const AudioClip> clip;
-    ma_sound sound{};
-    bool initialized = false;
-
-    ~PlayingSound() {
-        if (initialized) {
-            ma_sound_uninit(&sound);
-        }
+[[nodiscard]] ma_attenuation_model nativeAttenuation(const AttenuationModel model) {
+    switch (model) {
+        case AttenuationModel::None: return ma_attenuation_model_none;
+        case AttenuationModel::Inverse: return ma_attenuation_model_inverse;
+        case AttenuationModel::Linear: return ma_attenuation_model_linear;
+        case AttenuationModel::Exponential: return ma_attenuation_model_exponential;
     }
-
-    PlayingSound() = default;
-    PlayingSound(const PlayingSound&) = delete;
-    PlayingSound& operator=(const PlayingSound&) = delete;
-    PlayingSound(PlayingSound&&) = delete;
-    PlayingSound& operator=(PlayingSound&&) = delete;
-};
+    return ma_attenuation_model_inverse;
+}
 
 } // namespace
+
+struct AudioVoice::Impl final {
+    std::shared_ptr<const AudioClip> clip;
+    ma_sound sound{};
+    AudioState playbackState = AudioState::Stopped;
+    bool initialized = false;
+
+    ~Impl() { uninitialize(); }
+
+    void uninitialize() noexcept {
+        if (initialized) {
+            static_cast<void>(ma_sound_stop(&sound));
+            ma_sound_uninit(&sound);
+            initialized = false;
+        }
+        playbackState = AudioState::Stopped;
+    }
+};
 
 struct AudioEngine::Impl {
     ma_engine engine{};
     ma_sound_group musicGroup{};
     ma_sound_group sfxGroup{};
-    std::vector<std::unique_ptr<PlayingSound>> sounds;
+    std::vector<std::shared_ptr<AudioVoice::Impl>> sounds;
     bool engineInitialized = false;
     bool musicGroupInitialized = false;
     bool sfxGroupInitialized = false;
@@ -67,6 +77,9 @@ struct AudioEngine::Impl {
     }
 
     void shutdown() noexcept {
+        for (const auto& sound : sounds) {
+            sound->uninitialize();
+        }
         sounds.clear();
         if (sfxGroupInitialized) {
             ma_sound_group_uninit(&sfxGroup);
@@ -85,8 +98,12 @@ struct AudioEngine::Impl {
     void removeFinishedSounds() {
         std::erase_if(
             sounds,
-            [](const std::unique_ptr<PlayingSound>& sound) {
-                return ma_sound_at_end(&sound->sound) == MA_TRUE;
+            [](const std::shared_ptr<AudioVoice::Impl>& sound) {
+                if (!sound->initialized || ma_sound_at_end(&sound->sound) == MA_TRUE) {
+                    sound->uninitialize();
+                    return true;
+                }
+                return false;
             }
         );
     }
@@ -160,12 +177,19 @@ void AudioEngine::setMasterVolume(const float volume) {
     }
 }
 
-void AudioEngine::play(
+AudioVoice AudioEngine::play(
     std::shared_ptr<const AudioClip> clip,
     const AudioPlaybackSettings& settings
 ) {
     validateVolume(settings.volume);
     validatePitch(settings.pitch);
+    if (!std::isfinite(settings.minimumDistance) || settings.minimumDistance < 0.0F ||
+        !std::isfinite(settings.maximumDistance) ||
+        settings.maximumDistance <= settings.minimumDistance ||
+        !std::isfinite(settings.position.x) || !std::isfinite(settings.position.y) ||
+        !std::isfinite(settings.position.z)) {
+        throw std::invalid_argument("Audio spatial playback settings are invalid");
+    }
     if (!m_impl || !m_impl->engineInitialized) {
         throw std::logic_error("The audio engine is not initialized");
     }
@@ -174,7 +198,7 @@ void AudioEngine::play(
     }
 
     m_impl->removeFinishedSounds();
-    auto sound = std::make_unique<PlayingSound>();
+    auto sound = std::make_shared<AudioVoice::Impl>();
     sound->clip = std::move(clip);
 
     const ma_uint32 flags = settings.loadMode == AudioLoadMode::Stream
@@ -210,12 +234,30 @@ void AudioEngine::play(
     ma_sound_set_volume(&sound->sound, settings.volume);
     ma_sound_set_pitch(&sound->sound, settings.pitch);
     ma_sound_set_looping(&sound->sound, settings.looping ? MA_TRUE : MA_FALSE);
+    ma_sound_set_spatialization_enabled(
+        &sound->sound,
+        settings.spatial ? MA_TRUE : MA_FALSE
+    );
+    ma_sound_set_position(
+        &sound->sound,
+        settings.position.x,
+        settings.position.y,
+        settings.position.z
+    );
+    ma_sound_set_attenuation_model(
+        &sound->sound,
+        nativeAttenuation(settings.attenuation)
+    );
+    ma_sound_set_min_distance(&sound->sound, settings.minimumDistance);
+    ma_sound_set_max_distance(&sound->sound, settings.maximumDistance);
 
     const ma_result startResult = ma_sound_start(&sound->sound);
     if (startResult != MA_SUCCESS) {
         throw audioError("Failed to start audio playback", startResult);
     }
-    m_impl->sounds.push_back(std::move(sound));
+    sound->playbackState = AudioState::Playing;
+    m_impl->sounds.push_back(sound);
+    return AudioVoice(std::move(sound));
 }
 
 void AudioEngine::stop(const std::shared_ptr<const AudioClip>& clip) {
@@ -228,14 +270,121 @@ void AudioEngine::stop(const std::shared_ptr<const AudioClip>& clip) {
     const std::filesystem::path& path = clip->sourcePath();
     std::erase_if(
         m_impl->sounds,
-        [&path](const std::unique_ptr<PlayingSound>& sound) {
+        [&path](const std::shared_ptr<AudioVoice::Impl>& sound) {
             if (sound->clip->sourcePath() != path) {
-                return ma_sound_at_end(&sound->sound) == MA_TRUE;
+                if (!sound->initialized || ma_sound_at_end(&sound->sound) == MA_TRUE) {
+                    sound->uninitialize();
+                    return true;
+                }
+                return false;
             }
-            static_cast<void>(ma_sound_stop(&sound->sound));
+            sound->uninitialize();
             return true;
         }
     );
+}
+
+void AudioEngine::setListenerTransform(
+    const math::Vec3& position,
+    const math::Vec3& forward,
+    const math::Vec3& up
+) {
+    if (!m_impl || !m_impl->engineInitialized) {
+        throw std::logic_error("The audio engine is not initialized");
+    }
+    const auto finite = [](const math::Vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!finite(position) || !finite(forward) || !finite(up)) {
+        throw std::invalid_argument("Audio listener transform must be finite");
+    }
+    ma_engine_listener_set_position(&m_impl->engine, 0, position.x, position.y, position.z);
+    ma_engine_listener_set_direction(&m_impl->engine, 0, forward.x, forward.y, forward.z);
+    ma_engine_listener_set_world_up(&m_impl->engine, 0, up.x, up.y, up.z);
+}
+
+void AudioEngine::setBusVolume(const AudioBus bus, const float volume) {
+    validateVolume(volume);
+    if (!m_impl || !m_impl->engineInitialized) {
+        throw std::logic_error("The audio engine is not initialized");
+    }
+    if (bus == AudioBus::Master) {
+        setMasterVolume(volume);
+        return;
+    }
+    ma_sound_group_set_volume(m_impl->group(bus), volume);
+}
+
+AudioVoice::AudioVoice(std::shared_ptr<Impl> impl) noexcept
+    : m_impl(std::move(impl)) {}
+
+void AudioVoice::pause() {
+    if (!valid()) {
+        throw std::logic_error("Cannot pause an invalid audio voice");
+    }
+    const ma_result result = ma_sound_stop(&m_impl->sound);
+    if (result != MA_SUCCESS) {
+        throw audioError("Failed to pause audio voice", result);
+    }
+    m_impl->playbackState = AudioState::Paused;
+}
+
+void AudioVoice::resume() {
+    if (!valid()) {
+        throw std::logic_error("Cannot resume an invalid audio voice");
+    }
+    const ma_result result = ma_sound_start(&m_impl->sound);
+    if (result != MA_SUCCESS) {
+        throw audioError("Failed to resume audio voice", result);
+    }
+    m_impl->playbackState = AudioState::Playing;
+}
+
+void AudioVoice::stop() noexcept {
+    if (m_impl) {
+        m_impl->uninitialize();
+    }
+}
+
+void AudioVoice::setVolume(const float volume) {
+    validateVolume(volume);
+    if (!valid()) {
+        throw std::logic_error("Cannot update an invalid audio voice");
+    }
+    ma_sound_set_volume(&m_impl->sound, volume);
+}
+
+void AudioVoice::setPitch(const float pitch) {
+    validatePitch(pitch);
+    if (!valid()) {
+        throw std::logic_error("Cannot update an invalid audio voice");
+    }
+    ma_sound_set_pitch(&m_impl->sound, pitch);
+}
+
+void AudioVoice::setPosition(const math::Vec3& position) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+        !std::isfinite(position.z)) {
+        throw std::invalid_argument("Audio voice position must be finite");
+    }
+    if (!valid()) {
+        throw std::logic_error("Cannot update an invalid audio voice");
+    }
+    ma_sound_set_position(&m_impl->sound, position.x, position.y, position.z);
+}
+
+AudioState AudioVoice::state() const noexcept {
+    if (!valid()) {
+        return AudioState::Stopped;
+    }
+    if (ma_sound_at_end(&m_impl->sound) == MA_TRUE) {
+        return AudioState::Stopped;
+    }
+    return m_impl->playbackState;
+}
+
+bool AudioVoice::valid() const noexcept {
+    return m_impl && m_impl->initialized;
 }
 
 } // namespace vshade::audio

@@ -192,6 +192,18 @@ void main() { fragmentColor = vec4(1.0); }
     CHECK(vshade::renderer::Renderer::pipelineState() != sceneState);
 }
 
+TEST_CASE("Renderer3D scoped scenes finish automatically", "[renderer3d][opengl]") {
+    vshade::tests::visual::HiddenRenderContext context(64, 64);
+    vshade::renderer::Camera camera;
+    {
+        auto scene = vshade::renderer::Renderer3D::scopedScene(camera);
+        scene.setLighting(vshade::renderer::Lighting{});
+    }
+    CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 0);
+    CHECK_NOTHROW(vshade::renderer::Renderer3D::beginScene(camera));
+    CHECK_NOTHROW(vshade::renderer::Renderer3D::endScene());
+}
+
 TEST_CASE("Renderer3D snapshots custom material and draw parameters", "[renderer3d][opengl]") {
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Framebuffer framebuffer(64, 64);

@@ -3,7 +3,12 @@
 #include <audio/AudioClip.hpp>
 #include <audio/AudioEngine.hpp>
 #include <audio/AudioTypes.hpp>
+#include <audio/AudioService.hpp>
+#include <core/EngineServices.hpp>
 #include <scene/Components.hpp>
+#include <scene/Scene.hpp>
+#include <scene/SceneAudioSystem.hpp>
+#include <scene/SceneRuntime.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -100,7 +105,18 @@ TEST_CASE("Audio engine manages playback without opening an output device", "[au
     );
 
     engine.setMasterVolume(0.5F);
-    engine.play(decodedClip);
+    auto voice = engine.play(decodedClip, {.looping = true});
+    REQUIRE(voice.valid());
+    CHECK(voice.state() == vshade::audio::AudioState::Playing);
+    voice.setVolume(0.25F);
+    voice.setPitch(1.1F);
+    voice.setPosition({1.0F, 2.0F, 3.0F});
+    voice.pause();
+    CHECK(voice.state() == vshade::audio::AudioState::Paused);
+    voice.resume();
+    CHECK(voice.state() == vshade::audio::AudioState::Playing);
+    voice.stop();
+    CHECK(voice.state() == vshade::audio::AudioState::Stopped);
     engine.stop(decodedClip);
     engine.play(streamedClip, {
         .bus = vshade::audio::AudioBus::Music,
@@ -112,4 +128,38 @@ TEST_CASE("Audio engine manages playback without opening an output device", "[au
     engine.stop(streamedClip);
     engine.shutdown();
     engine.shutdown();
+}
+
+TEST_CASE("Scene audio is scoped while music survives scene changes", "[audio][scene-runtime]") {
+    vshade::core::EngineServices services({.enableDevice = false});
+    const auto clipReference = services.assets().reference<vshade::audio::AudioClip>(
+        streamedSample
+    );
+
+    auto music = services.audio().playMusic(streamedSample, {.looping = true});
+    REQUIRE(music.valid());
+
+    vshade::scene::Scene scene("Audio scene");
+    auto listener = scene.create("Listener");
+    listener.add<vshade::scene::AudioListenerComponent>();
+    auto source = scene.create("Emitter");
+    auto& audioSource = source.add<vshade::scene::AudioSourceComponent>();
+    audioSource.clipAsset = clipReference;
+    audioSource.playOnStart = true;
+    audioSource.looping = true;
+    audioSource.spatial = true;
+
+    vshade::scene::SceneRuntime runtime(services, {
+        .physics2D = false,
+        .physics3D = false,
+        .rendering = false,
+        .audio = true,
+    });
+    runtime.play(scene);
+    REQUIRE(runtime.sceneAudio() != nullptr);
+    CHECK(runtime.sceneAudio()->voiceCount() == 1);
+    runtime.update(0.0F);
+    runtime.stop();
+    CHECK(music.state() == vshade::audio::AudioState::Playing);
+    services.audio().stopMusic();
 }

@@ -16,6 +16,7 @@
 #include <scene/Components.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneLightingSystem.hpp>
+#include <scene/SceneRenderer.hpp>
 
 #include <array>
 #include <cstdint>
@@ -363,6 +364,57 @@ TEST_CASE("Renderer3D eye materials match their golden image", "[renderer3d][vis
     CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 2);
     const vshade::tests::visual::Image actual =
         vshade::tests::visual::captureFramebuffer(framebuffer);
+    vshade::tests::visual::checkGoldenImage(
+        actual,
+        "renderer3d_eye_materials",
+        std::filesystem::path(VSHADE_GOLDEN_DIR) / "render3d",
+        VSHADE_RENDER3D_OUTPUT_DIR
+    );
+}
+
+TEST_CASE("SceneRenderer consumes camera model and light components", "[renderer3d][visual][opengl][scene]") {
+    vshade::tests::visual::HiddenRenderContext context;
+    vshade::renderer::Framebuffer framebuffer(
+        vshade::tests::visual::defaultRenderWidth,
+        vshade::tests::visual::defaultRenderHeight
+    );
+    framebuffer.bind();
+    vshade::renderer::Renderer::beginFrame();
+    vshade::renderer::Renderer::setViewport(0, 0, framebuffer.width(), framebuffer.height());
+    vshade::renderer::Renderer::setDithering(false);
+
+    vshade::asset::AssetManager assets;
+    vshade::scene::Scene scene("Rendered scene");
+    auto camera = scene.create("Camera");
+    const vshade::math::Vec3 cameraPosition{2.8F, 1.8F, 3.8F};
+    camera.transform().setPosition(cameraPosition);
+    camera.transform().setRotation(vshade::math::lookRotation(-cameraPosition));
+    auto& cameraSettings = camera.add<vshade::scene::CameraComponent>();
+    cameraSettings.verticalFieldOfViewRadians = 0.785398163F;
+
+    auto eye = scene.create("Eye");
+    eye.transform().setScale({0.01F, 0.01F, 0.01F});
+    eye.add<vshade::scene::ModelRendererComponent>(
+        assets.reference<vshade::renderer::Model>(
+            std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "eye.glb"
+        ),
+        true
+    );
+    scene.create("Sun").add<vshade::scene::LightComponent>(
+        vshade::renderer::DirectionalLight{
+            .direction = {-0.55F, -1.0F, -0.35F},
+            .color = {1.0F, 0.94F, 0.82F},
+            .intensity = 1.0F,
+        },
+        true
+    );
+
+    vshade::scene::SceneRenderer renderer(assets);
+    REQUIRE(renderer.render(scene, framebuffer.width(), framebuffer.height()));
+    CHECK(vshade::renderer::Renderer3D::stats().meshCount == 2);
+    CHECK(renderer.frameStats().entityCount == 3);
+    CHECK(renderer.frameStats().meshCount == 2);
+    const auto actual = vshade::tests::visual::captureFramebuffer(framebuffer);
     vshade::tests::visual::checkGoldenImage(
         actual,
         "renderer3d_eye_materials",
