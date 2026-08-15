@@ -23,6 +23,8 @@ add_executable(VShadeTests
     RendererVisualTests.cpp
     SceneTests.cpp
     SceneLightingTests.cpp
+    ScriptingTests.cpp
+    ScriptingVisualTests.cpp
     visual/ImageComparison.cpp
 )
 

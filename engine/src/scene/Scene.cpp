@@ -75,6 +75,11 @@ Entity Scene::duplicateEntity(const Entity source) {
                 source.component<LightComponent>()
             );
         }
+        if (source.hasComponents<ScriptComponent>()) {
+            duplicate.addComponent<ScriptComponent>(
+                source.component<ScriptComponent>()
+            );
+        }
         for (const auto& handler : SceneComponentRegistry::handlers()) {
             handler.clone(m_registry, source.m_handle, m_registry, duplicate.m_handle);
         }

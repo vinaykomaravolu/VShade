@@ -1,5 +1,7 @@
 #include "scene/SceneComponentRegistry.hpp"
 
+#include "scene/Components.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -17,8 +19,11 @@ void SceneComponentRegistry::add(Handler handler) {
     if (handler.name == "UUID" || handler.name == "Tag" ||
         handler.name == "Transform" || handler.name == "SpriteRenderer" ||
         handler.name == "AudioSource" || handler.name == "AudioListener" ||
-        handler.name == "Light") {
-        throw std::invalid_argument("A custom component cannot use a built-in component name");
+        handler.name == "Light" || handler.name == "Scripts" ||
+        handler.type == entt::type_hash<ScriptComponent>::value()) {
+        throw std::invalid_argument(
+            "A custom component cannot reuse a built-in component type or name"
+        );
     }
 
     auto& existing = mutableHandlers();

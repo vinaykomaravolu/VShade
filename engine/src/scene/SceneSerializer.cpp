@@ -135,6 +135,60 @@ template<std::size_t Size>
     throw std::invalid_argument("unknown audio load mode: " + value);
 }
 
+[[nodiscard]] std::string_view scriptBackendName(const script::ScriptBackend backend) {
+    switch (backend) {
+        case script::ScriptBackend::NativeCpp: return "NativeCpp";
+        case script::ScriptBackend::CSharp: return "CSharp";
+        case script::ScriptBackend::Lua: return "Lua";
+        case script::ScriptBackend::Custom: return "Custom";
+    }
+    throw std::invalid_argument("unknown script backend");
+}
+
+[[nodiscard]] script::ScriptBackend parseScriptBackend(const Json& json) {
+    const std::string value = json.get<std::string>();
+    if (value == "NativeCpp") return script::ScriptBackend::NativeCpp;
+    if (value == "CSharp") return script::ScriptBackend::CSharp;
+    if (value == "Lua") return script::ScriptBackend::Lua;
+    if (value == "Custom") return script::ScriptBackend::Custom;
+    throw std::invalid_argument("unknown script backend: " + value);
+}
+
+[[nodiscard]] Json serializeScripts(const ScriptComponent& component) {
+    Json scripts = Json::array();
+    for (const ScriptBinding& binding : component.scripts) {
+        if (binding.typeName.empty()) {
+            throw std::invalid_argument("script type name cannot be empty");
+        }
+        scripts.push_back({
+            {"Backend", scriptBackendName(binding.backend)},
+            {"Type", binding.typeName},
+            {"Enabled", binding.enabled},
+        });
+    }
+    return scripts;
+}
+
+[[nodiscard]] ScriptComponent deserializeScripts(const Json& json) {
+    if (!json.is_array()) {
+        throw std::invalid_argument("Scripts must be a JSON array");
+    }
+    ScriptComponent component;
+    component.scripts.reserve(json.size());
+    for (const Json& value : json) {
+        ScriptBinding binding{
+            .backend = parseScriptBackend(value.at("Backend")),
+            .typeName = value.at("Type").get<std::string>(),
+            .enabled = value.at("Enabled").get<bool>(),
+        };
+        if (binding.typeName.empty()) {
+            throw std::invalid_argument("script type name cannot be empty");
+        }
+        component.scripts.push_back(std::move(binding));
+    }
+    return component;
+}
+
 [[nodiscard]] Json serializeLight(const LightComponent& component) {
     Json json{{"Enabled", component.enabled}};
     std::visit(
@@ -298,6 +352,11 @@ bool SceneSerializer::serialize(
                     registry.get<LightComponent>(handle)
                 );
             }
+            if (registry.all_of<ScriptComponent>(handle)) {
+                entity["Scripts"] = serializeScripts(
+                    registry.get<ScriptComponent>(handle)
+                );
+            }
             for (const auto& handler : SceneComponentRegistry::handlers()) {
                 if (handler.has(registry, handle)) {
                     entity["Components"][handler.name] =
@@ -449,6 +508,13 @@ bool SceneSerializer::deserialize(const std::filesystem::path& path) {
                 loadedRegistry.emplace<LightComponent>(
                     handle,
                     deserializeLight(*light)
+                );
+            }
+            if (const auto scripts = serializedEntity.find("Scripts");
+                scripts != serializedEntity.end()) {
+                loadedRegistry.emplace<ScriptComponent>(
+                    handle,
+                    deserializeScripts(*scripts)
                 );
             }
 

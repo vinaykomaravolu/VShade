@@ -48,6 +48,8 @@ set(VSHADE_SOURCES
     src/scene/SceneComponentRegistry.cpp
     src/scene/SceneLightingSystem.cpp
     src/scene/SceneSerializer.cpp
+    src/script/NativeScriptRegistry.cpp
+    src/script/NativeScriptSystem.cpp
 )
 
 # The GLAD loader is generated from the pinned external/glad submodule and
