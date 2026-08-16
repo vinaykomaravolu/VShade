@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Result.hpp"
+
 #include <filesystem>
 #include <string>
 
@@ -38,6 +40,17 @@ public:
      * @note The attached scene is unchanged when loading fails.
      */
     [[nodiscard]] bool deserialize(const std::filesystem::path& path);
+
+    /** @brief Structured equivalent of serialize() for editor and tooling code. */
+    [[nodiscard]] core::Result<void> serializeResult(
+        const std::filesystem::path& path,
+        SceneJsonFormat format = SceneJsonFormat::Pretty
+    ) const;
+
+    /** @brief Structured equivalent of deserialize() with a stable error code. */
+    [[nodiscard]] core::Result<void> deserializeResult(
+        const std::filesystem::path& path
+    );
 
     /** @brief Returns the diagnostic from the most recent failed operation. */
     [[nodiscard]] const std::string& lastError() const noexcept;

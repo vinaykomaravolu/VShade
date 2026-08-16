@@ -33,9 +33,9 @@ visual regression tests, comparison tolerances, and failure artifacts.
 ## Minimal application
 
 ```cpp
-#include <core/application.hpp>
-#include <core/entrypoint.hpp>
-#include <input/input.hpp>
+#include <core/Application.hpp>
+#include <core/EntryPoint.hpp>
+#include <input/Input.hpp>
 
 class Game final : public vshade::core::Application {
 protected:

@@ -8,6 +8,8 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -43,6 +45,25 @@ public:
         );
     }
 
+    /** @brief Concise alias for addComponent(). */
+    template<typename Component, typename... Arguments>
+    Component& add(Arguments&&... arguments) {
+        return addComponent<Component>(std::forward<Arguments>(arguments)...);
+    }
+
+    /** @brief Adds or replaces a component in one operation. */
+    template<typename Component, typename... Arguments>
+    Component& set(Arguments&&... arguments) {
+        static_assert(
+            !std::same_as<std::remove_cv_t<Component>, UUIDComponent>,
+            "An entity UUID cannot be replaced"
+        );
+        return registry().emplace_or_replace<Component>(
+            m_handle,
+            std::forward<Arguments>(arguments)...
+        );
+    }
+
     /** @brief Returns a mutable component attached to this entity. */
     template<typename Component>
         requires (!std::same_as<std::remove_cv_t<Component>, UUIDComponent>)
@@ -56,11 +77,49 @@ public:
         return registry().get<Component>(m_handle);
     }
 
+    /** @brief Concise alias for component(). */
+    template<typename Component>
+        requires (!std::same_as<std::remove_cv_t<Component>, UUIDComponent>)
+    [[nodiscard]] Component& get() {
+        return component<Component>();
+    }
+
+    /** @brief Concise const alias for component(). */
+    template<typename Component>
+    [[nodiscard]] const Component& get() const {
+        return component<Component>();
+    }
+
+    /** @brief Returns a component pointer, or null when it is absent. */
+    template<typename Component>
+    [[nodiscard]] Component* tryGet() noexcept {
+        if (!valid()) {
+            return nullptr;
+        }
+        return registry().try_get<Component>(m_handle);
+    }
+
+    /** @brief Returns a read-only component pointer, or null when absent. */
+    template<typename Component>
+    [[nodiscard]] const Component* tryGet() const noexcept {
+        if (!valid()) {
+            return nullptr;
+        }
+        return registry().try_get<Component>(m_handle);
+    }
+
     /** @brief Reports whether this entity has every requested component. */
     template<typename... Components>
         requires (sizeof...(Components) > 0)
     [[nodiscard]] bool hasComponents() const {
         return valid() && registry().all_of<Components...>(m_handle);
+    }
+
+    /** @brief Concise alias for hasComponents(). */
+    template<typename... Components>
+        requires (sizeof...(Components) > 0)
+    [[nodiscard]] bool has() const {
+        return hasComponents<Components...>();
     }
 
     /** @brief Removes a component and reports whether it existed. */
@@ -72,6 +131,24 @@ public:
         );
         return valid() && registry().remove<Component>(m_handle) != 0;
     }
+
+    /** @brief Concise alias for removeComponent(). */
+    template<typename Component>
+    bool remove() {
+        return removeComponent<Component>();
+    }
+
+    /** @brief Direct access to the transform present on every entity. */
+    [[nodiscard]] math::Transform& transform();
+
+    /** @brief Direct read-only access to the entity transform. */
+    [[nodiscard]] const math::Transform& transform() const;
+
+    /** @brief Returns the human-readable entity name. */
+    [[nodiscard]] std::string_view name() const;
+
+    /** @brief Changes the human-readable entity name. */
+    void setName(std::string name);
 
     /** @brief Reports whether this handle still identifies a live entity. */
     [[nodiscard]] bool valid() const noexcept;

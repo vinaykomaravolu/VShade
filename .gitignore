@@ -1,6 +1,8 @@
 /build/
+/build-clangd/
 /build-coverage/
 /build-docs/
+/build-examples/
 /out/
 /coverage.xml
 /tests/output/

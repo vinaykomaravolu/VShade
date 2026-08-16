@@ -1,338 +1,187 @@
-#include <core/application.hpp>
-#include <core/assert.hpp>
-#include <core/entrypoint.hpp>
-#include <core/log.hpp>
-#include <core/time.hpp>
-#include <input/input.hpp>
-#include <math/quaternion.hpp>
-#include <math/transform.hpp>
-#include <renderer/buffer.hpp>
-#include <renderer/camera.hpp>
-#include <renderer/cameracontroller.hpp>
-#include <renderer/material.hpp>
-#include <renderer/mesh.hpp>
-#include <renderer/renderer.hpp>
-#include <renderer/renderer3d.hpp>
-#include <renderer/shader.hpp>
-#include <renderer/texture.hpp>
-#include <renderer/vertexarray.hpp>
-#include <scene/Components.hpp>
-#include <scene/Entity.hpp>
-#include <scene/Scene.hpp>
-#include <scene/SceneComponentRegistry.hpp>
+#include <vshade/Game.hpp>
+
+#include <core/Log.hpp>
+#include <input/Input.hpp>
+#include <renderer/DebugDraw.hpp>
 
 #include <array>
-#include <cmath>
-#include <cstdint>
 #include <filesystem>
-#include <memory>
-#include <utility>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace {
 
-struct RotationComponent {
-    float yawSpeed = 1.0F;
-    float pitchFactor = 0.0F;
-    float roll = 0.0F;
+constexpr float ballRadius = 0.35F;
+constexpr float ballModelScale = ballRadius / 100.0F;
+
+const std::array<vshade::math::Vec3, 6> spawnPositions{
+    vshade::math::Vec3{-1.35F, 2.0F, 0.2F},
+    vshade::math::Vec3{-0.75F, 3.1F, -0.35F},
+    vshade::math::Vec3{-0.15F, 4.2F, 0.25F},
+    vshade::math::Vec3{0.45F, 5.3F, -0.25F},
+    vshade::math::Vec3{1.05F, 6.4F, 0.35F},
+    vshade::math::Vec3{1.45F, 7.5F, -0.15F},
 };
 
-[[nodiscard]] std::unique_ptr<vshade::renderer::Mesh> createCubeMesh() {
-    using vshade::renderer::MeshVertex;
+const std::array<vshade::math::Vec3, 6> initialVelocities{
+    vshade::math::Vec3{-0.75F, 0.0F, 0.15F},
+    vshade::math::Vec3{-0.5F, 0.0F, -0.2F},
+    vshade::math::Vec3{-0.25F, 0.0F, 0.25F},
+    vshade::math::Vec3{0.25F, 0.0F, -0.25F},
+    vshade::math::Vec3{0.5F, 0.0F, 0.2F},
+    vshade::math::Vec3{0.75F, 0.0F, -0.15F},
+};
 
-    // A cube needs separate vertices per face because every face has a
-    // different normal and its own complete set of texture coordinates.
-    constexpr std::array<MeshVertex, 24> vertices{{
-        // Front (+Z)
-        {{-0.7F, -0.7F, 0.7F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F}},
-        {{0.7F, -0.7F, 0.7F}, {0.0F, 0.0F, 1.0F}, {1.0F, 0.0F}},
-        {{0.7F, 0.7F, 0.7F}, {0.0F, 0.0F, 1.0F}, {1.0F, 1.0F}},
-        {{-0.7F, 0.7F, 0.7F}, {0.0F, 0.0F, 1.0F}, {0.0F, 1.0F}},
-        // Back (-Z)
-        {{0.7F, -0.7F, -0.7F}, {0.0F, 0.0F, -1.0F}, {0.0F, 0.0F}},
-        {{-0.7F, -0.7F, -0.7F}, {0.0F, 0.0F, -1.0F}, {1.0F, 0.0F}},
-        {{-0.7F, 0.7F, -0.7F}, {0.0F, 0.0F, -1.0F}, {1.0F, 1.0F}},
-        {{0.7F, 0.7F, -0.7F}, {0.0F, 0.0F, -1.0F}, {0.0F, 1.0F}},
-        // Left (-X)
-        {{-0.7F, -0.7F, -0.7F}, {-1.0F, 0.0F, 0.0F}, {0.0F, 0.0F}},
-        {{-0.7F, -0.7F, 0.7F}, {-1.0F, 0.0F, 0.0F}, {1.0F, 0.0F}},
-        {{-0.7F, 0.7F, 0.7F}, {-1.0F, 0.0F, 0.0F}, {1.0F, 1.0F}},
-        {{-0.7F, 0.7F, -0.7F}, {-1.0F, 0.0F, 0.0F}, {0.0F, 1.0F}},
-        // Right (+X)
-        {{0.7F, -0.7F, 0.7F}, {1.0F, 0.0F, 0.0F}, {0.0F, 0.0F}},
-        {{0.7F, -0.7F, -0.7F}, {1.0F, 0.0F, 0.0F}, {1.0F, 0.0F}},
-        {{0.7F, 0.7F, -0.7F}, {1.0F, 0.0F, 0.0F}, {1.0F, 1.0F}},
-        {{0.7F, 0.7F, 0.7F}, {1.0F, 0.0F, 0.0F}, {0.0F, 1.0F}},
-        // Top (+Y)
-        {{-0.7F, 0.7F, 0.7F}, {0.0F, 1.0F, 0.0F}, {0.0F, 0.0F}},
-        {{0.7F, 0.7F, 0.7F}, {0.0F, 1.0F, 0.0F}, {1.0F, 0.0F}},
-        {{0.7F, 0.7F, -0.7F}, {0.0F, 1.0F, 0.0F}, {1.0F, 1.0F}},
-        {{-0.7F, 0.7F, -0.7F}, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F}},
-        // Bottom (-Y)
-        {{-0.7F, -0.7F, -0.7F}, {0.0F, -1.0F, 0.0F}, {0.0F, 0.0F}},
-        {{0.7F, -0.7F, -0.7F}, {0.0F, -1.0F, 0.0F}, {1.0F, 0.0F}},
-        {{0.7F, -0.7F, 0.7F}, {0.0F, -1.0F, 0.0F}, {1.0F, 1.0F}},
-        {{-0.7F, -0.7F, 0.7F}, {0.0F, -1.0F, 0.0F}, {0.0F, 1.0F}},
-    }};
-    constexpr std::array<std::uint32_t, 36> indices{
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4,
-        8, 9, 10, 10, 11, 8,
-        12, 13, 14, 14, 15, 12,
-        16, 17, 18, 18, 19, 16,
-        20, 21, 22, 22, 23, 20,
-    };
+const std::array<vshade::math::Vec3, 6> lightColors{
+    vshade::math::Vec3{1.0F, 0.18F, 0.12F},
+    vshade::math::Vec3{1.0F, 0.55F, 0.12F},
+    vshade::math::Vec3{0.3F, 1.0F, 0.25F},
+    vshade::math::Vec3{0.15F, 0.65F, 1.0F},
+    vshade::math::Vec3{0.45F, 0.25F, 1.0F},
+    vshade::math::Vec3{1.0F, 0.2F, 0.75F},
+};
 
-    auto vertexBuffer = std::make_shared<vshade::renderer::VertexBuffer>(
-        vertices.data(),
-        sizeof(vertices)
-    );
-    vertexBuffer->setLayout({
-        {"position", vshade::renderer::ShaderDataType::Float3},
-        {"normal", vshade::renderer::ShaderDataType::Float3},
-        {"textureCoordinate", vshade::renderer::ShaderDataType::Float2},
-    });
-
-    auto indexBuffer = std::make_shared<vshade::renderer::IndexBuffer>(
-        indices.data(),
-        indices.size()
-    );
-    auto vertexArray = std::make_shared<vshade::renderer::VertexArray>();
-    vertexArray->addVertexBuffer(std::move(vertexBuffer));
-    vertexArray->setIndexBuffer(std::move(indexBuffer));
-
-    return std::make_unique<vshade::renderer::Mesh>(std::move(vertexArray));
-}
-
-class SandboxApplication final : public vshade::core::Application {
+class SandboxApplication final : public vshade::Application {
 public:
     SandboxApplication()
-        : Application({
-              .window = {
-                  .title = "VShade 2D + 3D Renderer Sandbox",
-                  .width = 1280,
-                  .height = 720,
-                  .fullscreen = false,
-                  .vsync = true,
-              },
-          }) {}
+        : Application({.window = {
+              .title = "VShade - Falling Balls",
+              .width = 1280,
+              .height = 720,
+              .fullscreen = false,
+              .vsync = true,
+          }}),
+          m_scene("Falling Balls") {}
 
 protected:
     void onStart() override {
-        // reflect-cpp discovers RotationComponent's fields automatically.
-        // The explicit name remains stable if the C++ type is renamed later.
-        vshade::scene::SceneComponentRegistry::registerComponent<RotationComponent>(
-            "Rotation"
+        const std::filesystem::path directory = VSHADE_SANDBOX_ASSET_DIR;
+        const auto ballModel = assets().reference<vshade::renderer::Model>(
+            directory / "ball.glb"
+        );
+        const auto platformModel = assets().reference<vshade::renderer::Model>(
+            directory / "round_platform.glb"
         );
 
-        // Meshes connect CPU vertex/index data to the engine's vertex-array API.
-        m_cubeMesh = createCubeMesh();
-
-        // A material may use Renderer3D's built-in shader, or override it with
-        // a shader loaded by the game. The sandbox demonstrates the override.
-        const std::filesystem::path shaderDirectory{VSHADE_SANDBOX_SHADER_DIR};
-        m_materialShader = std::make_shared<vshade::renderer::Shader>(
-            vshade::renderer::Shader::fromFiles(
-                "sandbox-material",
-                shaderDirectory / "shader.vs",
-                shaderDirectory / "shader.fs"
-            )
-        );
-
-        const std::filesystem::path textureDirectory{VSHADE_SANDBOX_TEXTURE_DIR};
-        m_checkerTexture = std::make_shared<vshade::renderer::Texture2D>(
-            vshade::renderer::Texture2D::fromFile(
-                textureDirectory / "checkerboard.ppm",
-                vshade::renderer::TextureFilter::Nearest,
-                vshade::renderer::TextureWrap::Repeat
-            )
-        );
-
-        m_cubeMaterial.setShader(m_materialShader);
-        m_cubeMaterial.setAlbedoTexture(m_checkerTexture);
-        m_cubeMaterial.setAlbedoColor({0.85F, 0.95F, 1.0F, 1.0F});
-        m_cubeMaterial.setRoughness(0.65F);
-        m_cubeMaterial.setMetallic(0.5F);
-        m_cubeMaterial.setShading(vshade::renderer::MaterialShading::Lit);
-
-        // Custom uniforms live on the material when every object using it
-        // should inherit the same value. Texture parameters are assigned a
-        // texture slot by Renderer3D when the queued command is executed.
-        m_cubeMaterial.parameters().set(
-            "effectTint",
-            vshade::math::Vec3{0.30F, 0.72F, 1.0F}
-        );
-        m_cubeMaterial.parameters().set("effectStrength", 0.22F);
-        m_cubeMaterial.parameters().set("detailTexture", m_checkerTexture);
-        m_cubeMaterial.parameters().set("detailStrength", 0.12F);
-
-        // Both cubes share the mesh, material, shader, and textures. Only
-        // their transforms and optional per-draw parameters differ.
-        m_leftCube = m_scene.createEntity("Left cube");
-        m_leftCube.component<vshade::scene::TransformComponent>()
-            .transform.setPosition({-0.9F, 0.0F, 0.0F});
-        m_leftCube.addComponent<RotationComponent>(1.0F, 0.45F, 0.08F);
-
-        m_rightCube = m_scene.createEntity("Right cube");
-        m_rightCube.component<vshade::scene::TransformComponent>()
-            .transform.setPosition({0.9F, 0.0F, 0.0F});
-        m_rightCube.addComponent<RotationComponent>(-1.0F, -0.35F, -0.08F);
-
-        // Start focused on the cube, then let the fly controller update this
-        // view from keyboard and mouse input.
-        m_camera3D.lookAt(
-            {3.2F, 2.2F, 4.2F},
-            {0.0F, 0.0F, 0.0F},
-            {0.0F, 1.0F, 0.0F}
-        );
-        updateCameraProjections(getWindow().width(), getWindow().height());
-        m_cameraController =
-            std::make_unique<vshade::renderer::CameraController>(m_camera3D);
-
-        vshade::renderer::Renderer3D::setDirectionalLight({
-            .direction = {-0.55F, -1.0F, -0.35F},
-            .color = {1.0F, 0.94F, 0.82F},
-            .intensity = 0.95F,
+        buildScene(ballModel, platformModel);
+        audio().setMasterVolume(0.65F);
+        audio().playMusic(directory / "retroloop.mp3", {
+            .volume = 0.7F,
+            .looping = true,
         });
 
-        GAME_INFO("Sandbox started");
-        GAME_INFO(
-            "Controls: WASD move, hold right mouse to look, scroll changes speed, "
-            "P toggles wireframe, Escape exits"
+        runtime().addSystem(
+            vshade::scene::SceneRuntimePhase::BeforeRender,
+            [this](vshade::Scene&, float) { drawPlatformCollider(); }
         );
+        playScene(m_scene);
+
+        GAME_INFO("SceneRuntime now owns physics, lighting, models, audio, and debug flush");
+        GAME_INFO("Controls: R resets balls, Escape exits");
     }
 
-    void onUpdate(const float deltaTime) override {
+    void onUpdate(float) override {
         if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::Escape)) {
             close();
         }
-        if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::P)) {
-            m_wireframe = !m_wireframe;
+        if (vshade::input::Input::isKeyPressed(vshade::input::KeyCode::R)) {
+            resetBalls();
         }
-
-        ENGINE_ASSERT(
-            m_cameraController != nullptr,
-            "Camera controller must exist before updating"
-        );
-        const bool captureMouse = vshade::input::Input::isMouseButtonDown(
-            vshade::input::MouseButton::Right
-        );
-        getWindow().setCursorCaptured(captureMouse);
-        m_cameraController->update(deltaTime);
-
-        // Game state is updated separately from rendering. The render method
-        // below only reads this transform and submits it.
-        m_cubeAngle += deltaTime * 0.65F;
-        auto rotatingCubes = m_scene.view<
-            const RotationComponent,
-            vshade::scene::TransformComponent
-        >();
-        rotatingCubes.each([this](
-            const RotationComponent& rotation,
-            vshade::scene::TransformComponent& transform
-        ) {
-            transform.transform.setRotation(vshade::math::fromEuler({
-                m_cubeAngle * rotation.pitchFactor,
-                m_cubeAngle * rotation.yawSpeed,
-                rotation.roll,
-            }));
-        });
-    }
-
-    void onRender() override {
-        vshade::renderer::Renderer::setClearColor({0.025F, 0.035F, 0.06F, 1.0F});
-        vshade::renderer::Renderer::clear(
-            vshade::renderer::ClearFlags::Color |
-            vshade::renderer::ClearFlags::Depth
-        );
-
-        ENGINE_ASSERT(m_cubeMesh != nullptr, "Cube mesh must exist before rendering");
-
-        // A scoped pipeline guard makes temporary low-level state explicit.
-        // Renderer3D also scopes the depth/culling state it owns. When this
-        // method returns, both layers have restored the previous state.
-        auto pipelineStateGuard =
-            vshade::renderer::Renderer::pushPipelineState();
-        auto sandboxPipeline = vshade::renderer::Renderer::pipelineState();
-        sandboxPipeline.polygonMode = m_wireframe
-            ? vshade::renderer::PolygonMode::Line
-            : vshade::renderer::PolygonMode::Fill;
-        sandboxPipeline.dithering = false;
-        vshade::renderer::Renderer::applyPipelineState(sandboxPipeline);
-
-        // The left cube uses all custom values stored on the shared material.
-        vshade::renderer::Renderer3D::beginScene(m_camera3D);
-        vshade::renderer::Renderer3D::drawMesh(
-            m_leftCube.component<vshade::scene::TransformComponent>().transform,
-            *m_cubeMesh,
-            m_cubeMaterial
-        );
-
-        // DrawParameters are copied into this one queued draw. They override
-        // material values with matching names without modifying the material
-        // shared by the left cube.
-        vshade::renderer::DrawParameters rightCubeParameters;
-        rightCubeParameters.set(
-            "effectTint",
-            vshade::math::Vec3{1.0F, 0.36F, 0.12F}
-        );
-        rightCubeParameters.set(
-            "effectStrength",
-            0.45F + 0.25F * std::sin(m_cubeAngle * 2.0F)
-        );
-        rightCubeParameters.set("detailStrength", 0.28F);
-        vshade::renderer::Renderer3D::drawMesh(
-            m_rightCube.component<vshade::scene::TransformComponent>().transform,
-            *m_cubeMesh,
-            m_cubeMaterial,
-            rightCubeParameters
-        );
-        vshade::renderer::Renderer3D::endScene();
-    }
-
-    void onWindowResize(const std::uint32_t width, const std::uint32_t height) override {
-        if (width != 0 && height != 0) {
-            updateCameraProjections(width, height);
-        }
-    }
-
-    void onShutdown() override {
-        getWindow().setCursorCaptured(false);
-        GAME_INFO(
-            "Sandbox stopped after {} frames ({:.2f} seconds)",
-            vshade::core::Time::frameCount(),
-            vshade::core::Time::elapsedTime()
-        );
-
-        // Release GPU-backed objects while Application still owns the active
-        // OpenGL context. Material references are cleared first.
-        m_cubeMaterial.parameters().clear();
-        m_cubeMaterial.setShader(nullptr);
-        m_cubeMaterial.setAlbedoTexture(nullptr);
-        m_cubeMesh.reset();
-        m_materialShader.reset();
-        m_checkerTexture.reset();
-        m_cameraController.reset();
     }
 
 private:
-    void updateCameraProjections(const std::uint32_t width, const std::uint32_t height) {
-        const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
-        m_camera3D.setPerspective(0.785398163F, aspectRatio, 0.1F, 100.0F);
+    void buildScene(
+        const vshade::asset::AssetReference<vshade::renderer::Model>& ballModel,
+        const vshade::asset::AssetReference<vshade::renderer::Model>& platformModel
+    ) {
+        m_scene.setEnvironment({
+            .ambientColor = {0.28F, 0.34F, 0.52F},
+            .ambientIntensity = 0.16F,
+        });
+
+        auto camera = m_scene.create("Camera");
+        const vshade::math::Vec3 cameraPosition{7.0F, 5.5F, 8.0F};
+        camera.transform().setPosition(cameraPosition);
+        camera.transform().setRotation(vshade::math::lookRotation(
+            vshade::math::Vec3{0.0F, 2.6F, 0.0F} - cameraPosition
+        ));
+        camera.add<vshade::scene::CameraComponent>();
+        camera.add<vshade::scene::AudioListenerComponent>();
+
+        auto sun = m_scene.create("Sun");
+        sun.add<vshade::scene::LightComponent>(
+            vshade::renderer::DirectionalLight{
+                .direction = {-0.45F, -1.0F, -0.35F},
+                .color = {1.0F, 0.95F, 0.86F},
+                .intensity = 0.8F,
+            },
+            true
+        );
+
+        m_platform = m_scene.create("Round Platform");
+        m_platform.add<vshade::scene::ModelRendererComponent>(platformModel, true);
+        m_platform.add<vshade::scene::RigidBody3DComponent>().settings.type =
+            vshade::physics::BodyType::Static;
+        m_platform.add<vshade::scene::Collider3DComponent>(
+            vshade::scene::Collider3DComponent{
+                .shape = vshade::physics::BoxShape3D{{2.45F, 0.09F, 2.45F}},
+                .material = {.friction = 0.8F, .restitution = 0.1F},
+            }
+        );
+
+        for (std::size_t index = 0; index < spawnPositions.size(); ++index) {
+            auto ball = m_scene.create("Ball " + std::to_string(index + 1));
+            ball.transform().setPosition(spawnPositions[index]);
+            ball.transform().setScale(vshade::math::Vec3{ballModelScale});
+            ball.add<vshade::scene::ModelRendererComponent>(ballModel, true);
+            auto& body = ball.add<vshade::scene::RigidBody3DComponent>().settings;
+            body.type = vshade::physics::BodyType::Dynamic;
+            body.linearVelocity = initialVelocities[index];
+            body.continuousCollision = true;
+            ball.add<vshade::scene::Collider3DComponent>(
+                vshade::scene::Collider3DComponent{
+                    .shape = vshade::physics::SphereShape3D{ballRadius},
+                    .material = {.friction = 0.45F, .restitution = 0.55F},
+                }
+            );
+            ball.add<vshade::scene::LightComponent>(
+                vshade::renderer::PointLight{
+                    .color = lightColors[index],
+                    .intensity = 4.5F,
+                    .range = 4.5F,
+                },
+                true
+            );
+            m_balls.push_back(ball);
+        }
     }
 
-    std::shared_ptr<vshade::renderer::Shader> m_materialShader;
-    std::shared_ptr<vshade::renderer::Texture2D> m_checkerTexture;
-    std::unique_ptr<vshade::renderer::Mesh> m_cubeMesh;
-    std::unique_ptr<vshade::renderer::CameraController> m_cameraController;
-    vshade::renderer::Material m_cubeMaterial;
-    vshade::renderer::Camera m_camera3D;
-    vshade::scene::Scene m_scene{"Sandbox"};
-    vshade::scene::Entity m_leftCube;
-    vshade::scene::Entity m_rightCube;
-    float m_cubeAngle = 0.0F;
-    bool m_wireframe = false;
+    void resetBalls() {
+        for (std::size_t index = 0; index < m_balls.size(); ++index) {
+            m_balls[index].transform().setPosition(spawnPositions[index]);
+            m_balls[index].transform().setRotation(vshade::math::identity());
+        }
+        runtime().physics3D().rebuild(m_scene);
+    }
+
+    void drawPlatformCollider() const {
+        const auto& collider = m_platform.get<vshade::scene::Collider3DComponent>();
+        const auto* box = std::get_if<vshade::physics::BoxShape3D>(&collider.shape);
+        if (box == nullptr) return;
+        const auto center = m_platform.transform().position() + collider.offset;
+        vshade::renderer::DebugDraw::box(
+            {.minimum = center - box->halfExtents,
+             .maximum = center + box->halfExtents},
+            {0.15F, 1.0F, 0.25F, 1.0F}
+        );
+    }
+
+    vshade::Scene m_scene;
+    vshade::Entity m_platform;
+    std::vector<vshade::Entity> m_balls;
 };
 
 } // namespace
 
-SHADE_ENGINE_MAIN(SandboxApplication)
+VSHADE_GAME(SandboxApplication)

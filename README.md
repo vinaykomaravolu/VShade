@@ -14,7 +14,10 @@ VShade is a small C++20 OpenGL engine runtime scaffold. It currently provides:
 - EnTT scenes with stable entity UUIDs, duplication, and reflect-cpp-powered
   automatic JSON serialization for custom components;
 - a static engine library;
-- a minimal sandbox application.
+- application-owned assets, global audio, type registration, and scene runtime;
+- component-driven cameras, models, lighting, physics, audio, and native scripts;
+- persistent typed asset references, scene instancing, hierarchy, and prefabs;
+- a minimal falling-ball sandbox using the game-facing API.
 
 The generated [API reference](https://vinaykomaravolu.github.io/VShade/) is
 published with GitHub Pages. Documentation source and local build instructions
@@ -22,7 +25,8 @@ are in [docs/api.md](docs/api.md). The renderer architecture and lifecycle are
 described in [docs/renderer.md](docs/renderer.md). Offscreen golden-image tests
 are documented in [docs/visual-testing.md](docs/visual-testing.md).
 Scene entities and the JSON format are documented in
-[docs/scene.md](docs/scene.md).
+[docs/scene.md](docs/scene.md). The recommended game-author workflow is in
+[docs/game-api.md](docs/game-api.md).
 
 ## Get the dependencies
 
@@ -42,8 +46,24 @@ cmake -S . -B build
 cmake --build build --config Debug
 ```
 
-The sandbox renders a lit, textured cube. Use WASD to move, hold the right
-mouse button to look, scroll to change speed, and press Escape to exit.
+The sandbox loads `ball.glb` and `round_platform.glb`, streams
+`retroloop.mp3`, and lets `SceneRuntime` render and simulate six luminous
+falling balls. Press R to reset the balls and Escape to exit.
+
+## Examples
+
+The [examples](examples/README.md) directory is a progressive, runnable
+tutorial. Its 26 numbered applications start with a window and triangle, then
+build through scenes, 2D and 3D rendering, physics, audio, assets, scripting,
+and small games. Focused feature demos cover textures, transparency, multiple
+lights, normal maps, and rendering to a texture.
+
+Examples are opt-in so normal engine and test builds stay small:
+
+```sh
+cmake -S . -B build-examples -DVSHADE_BUILD_EXAMPLES=ON -DBUILD_TESTING=OFF
+cmake --build build-examples --config Debug
+```
 
 ## Test
 
@@ -81,29 +101,32 @@ add_executable(MyGame main.cpp)
 target_link_libraries(MyGame PRIVATE VShade::Engine)
 ```
 
-Then include the public API with:
+For ordinary game code, include the curated API:
 
 ```cpp
-#include <core/application.hpp>
-#include <core/entrypoint.hpp>
+#include <vshade/Game.hpp>
 ```
 
 A game supplies behavior by deriving from `Application`:
 
 ```cpp
-class MyGame final : public vshade::core::Application {
+class MyGame final : public vshade::Application {
 protected:
-    void onFixedUpdate(float fixedDeltaTime) override {
-        // Update fixed-step simulation or physics here.
-    }
-
-    void onUpdate(float deltaTime) override {
-        // Update the active scene here.
+    void onStart() override {
+        types().script<PlayerController>("Game.PlayerController");
+        playScene("assets/scenes/level-one.vscene");
+        audio().playMusic("assets/audio/theme.ogg", {.looping = true});
     }
 };
 
-SHADE_ENGINE_MAIN(MyGame)
+VSHADE_GAME(MyGame)
 ```
+
+The application automatically advances scripts, fixed-step physics, scene
+audio, model/sprite rendering, lighting, and debug drawing. Override frame
+hooks only for application-level behavior. Direct renderer, physics-world,
+audio-engine, asset-loader, and EnTT-style scene APIs remain available for
+advanced systems.
 
 Input is stored once per frame, so it does not need a `Window` argument:
 
@@ -122,33 +145,33 @@ three states.
 Other core systems have focused headers:
 
 ```cpp
-#include <core/assert.hpp>
-#include <core/entrypoint.hpp>
-#include <core/filesystem.hpp>
-#include <core/log.hpp>
-#include <core/time.hpp>
-#include <math/math.hpp>
-#include <math/matrix.hpp>
-#include <math/quaternion.hpp>
-#include <math/transform.hpp>
-#include <math/vector.hpp>
-#include <input/input.hpp>
-#include <input/keycode.hpp>
-#include <input/mousecode.hpp>
-#include <platform/window.hpp>
-#include <renderer/buffer.hpp>
-#include <renderer/camera.hpp>
-#include <renderer/cameracontroller.hpp>
-#include <renderer/framebuffer.hpp>
-#include <renderer/material.hpp>
-#include <renderer/mesh.hpp>
-#include <renderer/renderer.hpp>
-#include <renderer/renderer2d.hpp>
-#include <renderer/renderer3d.hpp>
-#include <renderer/rendertypes.hpp>
-#include <renderer/shader.hpp>
-#include <renderer/texture.hpp>
-#include <renderer/vertexarray.hpp>
+#include <core/Assert.hpp>
+#include <core/EntryPoint.hpp>
+#include <core/Filesystem.hpp>
+#include <core/Log.hpp>
+#include <core/Time.hpp>
+#include <math/Math.hpp>
+#include <math/Matrix.hpp>
+#include <math/Quaternion.hpp>
+#include <math/Transform.hpp>
+#include <math/Vector.hpp>
+#include <input/Input.hpp>
+#include <input/KeyCode.hpp>
+#include <input/MouseCode.hpp>
+#include <platform/Window.hpp>
+#include <renderer/Buffer.hpp>
+#include <renderer/Camera.hpp>
+#include <renderer/CameraController.hpp>
+#include <renderer/Framebuffer.hpp>
+#include <renderer/Material.hpp>
+#include <renderer/Mesh.hpp>
+#include <renderer/Renderer.hpp>
+#include <renderer/Renderer2D.hpp>
+#include <renderer/Renderer3D.hpp>
+#include <renderer/RenderTypes.hpp>
+#include <renderer/Shader.hpp>
+#include <renderer/Texture.hpp>
+#include <renderer/VertexArray.hpp>
 ```
 
 GLAD loads OpenGL 3.3 core functions after the window creates its context. The

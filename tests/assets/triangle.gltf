@@ -1,0 +1,69 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "VShade tests"
+  },
+  "buffers": [
+    {
+      "byteLength": 102,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAAAAAAAPwAAAL8AAAAAAAAAAAAAAD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAD8AAIA/AAABAAIA"
+    }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24, "target": 34962 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 6, "target": 34963 }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [-0.5, -0.5, 0.0],
+      "max": [0.5, 0.5, 0.0]
+    },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ],
+  "meshes": [
+    {
+      "name": "Triangle",
+      "primitives": [
+        {
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        },
+        {
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+          "indices": 3,
+          "mode": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "TestMaterial",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.25, 0.5, 0.75, 1.0],
+        "metallicFactor": 0.2,
+        "roughnessFactor": 0.4
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "name": "TriangleNode",
+      "mesh": 0,
+      "translation": [1.0, 2.0, 3.0],
+      "scale": [2.0, 2.0, 2.0]
+    }
+  ],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0
+}

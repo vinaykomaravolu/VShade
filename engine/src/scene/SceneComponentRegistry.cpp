@@ -1,5 +1,7 @@
 #include "scene/SceneComponentRegistry.hpp"
 
+#include "scene/Components.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -15,8 +17,24 @@ void SceneComponentRegistry::add(Handler handler) {
         throw std::invalid_argument("A serialized component name cannot be empty");
     }
     if (handler.name == "UUID" || handler.name == "Tag" ||
-        handler.name == "Transform" || handler.name == "SpriteRenderer") {
-        throw std::invalid_argument("A custom component cannot use a built-in component name");
+        handler.name == "Transform" || handler.name == "SpriteRenderer" ||
+        handler.name == "Camera" || handler.name == "ModelRenderer" ||
+        handler.name == "AudioSource" || handler.name == "AudioListener" ||
+        handler.name == "Light" || handler.name == "RigidBody2D" ||
+        handler.name == "Collider2D" || handler.name == "RigidBody3D" ||
+        handler.name == "Collider3D" || handler.name == "Scripts" ||
+        handler.name == "Parent" ||
+        handler.type == entt::type_hash<CameraComponent>::value() ||
+        handler.type == entt::type_hash<ModelRendererComponent>::value() ||
+        handler.type == entt::type_hash<RigidBody2DComponent>::value() ||
+        handler.type == entt::type_hash<Collider2DComponent>::value() ||
+        handler.type == entt::type_hash<RigidBody3DComponent>::value() ||
+        handler.type == entt::type_hash<Collider3DComponent>::value() ||
+        handler.type == entt::type_hash<ScriptComponent>::value() ||
+        handler.type == entt::type_hash<ParentComponent>::value()) {
+        throw std::invalid_argument(
+            "A custom component cannot reuse a built-in component type or name"
+        );
     }
 
     auto& existing = mutableHandlers();
