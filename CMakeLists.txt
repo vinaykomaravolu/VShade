@@ -10,6 +10,7 @@ project(
 include(CTest)
 
 option(VSHADE_BUILD_SANDBOX "Build the example sandbox application" ON)
+option(VSHADE_BUILD_EDITOR "Build the VShade editor" ON)
 option(VSHADE_BUILD_EXAMPLES "Build standalone learning examples" OFF)
 option(VSHADE_BUILD_DOCS "Build the VShade Doxygen API reference" OFF)
 option(VSHADE_WARNINGS_AS_ERRORS "Treat VShade compiler warnings as errors" OFF)
@@ -69,6 +70,13 @@ endif()
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/miniaudio/miniaudio.h")
     message(FATAL_ERROR
         "Missing dependency: external/miniaudio. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
+if(VSHADE_BUILD_EDITOR AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui.cpp")
+    message(FATAL_ERROR
+        "Missing dependency: external/imgui. "
         "Run: git submodule update --init --recursive"
     )
 endif()
@@ -162,6 +170,10 @@ if(BUILD_TESTING)
 endif()
 
 add_subdirectory(engine)
+
+if(VSHADE_BUILD_EDITOR)
+    add_subdirectory(editor)
+endif()
 
 if(VSHADE_BUILD_SANDBOX)
     add_subdirectory(sandbox)
