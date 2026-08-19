@@ -50,6 +50,8 @@ private:
     void saveScene();
     void saveSceneAs();
     void playScene();
+    void pauseScene();
+    void stepScene();
     void stopScene();
     void bindActiveScene();
 
@@ -64,6 +66,7 @@ private:
     std::filesystem::path m_activeScenePath;
     std::filesystem::path m_projectDirectory;
     SceneState m_sceneState = SceneState::Edit;
+    bool m_stepRequested = false;
     bool m_resetDockLayoutRequested = false;
 };
 

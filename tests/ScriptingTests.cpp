@@ -346,15 +346,21 @@ TEST_CASE("SceneRuntime owns one explicit play-mode lifecycle", "[scripting][sce
 
     runtime.play(scene);
     CHECK(runtime.isPlaying());
+    CHECK_FALSE(runtime.isPaused());
     CHECK(runtime.scene() == &scene);
     CHECK(runtime.nativeScripts().hasAttachedScene());
     CHECK_THROWS_AS(runtime.play(scene), std::logic_error);
 
+    runtime.setPaused(true);
+    CHECK(runtime.isPaused());
+    runtime.setPaused(false);
+    CHECK_FALSE(runtime.isPaused());
     runtime.update(0.0F);
     runtime.fixedUpdate(0.001F);
     runtime.stop();
     runtime.stop();
     CHECK_FALSE(runtime.isPlaying());
+    CHECK_FALSE(runtime.isPaused());
     CHECK(runtime.scene() == nullptr);
     CHECK_FALSE(runtime.nativeScripts().hasAttachedScene());
 }

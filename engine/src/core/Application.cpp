@@ -72,14 +72,14 @@ int Application::run() {
             fixedAccumulator += static_cast<double>(Time::deltaTime());
             while (fixedAccumulator >= static_cast<double>(m_config.fixedDeltaTime)) {
                 onFixedUpdate(m_config.fixedDeltaTime);
-                if (m_runtime->isPlaying()) {
+                if (m_runtime->isPlaying() && !m_runtime->isPaused()) {
                     m_runtime->fixedUpdate(m_config.fixedDeltaTime);
                 }
                 fixedAccumulator -= static_cast<double>(m_config.fixedDeltaTime);
             }
 
             onUpdate(Time::deltaTime());
-            if (m_runtime->isPlaying()) {
+            if (m_runtime->isPlaying() && !m_runtime->isPaused()) {
                 m_runtime->update(Time::deltaTime());
             }
 

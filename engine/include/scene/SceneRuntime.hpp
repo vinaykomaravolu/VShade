@@ -88,6 +88,12 @@ public:
     /** @brief Stops gameplay systems and releases the active scene reference. */
     void stop() noexcept;
 
+    /** @brief Suspends or resumes automatic runtime updates while preserving state. */
+    void setPaused(bool paused) noexcept;
+
+    /** @brief Reports whether automatic runtime updates are suspended. */
+    [[nodiscard]] bool isPaused() const noexcept;
+
     /** @brief Reports whether a scene is currently executing. */
     [[nodiscard]] bool isPlaying() const noexcept;
 

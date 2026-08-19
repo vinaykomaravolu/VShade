@@ -41,6 +41,15 @@ void EditorLayer::onAttach() {
 }
 
 void EditorLayer::onUpdate(const float deltaTime) {
+    if (m_sceneState == SceneState::Pause
+        && m_stepRequested
+        && m_runtime
+        && m_runtime->isPlaying()) {
+        constexpr float fixedStep = 1.0F / 60.0F;
+        m_runtime->fixedUpdate(fixedStep);
+        m_runtime->update(fixedStep);
+        m_stepRequested = false;
+    }
     m_viewport.onUpdate(deltaTime);
 }
 
@@ -247,7 +256,7 @@ void EditorLayer::DrawToolbar() {
 
     constexpr float buttonWidth = 72.0F;
     constexpr float spacing = 8.0F;
-    constexpr float totalWidth = buttonWidth * 3.0F + spacing * 2.0F;
+    constexpr float totalWidth = buttonWidth * 4.0F + spacing * 3.0F;
     ImGui::SetCursorPosX(
         std::max(0.0F, (ImGui::GetWindowWidth() - totalWidth) * 0.5F)
     );
@@ -260,8 +269,19 @@ void EditorLayer::DrawToolbar() {
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, spacing);
-    ImGui::BeginDisabled();
-    ImGui::Button("Pause", {buttonWidth, 28.0F});
+    ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
+    const char* pauseLabel =
+        m_sceneState == SceneState::Pause ? "Resume" : "Pause";
+    if (ImGui::Button(pauseLabel, {buttonWidth, 28.0F})) {
+        pauseScene();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::BeginDisabled(m_sceneState != SceneState::Pause);
+    if (ImGui::Button("Step", {buttonWidth, 28.0F})) {
+        stepScene();
+    }
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, spacing);
@@ -427,6 +447,7 @@ void EditorLayer::playScene() {
         );
         m_runtime->play(*m_runtimeScene);
         m_sceneState = SceneState::Play;
+        m_stepRequested = false;
         bindActiveScene();
     } catch (const std::exception& error) {
         m_runtime->stop();
@@ -434,6 +455,26 @@ void EditorLayer::playScene() {
         m_sceneState = SceneState::Edit;
         bindActiveScene();
         ENGINE_ERROR("Failed to enter play mode: {}", error.what());
+    }
+}
+
+void EditorLayer::pauseScene() {
+    if (!m_runtime) {
+        return;
+    }
+    if (m_sceneState == SceneState::Play) {
+        m_sceneState = SceneState::Pause;
+        m_runtime->setPaused(true);
+    } else if (m_sceneState == SceneState::Pause) {
+        m_sceneState = SceneState::Play;
+        m_stepRequested = false;
+        m_runtime->setPaused(false);
+    }
+}
+
+void EditorLayer::stepScene() {
+    if (m_sceneState == SceneState::Pause) {
+        m_stepRequested = true;
     }
 }
 
@@ -445,6 +486,7 @@ void EditorLayer::stopScene() {
         m_runtime->stop();
     }
     m_sceneState = SceneState::Edit;
+    m_stepRequested = false;
     bindActiveScene();
     m_runtimeScene.reset();
 }

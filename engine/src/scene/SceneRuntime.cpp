@@ -66,6 +66,7 @@ struct SceneRuntime::Impl {
     std::unique_ptr<SceneAudioSystem> audio;
     SceneRuntimeConfig config;
     std::array<std::vector<SceneSystemCallback>, 6> systems;
+    bool paused = false;
 
     void invoke(const SceneRuntimePhase phase, const float deltaTime) {
         for (auto& system : systems[phaseIndex(phase)]) {
@@ -105,6 +106,7 @@ void SceneRuntime::play(Scene& sceneToPlay) {
     }
 
     m_impl->activeScene = &sceneToPlay;
+    m_impl->paused = false;
     try {
         if (m_impl->config.physics2D) {
             m_impl->physics2D.rebuild(sceneToPlay);
@@ -193,6 +195,17 @@ void SceneRuntime::stop() noexcept {
     }
     clearPhysics(m_impl->physics2D, m_impl->physics3D);
     m_impl->activeScene = nullptr;
+    m_impl->paused = false;
+}
+
+void SceneRuntime::setPaused(const bool paused) noexcept {
+    if (m_impl && isPlaying()) {
+        m_impl->paused = paused;
+    }
+}
+
+bool SceneRuntime::isPaused() const noexcept {
+    return m_impl && m_impl->paused;
 }
 
 bool SceneRuntime::isPlaying() const noexcept {
