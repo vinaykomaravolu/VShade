@@ -34,7 +34,6 @@ add_executable(VShadeEditor
     src/EditorApplication.cpp
     src/EditorCamera.cpp
     src/EditorLayer.cpp
-    src/Project.cpp
     src/panels/Console.cpp
     src/panels/ContentBrowserPanel.cpp
     src/panels/InspectorPanel.cpp

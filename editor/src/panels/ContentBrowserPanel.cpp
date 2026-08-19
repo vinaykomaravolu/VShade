@@ -1,4 +1,5 @@
 #include "panels/ContentBrowserPanel.hpp"
+#include "widgets/AssetSelector.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -26,16 +27,16 @@ namespace {
 } // namespace
 
 ContentBrowserPanel::ContentBrowserPanel(
-    std::filesystem::path assetDirectory
+    std::filesystem::path rootDirectory
 ) {
-    setAssetDirectory(std::move(assetDirectory));
+    setRoot(std::move(rootDirectory));
 }
 
-void ContentBrowserPanel::setAssetDirectory(
-    std::filesystem::path assetDirectory
+void ContentBrowserPanel::setRoot(
+    std::filesystem::path rootDirectory
 ) {
-    m_assetDirectory = std::move(assetDirectory).lexically_normal();
-    m_currentDirectory = m_assetDirectory;
+    m_rootDirectory = std::move(rootDirectory).lexically_normal();
+    m_currentDirectory = m_rootDirectory;
 }
 
 std::optional<std::filesystem::path>
@@ -48,7 +49,7 @@ ContentBrowserPanel::onImGuiRender() {
     }
 
     std::error_code error;
-    if (m_assetDirectory.empty()) {
+    if (m_rootDirectory.empty()) {
         ImGui::TextDisabled("Open or create a project to browse assets.");
         ImGui::End();
         return sceneToOpen;
@@ -56,18 +57,18 @@ ContentBrowserPanel::onImGuiRender() {
     if (!std::filesystem::is_directory(m_currentDirectory, error)) {
         ImGui::TextDisabled(
             "Asset directory not found: %s",
-            m_assetDirectory.generic_string().c_str()
+            m_rootDirectory.generic_string().c_str()
         );
         ImGui::End();
         return sceneToOpen;
     }
 
-    if (m_currentDirectory != m_assetDirectory) {
+    if (m_currentDirectory != m_rootDirectory) {
         if (ImGui::Button("<-")) {
             const std::filesystem::path parent =
                 m_currentDirectory.parent_path();
             m_currentDirectory = parent.empty()
-                ? m_assetDirectory
+                ? m_rootDirectory
                 : parent;
         }
         ImGui::SameLine();
@@ -126,7 +127,7 @@ ContentBrowserPanel::onImGuiRender() {
         if (!directory && ImGui::BeginDragDropSource()) {
             const std::string payloadPath = path.generic_string();
             ImGui::SetDragDropPayload(
-                "VShadeAsset",
+                assetDragDropType,
                 payloadPath.c_str(),
                 payloadPath.size() + 1
             );

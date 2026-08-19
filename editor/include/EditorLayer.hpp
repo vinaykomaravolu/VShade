@@ -20,10 +20,11 @@ namespace vshade::asset {
 class AssetManager;
 }
 
-namespace editor {
-
+namespace vshade::project {
 class Project;
+}
 
+namespace editor {
 class EditorLayer final {
 public:
     enum class SceneState {
@@ -57,7 +58,8 @@ private:
     void saveSceneAs();
     void newProject();
     void openProject();
-    void setProject(std::shared_ptr<Project> project);
+    void setProject(std::shared_ptr<vshade::project::Project> project);
+    void recordStartSceneIfUnset();
     void importAsset(const std::filesystem::path& sourcePath);
     void duplicateSelectedEntity();
     void deleteSelectedEntity();
@@ -78,7 +80,7 @@ private:
     vshade::scene::Entity m_selectedEntity;
     std::shared_ptr<vshade::scene::Scene> m_editorScene;
     std::shared_ptr<vshade::scene::Scene> m_runtimeScene;
-    std::shared_ptr<Project> m_project;
+    std::shared_ptr<vshade::project::Project> m_project;
     std::filesystem::path m_activeScenePath;
     SceneState m_sceneState = SceneState::Edit;
     bool m_stepRequested = false;

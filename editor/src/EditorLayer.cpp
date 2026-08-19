@@ -1,9 +1,10 @@
 #include "EditorLayer.hpp"
-#include "Project.hpp"
+#include "widgets/AssetSelector.hpp"
 
 #include <asset/AssetManager.hpp>
 #include <audio/AudioClip.hpp>
 #include <core/Log.hpp>
+#include <project/Project.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Texture.hpp>
 #include <scene/Scene.hpp>
@@ -474,7 +475,7 @@ void EditorLayer::DrawFileDialogs() {
             const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
             try {
-                setProject(Project::open(selectedPath));
+                setProject(vshade::project::Project::load(selectedPath));
             } catch (const std::exception& error) {
                 ENGINE_ERROR(
                     "Failed to open project '{}': {}",
@@ -491,7 +492,9 @@ void EditorLayer::DrawFileDialogs() {
             const std::filesystem::path selectedDirectory =
                 ImGuiFileDialog::Instance()->GetCurrentPath();
             try {
-                setProject(Project::create(selectedDirectory));
+                setProject(vshade::project::Project::create(
+                    selectedDirectory
+                ));
             } catch (const std::exception& error) {
                 ENGINE_ERROR(
                     "Failed to create project '{}': {}",
@@ -524,7 +527,7 @@ void EditorLayer::newScene() {
 void EditorLayer::openScene() {
     IGFD::FileDialogConfig config;
     config.path = m_project
-        ? m_project->assetDirectory().generic_string()
+        ? m_project->sceneDirectory().generic_string()
         : ".";
     config.countSelectionMax = 1;
     config.flags = ImGuiFileDialogFlags_Modal;
@@ -577,6 +580,7 @@ void EditorLayer::saveScene() {
         return;
     }
     ENGINE_INFO("Saved scene '{}'", m_activeScenePath.generic_string());
+    recordStartSceneIfUnset();
 }
 
 void EditorLayer::saveSceneAs() {
@@ -590,7 +594,7 @@ void EditorLayer::saveSceneAs() {
         config.fileName = m_activeScenePath.filename().generic_string();
     } else {
         config.path = m_project
-            ? m_project->assetDirectory().generic_string()
+            ? m_project->sceneDirectory().generic_string()
             : ".";
         config.fileName = "Untitled.vscene";
     }
@@ -608,7 +612,7 @@ void EditorLayer::saveSceneAs() {
 void EditorLayer::newProject() {
     IGFD::FileDialogConfig config;
     config.path = m_project
-        ? m_project->directory().generic_string()
+        ? m_project->projectDirectory().generic_string()
         : ".";
     config.countSelectionMax = 1;
     config.flags = ImGuiFileDialogFlags_Modal;
@@ -623,7 +627,7 @@ void EditorLayer::newProject() {
 void EditorLayer::openProject() {
     IGFD::FileDialogConfig config;
     config.path = m_project
-        ? m_project->directory().generic_string()
+        ? m_project->projectDirectory().generic_string()
         : ".";
     config.countSelectionMax = 1;
     config.flags = ImGuiFileDialogFlags_Modal;
@@ -635,16 +639,34 @@ void EditorLayer::openProject() {
     );
 }
 
-void EditorLayer::setProject(std::shared_ptr<Project> project) {
+void EditorLayer::setProject(
+    std::shared_ptr<vshade::project::Project> project
+) {
     if (!project) {
         return;
     }
     m_project = std::move(project);
-    m_contentBrowser.setAssetDirectory(m_project->assetDirectory());
+    m_contentBrowser.setRoot(m_project->assetDirectory());
+    AssetSelector::setSearchDirectory(m_project->assetDirectory());
+    if (m_assets) {
+        AssetSelector::discover(*m_assets);
+    }
     ENGINE_INFO(
         "Opened project '{}'",
         m_project->projectFile().generic_string()
     );
+    const std::filesystem::path startScene =
+        m_project->startScenePath();
+    if (!startScene.empty()) {
+        if (std::filesystem::is_regular_file(startScene)) {
+            loadScene(startScene);
+        } else {
+            ENGINE_WARN(
+                "Project start scene does not exist: '{}'",
+                startScene.generic_string()
+            );
+        }
+    }
 }
 
 void EditorLayer::importAsset(
@@ -705,6 +727,7 @@ void EditorLayer::importAsset(
             throw std::invalid_argument("Unsupported asset file type");
         }
         ENGINE_INFO("Imported asset '{}'", destination.generic_string());
+        AssetSelector::discover(*m_assets);
     } catch (const std::exception& error) {
         ENGINE_ERROR(
             "Failed to import asset '{}': {}",
@@ -733,6 +756,31 @@ void EditorLayer::deleteSelectedEntity() {
     if (activeScene && activeScene->valid(m_selectedEntity)) {
         activeScene->destroyEntity(m_selectedEntity);
         m_selectedEntity = {};
+    }
+}
+
+void EditorLayer::recordStartSceneIfUnset() {
+    if (!m_project
+        || m_activeScenePath.empty()
+        || !m_project->config().startScene.empty()) {
+        return;
+    }
+
+    try {
+        m_project->setStartScene(m_activeScenePath);
+        if (const auto result = m_project->save(); !result) {
+            ENGINE_WARN(
+                "Failed to record start scene '{}': {}",
+                m_activeScenePath.generic_string(),
+                result.error().message
+            );
+        }
+    } catch (const std::exception& error) {
+        ENGINE_WARN(
+            "Failed to record start scene '{}': {}",
+            m_activeScenePath.generic_string(),
+            error.what()
+        );
     }
 }
 

@@ -15,6 +15,7 @@ add_executable(VShadeTests
     Physics2DVisualTests.cpp
     Physics3DTests.cpp
     Physics3DVisualTests.cpp
+    ProjectTests.cpp
     Renderer2DTests.cpp
     Renderer2DVisualTests.cpp
     Renderer3DTests.cpp
@@ -49,6 +50,7 @@ target_compile_definitions(VShadeTests PRIVATE
     VSHADE_MATERIAL_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/material"
     VSHADE_PHYSICS2D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/physics2d"
     VSHADE_PHYSICS3D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/physics3d"
+    VSHADE_PROJECT_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/project"
     VSHADE_RENDER_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render"
     VSHADE_RENDER2D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render2d"
     VSHADE_RENDER3D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/render3d"

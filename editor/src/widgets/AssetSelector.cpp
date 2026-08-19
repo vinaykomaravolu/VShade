@@ -9,15 +9,23 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstring>
 #include <exception>
+#include <filesystem>
+#include <initializer_list>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <unordered_map>
+#include <utility>
 
 #include <ImGuiFileDialog.h>
 #include <imgui.h>
 
 namespace editor {
 namespace {
+
+std::filesystem::path g_searchDirectory;
 
 [[nodiscard]] std::string lowercase(std::string value) {
     std::ranges::transform(
@@ -30,12 +38,127 @@ namespace {
     return value;
 }
 
+void discoverAssetsInDirectory(
+    vshade::asset::AssetManager& assets,
+    const std::filesystem::path& directory
+) {
+    std::error_code error;
+    if (directory.empty()
+        || !std::filesystem::is_directory(directory, error)) {
+        return;
+    }
+
+    std::filesystem::recursive_directory_iterator iterator(
+        directory,
+        std::filesystem::directory_options::skip_permission_denied,
+        error
+    );
+    const std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        std::error_code entryError;
+        const std::filesystem::path path = iterator->path();
+        const bool regularFile = iterator->is_regular_file(entryError);
+        iterator.increment(error);
+        if (!regularFile) {
+            continue;
+        }
+
+        const std::string extension = lowercase(
+            path.extension().generic_string()
+        );
+        try {
+            if (extension == ".glb" || extension == ".gltf") {
+                static_cast<void>(
+                    assets.reference<vshade::renderer::Model>(path)
+                );
+            } else if (
+                extension == ".png"
+                || extension == ".jpg"
+                || extension == ".jpeg"
+                || extension == ".bmp"
+                || extension == ".tga"
+            ) {
+                static_cast<void>(
+                    assets.reference<vshade::renderer::Texture2D>(path)
+                );
+            } else if (
+                extension == ".wav"
+                || extension == ".mp3"
+                || extension == ".flac"
+                || extension == ".ogg"
+            ) {
+                static_cast<void>(
+                    assets.reference<vshade::audio::AudioClip>(path)
+                );
+            }
+        } catch (const std::exception& discoverError) {
+            ENGINE_WARN(
+                "Skipped asset '{}': {}",
+                path.generic_string(),
+                discoverError.what()
+            );
+        }
+    }
+}
+
+[[nodiscard]] bool extensionMatches(
+    const std::filesystem::path& path,
+    const std::initializer_list<std::string_view> extensions
+) {
+    const std::string extension = lowercase(path.extension().generic_string());
+    for (const std::string_view candidate : extensions) {
+        if (extension == candidate) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template<typename Resource>
+bool assignDroppedAsset(
+    vshade::asset::AssetReference<Resource>& reference,
+    vshade::asset::AssetManager& assets,
+    const std::initializer_list<std::string_view> extensions
+) {
+    if (!ImGui::BeginDragDropTarget()) {
+        return false;
+    }
+
+    bool changed = false;
+    if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(assetDragDropType)) {
+        const std::filesystem::path path{
+            static_cast<const char*>(payload->Data)
+        };
+        if (!extensionMatches(path, extensions)) {
+            ENGINE_WARN(
+                "Asset '{}' cannot be assigned to this field",
+                path.generic_string()
+            );
+        } else {
+            try {
+                reference = assets.reference<Resource>(path);
+                changed = true;
+            } catch (const std::exception& error) {
+                ENGINE_ERROR(
+                    "Failed to assign asset '{}': {}",
+                    path.generic_string(),
+                    error.what()
+                );
+            }
+        }
+    }
+    ImGui::EndDragDropTarget();
+    return changed;
+}
+
 template<typename Resource>
 bool drawTypedAssetSelector(
     const char* label,
     const char* typeId,
     const char* dialogTitle,
     const char* filters,
+    const std::initializer_list<std::string_view> extensions,
     vshade::asset::AssetReference<Resource>& reference,
     vshade::asset::AssetManager& assets
 ) {
@@ -45,6 +168,7 @@ bool drawTypedAssetSelector(
     auto& search = searches[stateKey];
 
     ImGui::PushID(stateKey.c_str());
+    ImGui::BeginGroup();
     ImGui::TextUnformatted(label);
     ImGui::SameLine();
     const std::string currentName = reference
@@ -52,10 +176,12 @@ bool drawTypedAssetSelector(
         : "None";
     const std::string fieldLabel = currentName + "  \xE2\x96\xBC";
     if (ImGui::Button(fieldLabel.c_str())) {
+        discoverAssetsInDirectory(assets, g_searchDirectory);
         ImGui::OpenPopup("AssetSelectorPopup");
     }
+    ImGui::EndGroup();
 
-    bool changed = false;
+    bool changed = assignDroppedAsset(reference, assets, extensions);
     bool importRequested = false;
     if (ImGui::BeginPopup("AssetSelectorPopup")) {
         ImGui::SetNextItemWidth(280.0F);
@@ -75,6 +201,7 @@ bool drawTypedAssetSelector(
 
         const std::string query = lowercase(search.data());
         const auto knownAssets = assets.knownAssets<Resource>();
+        std::size_t listed = 0;
         for (const auto& asset : knownAssets) {
             const std::string name =
                 asset.sourcePath.filename().generic_string();
@@ -92,6 +219,12 @@ bool drawTypedAssetSelector(
                 ImGui::CloseCurrentPopup();
             }
             ImGui::PopID();
+            ++listed;
+        }
+        if (knownAssets.empty()) {
+            ImGui::TextDisabled("No assets of this type in the project.");
+        } else if (listed == 0) {
+            ImGui::TextDisabled("No matching assets.");
         }
 
         ImGui::Separator();
@@ -104,7 +237,9 @@ bool drawTypedAssetSelector(
 
     if (importRequested) {
         IGFD::FileDialogConfig config;
-        config.path = ".";
+        config.path = g_searchDirectory.empty()
+            ? "."
+            : g_searchDirectory.generic_string();
         config.countSelectionMax = 1;
         config.flags = ImGuiFileDialogFlags_Modal;
         ImGuiFileDialog::Instance()->OpenDialog(
@@ -136,6 +271,43 @@ bool drawTypedAssetSelector(
 
 } // namespace
 
+void AssetSelector::setSearchDirectory(std::filesystem::path directory) {
+    g_searchDirectory = std::move(directory).lexically_normal();
+}
+
+void AssetSelector::discover(vshade::asset::AssetManager& assets) {
+    discoverAssetsInDirectory(assets, g_searchDirectory);
+}
+
+bool AssetSelector::acceptDroppedAsset(
+    vshade::asset::AssetReference<vshade::renderer::Texture2D>& reference,
+    vshade::asset::AssetManager& assets
+) {
+    return assignDroppedAsset(
+        reference,
+        assets,
+        {".png", ".jpg", ".jpeg", ".bmp", ".tga"}
+    );
+}
+
+bool AssetSelector::acceptDroppedAsset(
+    vshade::asset::AssetReference<vshade::renderer::Model>& reference,
+    vshade::asset::AssetManager& assets
+) {
+    return assignDroppedAsset(reference, assets, {".glb", ".gltf"});
+}
+
+bool AssetSelector::acceptDroppedAsset(
+    vshade::asset::AssetReference<vshade::audio::AudioClip>& reference,
+    vshade::asset::AssetManager& assets
+) {
+    return assignDroppedAsset(
+        reference,
+        assets,
+        {".wav", ".mp3", ".flac", ".ogg"}
+    );
+}
+
 bool AssetSelector::draw(
     const char* label,
     vshade::asset::AssetReference<vshade::renderer::Texture2D>& reference,
@@ -146,6 +318,7 @@ bool AssetSelector::draw(
         "Texture",
         "Import Texture",
         ".png,.jpg,.jpeg,.bmp,.tga",
+        {".png", ".jpg", ".jpeg", ".bmp", ".tga"},
         reference,
         assets
     );
@@ -161,6 +334,7 @@ bool AssetSelector::draw(
         "Model",
         "Import Model",
         ".glb,.gltf",
+        {".glb", ".gltf"},
         reference,
         assets
     );
@@ -176,6 +350,7 @@ bool AssetSelector::draw(
         "AudioClip",
         "Import Audio Clip",
         ".wav,.mp3,.flac,.ogg",
+        {".wav", ".mp3", ".flac", ".ogg"},
         reference,
         assets
     );

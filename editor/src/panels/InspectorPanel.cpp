@@ -26,11 +26,12 @@ namespace {
 constexpr ImGuiWindowFlags panelFlags =
     ImGuiWindowFlags_NoCollapse;
 
-template<typename Component, typename UiFunction>
+template<typename Component, typename UiFunction, typename DropFunction>
 void drawComponent(
     const char* name,
     vshade::scene::Entity entity,
-    UiFunction&& uiFunction
+    UiFunction&& uiFunction,
+    DropFunction&& dropFunction
 ) {
     if (!entity.has<Component>()) {
         return;
@@ -38,13 +39,29 @@ void drawComponent(
 
     auto& component = entity.get<Component>();
     ImGui::PushID(name);
-    if (ImGui::CollapsingHeader(
-            name,
-            ImGuiTreeNodeFlags_DefaultOpen
-        )) {
+    const bool open = ImGui::CollapsingHeader(
+        name,
+        ImGuiTreeNodeFlags_DefaultOpen
+    );
+    std::forward<DropFunction>(dropFunction)(component);
+    if (open) {
         std::forward<UiFunction>(uiFunction)(component);
     }
     ImGui::PopID();
+}
+
+template<typename Component, typename UiFunction>
+void drawComponent(
+    const char* name,
+    vshade::scene::Entity entity,
+    UiFunction&& uiFunction
+) {
+    drawComponent<Component>(
+        name,
+        entity,
+        std::forward<UiFunction>(uiFunction),
+        [](Component&) {}
+    );
 }
 
 } // namespace
@@ -219,6 +236,17 @@ void InspectorPanel::drawSpriteRenderer(vshade::scene::Entity entity) {
             ImGui::ColorEdit4("Color", &sprite.color.x);
             ImGui::DragFloat2("Tiling", &sprite.tiling.x, 0.1F);
             ImGui::DragInt("Sorting Layer", &sprite.sortingLayer, 1.0F);
+        },
+        [this](vshade::scene::SpriteRendererComponent& sprite) {
+            if (m_assets
+                && AssetSelector::acceptDroppedAsset(
+                    sprite.texture,
+                    *m_assets
+                )) {
+                sprite.texturePath = sprite.texture
+                    ? sprite.texture.sourcePath()
+                    : std::filesystem::path{};
+            }
         }
     );
 }
@@ -236,6 +264,14 @@ void InspectorPanel::drawModelRenderer(vshade::scene::Entity entity) {
                 );
             }
             ImGui::Checkbox("Visible", &modelRenderer.visible);
+        },
+        [this](vshade::scene::ModelRendererComponent& modelRenderer) {
+            if (m_assets) {
+                AssetSelector::acceptDroppedAsset(
+                    modelRenderer.model,
+                    *m_assets
+                );
+            }
         }
     );
 }
@@ -262,6 +298,17 @@ void InspectorPanel::drawAudioSource(vshade::scene::Entity entity) {
             ImGui::Checkbox("Looping", &source.looping);
             ImGui::Checkbox("Play On Start", &source.playOnStart);
             ImGui::Checkbox("Spatial", &source.spatial);
+        },
+        [this](vshade::scene::AudioSourceComponent& source) {
+            if (m_assets
+                && AssetSelector::acceptDroppedAsset(
+                    source.clipAsset,
+                    *m_assets
+                )) {
+                source.clip = source.clipAsset
+                    ? source.clipAsset.handle()
+                    : vshade::audio::AudioClipHandle{};
+            }
         }
     );
 }

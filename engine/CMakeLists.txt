@@ -23,6 +23,8 @@ set(VSHADE_SOURCES
     src/math/Transform.cpp
     src/math/Vector.cpp
     src/platform/Window.cpp
+    src/project/Project.cpp
+    src/project/ProjectSerializer.cpp
     src/physics/box2d/PhysicsSystem2D.cpp
     src/physics/box2d/PhysicsWorld2D.cpp
     src/physics/jolt/PhysicsSystem3D.cpp
