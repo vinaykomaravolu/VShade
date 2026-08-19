@@ -107,6 +107,9 @@ public:
                 );
             }
         };
+        handler.remove = [](entt::registry& registry, const entt::entity entity) {
+            registry.remove<Component>(entity);
+        };
         add(std::move(handler));
     }
 
@@ -123,6 +126,7 @@ private:
             entt::registry&,
             entt::entity
         )> clone;
+        std::function<void(entt::registry&, entt::entity)> remove;
     };
 
     friend class Scene;

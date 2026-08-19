@@ -192,6 +192,7 @@ scene::SceneRuntime& Application::runtime() {
 scene::Scene& Application::playScene(const std::filesystem::path& path) {
     const auto sceneAsset = assets().loadResource<scene::Scene>(path);
     std::unique_ptr<scene::Scene> instance = sceneAsset->instantiate();
+    instance->applyPrefabInstances(assets());
     stopScene();
     m_ownedScene = std::move(instance);
     runtime().play(*m_ownedScene);

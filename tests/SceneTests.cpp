@@ -227,6 +227,133 @@ TEST_CASE("Prefab extraction copies a subtree and can round-trip through JSON", 
     REQUIRE(loadedDestination.children(loadedInstance).size() == 1);
 }
 
+TEST_CASE("Linked prefab instances refresh from later prefab edits", "[scene][prefab]") {
+    vshade::scene::Scene source("Level");
+    auto root = source.create("Turret");
+    auto barrel = source.create("Barrel");
+    source.setParent(barrel, root);
+    root.add<vshade::scene::LightComponent>();
+    root.get<vshade::scene::LightComponent>().enabled = true;
+
+    const auto original = vshade::scene::Prefab::fromEntity(source, root);
+    std::uint64_t templateRootUuid = 0;
+    std::uint64_t templateBarrelUuid = 0;
+    for (const auto [handle, uuid, tag] : original.scene().view<
+             const vshade::scene::UUIDComponent,
+             const vshade::scene::TagComponent
+    >().each()) {
+        (void)handle;
+        if (tag.tag == "Turret") {
+            templateRootUuid = uuid.uuid;
+        }
+        if (tag.tag == "Barrel") {
+            templateBarrelUuid = uuid.uuid;
+        }
+    }
+    REQUIRE(templateRootUuid != 0);
+    REQUIRE(templateBarrelUuid != 0);
+
+    std::size_t prefabInstanceComponents = 0;
+    for (const auto handle :
+         original.scene().view<const vshade::scene::PrefabInstanceComponent>()) {
+        (void)handle;
+        ++prefabInstanceComponents;
+    }
+    CHECK(prefabInstanceComponents == 0);
+
+    const std::filesystem::path path = sceneOutputPath("linked_turret.vsprefab");
+    REQUIRE(original.save(path));
+
+    vshade::asset::AssetManager assets;
+    const auto loaded = assets.loadResource<vshade::scene::Prefab>(path);
+    REQUIRE(loaded);
+
+    vshade::scene::Scene level("Spawned");
+    const auto unlinked = level.instantiate(*loaded);
+    REQUIRE(unlinked);
+    CHECK_FALSE(unlinked.has<vshade::scene::PrefabInstanceComponent>());
+
+    auto first = level.instantiate(*loaded, loaded.reference());
+    auto second = level.instantiate(*loaded, loaded.reference());
+    REQUIRE(first);
+    REQUIRE(second);
+    REQUIRE(first.has<vshade::scene::PrefabInstanceComponent>());
+    REQUIRE(second.has<vshade::scene::PrefabInstanceComponent>());
+    CHECK(first.get<vshade::scene::PrefabInstanceComponent>().prefab == loaded.reference());
+    CHECK(first.get<vshade::scene::PrefabInstanceComponent>().entities.size() == 2);
+    CHECK(first.uuid() != second.uuid());
+    CHECK(first.uuid() != templateRootUuid);
+
+    first.transform().setPosition({10.0F, 0.0F, 0.0F});
+    second.transform().setPosition({20.0F, 0.0F, 0.0F});
+
+    const auto extracted = vshade::scene::Prefab::fromEntity(level, first);
+    std::uint64_t extractedRootUuid = 0;
+    std::uint64_t extractedBarrelUuid = 0;
+    for (const auto [handle, uuid, tag] : extracted.scene().view<
+             const vshade::scene::UUIDComponent,
+             const vshade::scene::TagComponent
+    >().each()) {
+        (void)handle;
+        if (tag.tag == "Turret") {
+            extractedRootUuid = uuid.uuid;
+        }
+        if (tag.tag == "Barrel") {
+            extractedBarrelUuid = uuid.uuid;
+        }
+    }
+    CHECK(extractedRootUuid == templateRootUuid);
+    CHECK(extractedBarrelUuid == templateBarrelUuid);
+
+    vshade::scene::SceneSerializer writer(level);
+    const std::string json = writer.serializeToString(
+        vshade::scene::SceneJsonFormat::Compact
+    );
+    REQUIRE_FALSE(json.empty());
+    CHECK(json.find("PrefabInstance") != std::string::npos);
+
+    vshade::scene::Scene roundTripped("Loaded instances");
+    vshade::scene::SceneSerializer reader(roundTripped);
+    REQUIRE(reader.deserializeFromString(json));
+    const auto loadedFirst = roundTripped.findEntity(first.uuid());
+    REQUIRE(loadedFirst);
+    REQUIRE(loadedFirst.has<vshade::scene::PrefabInstanceComponent>());
+    CHECK(loadedFirst.get<vshade::scene::PrefabInstanceComponent>().prefab.sourcePath()
+        == loaded.reference().sourcePath());
+    CHECK(loadedFirst.get<vshade::scene::PrefabInstanceComponent>().entities.size() == 2);
+
+    root.setName("Cannon");
+    root.get<vshade::scene::LightComponent>().enabled = false;
+    auto scope = source.create("Scope");
+    source.setParent(scope, root);
+    const auto updated = vshade::scene::Prefab::fromEntity(source, root);
+    REQUIRE(updated.save(path));
+
+    level.applyPrefabInstances(assets);
+    CHECK(std::string(first.name()) == "Cannon");
+    CHECK(std::string(second.name()) == "Cannon");
+    CHECK_FALSE(first.get<vshade::scene::LightComponent>().enabled);
+    CHECK_FALSE(second.get<vshade::scene::LightComponent>().enabled);
+    CHECK(first.transform().position().x == Catch::Approx(10.0F));
+    CHECK(second.transform().position().x == Catch::Approx(20.0F));
+    REQUIRE(level.children(first).size() == 2);
+    REQUIRE(level.children(second).size() == 2);
+
+    bool firstHasScope = false;
+    bool secondHasScope = false;
+    for (const auto child : level.children(first)) {
+        firstHasScope = firstHasScope || std::string(child.name()) == "Scope";
+    }
+    for (const auto child : level.children(second)) {
+        secondHasScope = secondHasScope || std::string(child.name()) == "Scope";
+    }
+    CHECK(firstHasScope);
+    CHECK(secondHasScope);
+
+    const auto duplicate = level.duplicateEntity(first);
+    CHECK_FALSE(duplicate.has<vshade::scene::PrefabInstanceComponent>());
+}
+
 TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
     REQUIRE(std::filesystem::is_regular_file(
         std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "player.png"

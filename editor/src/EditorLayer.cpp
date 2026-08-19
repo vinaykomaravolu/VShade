@@ -629,6 +629,9 @@ void EditorLayer::loadScene(const std::filesystem::path& path) {
 
     setActiveScene(std::move(scene));
     m_activeScenePath = path;
+    if (m_assets && m_editorScene) {
+        m_editorScene->applyPrefabInstances(*m_assets);
+    }
 }
 
 void EditorLayer::saveScene() {
@@ -893,9 +896,26 @@ void EditorLayer::writePrefab(const std::filesystem::path& path) {
             throw std::runtime_error(result.error().message);
         }
         if (m_assets) {
-            static_cast<void>(
-                m_assets->reference<vshade::scene::Prefab>(path)
+            const auto prefabRef =
+                m_assets->reference<vshade::scene::Prefab>(path);
+            if (m_assets->isLoaded(prefabRef.handle())) {
+                m_assets->unload(prefabRef.handle());
+            }
+            const auto loaded = m_assets->loadResource<vshade::scene::Prefab>(
+                prefabRef
             );
+            if (m_editorScene->valid(m_selectedEntity)) {
+                if (auto* instance = m_selectedEntity.tryGet<
+                        vshade::scene::PrefabInstanceComponent>()) {
+                    instance->prefab = loaded.reference();
+                } else {
+                    m_editorScene->bindPrefabInstance(
+                        m_selectedEntity,
+                        loaded.reference()
+                    );
+                }
+            }
+            m_editorScene->applyPrefabInstances(*m_assets);
             saveProjectCatalog();
             AssetSelector::discover(*m_assets);
         }
@@ -1034,6 +1054,9 @@ void EditorLayer::playScene() {
     }
 
     try {
+        if (m_assets) {
+            m_editorScene->applyPrefabInstances(*m_assets);
+        }
         m_runtimeScene = std::shared_ptr<vshade::scene::Scene>(
             m_editorScene->instantiate()
         );

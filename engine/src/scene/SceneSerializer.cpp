@@ -2,6 +2,7 @@
 
 #include "math/Quaternion.hpp"
 #include "scene/Components.hpp"
+#include "scene/Prefab.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneComponentRegistry.hpp"
 
@@ -781,6 +782,20 @@ std::string SceneSerializer::serializeToString(const SceneJsonFormat format) con
                     registry.get<ParentComponent>(handle).parentUuid
                 );
             }
+            if (registry.all_of<PrefabInstanceComponent>(handle)) {
+                const auto& instance = registry.get<PrefabInstanceComponent>(handle);
+                Json links = Json::array();
+                for (const PrefabEntityLink& link : instance.entities) {
+                    links.push_back({
+                        {"Prefab", std::to_string(link.prefabUuid)},
+                        {"Entity", std::to_string(link.instanceUuid)},
+                    });
+                }
+                entity["PrefabInstance"] = {
+                    {"Prefab", serializeAssetReference(instance.prefab)},
+                    {"Entities", std::move(links)},
+                };
+            }
             for (const auto& handler : SceneComponentRegistry::handlers()) {
                 if (handler.has(registry, handle)) {
                     entity["Components"][handler.name] =
@@ -1076,6 +1091,31 @@ bool SceneSerializer::deserializeFromString(const std::string& json) {
                     throw std::invalid_argument("Entity Parent must reference another entity");
                 }
                 loadedRegistry.emplace<ParentComponent>(handle, parentUuid);
+            }
+            if (const auto prefabInstance = serializedEntity.find("PrefabInstance");
+                prefabInstance != serializedEntity.end()) {
+                PrefabInstanceComponent component{
+                    .prefab = deserializeAssetReference<Prefab>(
+                        prefabInstance->at("Prefab")
+                    ),
+                };
+                if (!prefabInstance->at("Entities").is_array()) {
+                    throw std::invalid_argument("PrefabInstance Entities must be an array");
+                }
+                for (const Json& link : prefabInstance->at("Entities")) {
+                    const std::uint64_t prefabUuid = parseUuid(link.at("Prefab"));
+                    const std::uint64_t instanceUuid = parseUuid(link.at("Entity"));
+                    if (prefabUuid == 0 || instanceUuid == 0) {
+                        throw std::invalid_argument(
+                            "PrefabInstance entity links must be non-zero"
+                        );
+                    }
+                    component.entities.push_back({prefabUuid, instanceUuid});
+                }
+                loadedRegistry.emplace<PrefabInstanceComponent>(
+                    handle,
+                    std::move(component)
+                );
             }
 
             if (const auto components = serializedEntity.find("Components");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "asset/AssetReference.hpp"
 #include "scene/Components.hpp"
 #include "scene/Entity.hpp"
 #include "scene/SceneEnvironment.hpp"
@@ -12,6 +13,10 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+
+namespace vshade::asset {
+class AssetManager;
+}
 
 namespace vshade::scene {
 
@@ -44,6 +49,33 @@ public:
 
     /** @brief Copies every prefab entity into this scene with fresh UUIDs. */
     [[nodiscard]] Entity instantiate(const Prefab& prefab);
+
+    /**
+     * @brief Spawns a linked prefab instance that can be refreshed from @p source.
+     * @note The root transform remains an instance override after applyPrefab().
+     */
+    [[nodiscard]] Entity instantiate(
+        const Prefab& prefab,
+        const asset::AssetReference<Prefab>& source
+    );
+
+    /**
+     * @brief Records @p root and its descendants as an identity-mapped prefab instance.
+     * @throws std::invalid_argument If @p root is invalid or @p source is empty.
+     */
+    void bindPrefabInstance(
+        Entity root,
+        asset::AssetReference<Prefab> source
+    );
+
+    /**
+     * @brief Rebuilds a linked instance from @p prefab, preserving the root transform.
+     * @throws std::invalid_argument If @p instanceRoot is not a prefab instance in this scene.
+     */
+    void applyPrefab(Entity instanceRoot, const Prefab& prefab);
+
+    /** @brief Reloads every linked prefab instance that can still be resolved. */
+    void applyPrefabInstances(asset::AssetManager& assets);
 
     /** @brief Destroys an entity owned by this scene. */
     void destroyEntity(Entity entity);
@@ -101,6 +133,12 @@ private:
 
     [[nodiscard]] Entity createEntityWithUuid(std::string name, std::uint64_t uuid);
     [[nodiscard]] std::uint64_t generateUuid();
+    void copyPrefabComponents(
+        Entity destination,
+        const Scene& source,
+        entt::entity sourceHandle,
+        bool keepTransform
+    );
 
     entt::registry m_registry;
     std::unordered_map<std::uint64_t, entt::entity> m_entitiesByUuid;

@@ -48,11 +48,28 @@ Prefab Prefab::fromEntity(const Scene& scene, const Entity root) {
     auto prefabScene = std::make_shared<Scene>(
         scene.m_registry.get<TagComponent>(root.handle()).tag
     );
+    std::unordered_map<std::uint64_t, std::uint64_t> instanceToPrefabUuid;
+    if (const auto* instance =
+            scene.m_registry.try_get<PrefabInstanceComponent>(root.handle())) {
+        for (const PrefabEntityLink& link : instance->entities) {
+            instanceToPrefabUuid[link.instanceUuid] = link.prefabUuid;
+        }
+    }
+
     std::unordered_map<std::uint64_t, Entity> entities;
     for (const entt::entity handle : sources) {
         const auto& uuid = scene.m_registry.get<UUIDComponent>(handle);
         const auto& tag = scene.m_registry.get<TagComponent>(handle);
-        entities.emplace(uuid.uuid, prefabScene->createEntity(tag.tag));
+        std::uint64_t prefabUuid = uuid.uuid;
+        if (!instanceToPrefabUuid.empty()) {
+            if (const auto found = instanceToPrefabUuid.find(uuid.uuid);
+                found != instanceToPrefabUuid.end()) {
+                prefabUuid = found->second;
+            } else {
+                prefabUuid = prefabScene->generateUuid();
+            }
+        }
+        entities.emplace(uuid.uuid, prefabScene->createEntityWithUuid(tag.tag, prefabUuid));
     }
 
     for (const entt::entity handle : sources) {

@@ -509,7 +509,10 @@ bool Viewport::spawnDroppedAsset(
                 if (m_editHooks.begin) {
                     m_editHooks.begin();
                 }
-                vshade::scene::Entity entity = m_scene->instantiate(*prefab);
+                vshade::scene::Entity entity = m_scene->instantiate(
+                    *prefab,
+                    prefab.reference()
+                );
                 if (!entity) {
                     throw std::runtime_error("The prefab did not contain a root entity");
                 }

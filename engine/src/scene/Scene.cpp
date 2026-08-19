@@ -2,11 +2,17 @@
 #include "scene/SceneComponentRegistry.hpp"
 #include "scene/Prefab.hpp"
 
+#include "asset/AssetManager.hpp"
+#include "core/Log.hpp"
+
 #include <atomic>
 #include <algorithm>
 #include <limits>
 #include <random>
+#include <ranges>
 #include <stdexcept>
+#include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace vshade::scene {
@@ -160,6 +166,7 @@ std::unique_ptr<Scene> Scene::instantiate() const {
         copyComponent.template operator()<Collider3DComponent>();
         copyComponent.template operator()<ScriptComponent>();
         copyComponent.template operator()<ParentComponent>();
+        copyComponent.template operator()<PrefabInstanceComponent>();
 
         for (const auto& handler : SceneComponentRegistry::handlers()) {
             handler.clone(
@@ -174,6 +181,13 @@ std::unique_ptr<Scene> Scene::instantiate() const {
 }
 
 Entity Scene::instantiate(const Prefab& prefab) {
+    return instantiate(prefab, {});
+}
+
+Entity Scene::instantiate(
+    const Prefab& prefab,
+    const asset::AssetReference<Prefab>& source
+) {
     const Scene& sourceScene = prefab.scene();
     std::unordered_map<std::uint64_t, Entity> entities;
     std::vector<Entity> created;
@@ -199,55 +213,257 @@ Entity Scene::instantiate(const Prefab& prefab) {
             const std::uint64_t sourceUuid =
                 sourceScene.m_registry.get<UUIDComponent>(sourceHandle).uuid;
             Entity destination = entities.at(sourceUuid);
-            destination.component<TransformComponent>() =
-                sourceScene.m_registry.get<TransformComponent>(sourceHandle);
-
-            const auto copy = [&]<typename Component>() {
-                if (sourceScene.m_registry.all_of<Component>(sourceHandle)) {
-                    destination.addComponent<Component>(
-                        sourceScene.m_registry.get<Component>(sourceHandle)
-                    );
-                }
-            };
-            copy.template operator()<SpriteRendererComponent>();
-            copy.template operator()<CameraComponent>();
-            copy.template operator()<ModelRendererComponent>();
-            copy.template operator()<AudioSourceComponent>();
-            copy.template operator()<AudioListenerComponent>();
-            copy.template operator()<LightComponent>();
-            copy.template operator()<RigidBody2DComponent>();
-            copy.template operator()<Collider2DComponent>();
-            copy.template operator()<RigidBody3DComponent>();
-            copy.template operator()<Collider3DComponent>();
-            copy.template operator()<ScriptComponent>();
-
+            copyPrefabComponents(destination, sourceScene, sourceHandle, false);
             if (const auto* relationship =
                 sourceScene.m_registry.try_get<ParentComponent>(sourceHandle)) {
                 destination.addComponent<ParentComponent>(ParentComponent{
                     entities.at(relationship->parentUuid).uuid()
                 });
             }
-            for (const auto& handler : SceneComponentRegistry::handlers()) {
-                handler.clone(
-                    sourceScene.m_registry,
-                    sourceHandle,
-                    m_registry,
-                    destination.m_handle
-                );
-            }
         }
+
+        if (primarySourceUuid == std::numeric_limits<std::uint64_t>::max()) {
+            primarySourceUuid = firstSourceUuid;
+        }
+        Entity root = primarySourceUuid == std::numeric_limits<std::uint64_t>::max()
+            ? Entity{}
+            : entities.at(primarySourceUuid);
+        if (root && source.valid()) {
+            PrefabInstanceComponent component{.prefab = source};
+            component.entities.reserve(entities.size());
+            for (const auto& [prefabUuid, entity] : entities) {
+                component.entities.push_back({prefabUuid, entity.uuid()});
+            }
+            std::ranges::sort(
+                component.entities,
+                [](const PrefabEntityLink& left, const PrefabEntityLink& right) {
+                    return left.prefabUuid < right.prefabUuid;
+                }
+            );
+            root.add<PrefabInstanceComponent>(std::move(component));
+        }
+        return root;
     } catch (...) {
         for (auto iterator = created.rbegin(); iterator != created.rend(); ++iterator) {
             if (valid(*iterator)) destroyEntity(*iterator);
         }
         throw;
     }
+}
+
+void Scene::bindPrefabInstance(
+    Entity root,
+    asset::AssetReference<Prefab> source
+) {
+    if (!valid(root) || !source.valid()) {
+        throw std::invalid_argument("Prefab instance root and source asset must be valid");
+    }
+
+    PrefabInstanceComponent component{.prefab = std::move(source)};
+    std::vector<Entity> pending{root};
+    std::unordered_set<std::uint64_t> visited;
+    while (!pending.empty()) {
+        const Entity entity = pending.back();
+        pending.pop_back();
+        if (!valid(entity) || !visited.insert(entity.uuid()).second) {
+            continue;
+        }
+        component.entities.push_back({entity.uuid(), entity.uuid()});
+        for (const Entity child : children(entity)) {
+            pending.push_back(child);
+        }
+    }
+    std::ranges::sort(
+        component.entities,
+        [](const PrefabEntityLink& left, const PrefabEntityLink& right) {
+            return left.prefabUuid < right.prefabUuid;
+        }
+    );
+    root.set<PrefabInstanceComponent>(std::move(component));
+}
+
+void Scene::applyPrefab(Entity instanceRoot, const Prefab& prefab) {
+    if (!valid(instanceRoot) || !instanceRoot.has<PrefabInstanceComponent>()) {
+        throw std::invalid_argument("applyPrefab requires a linked prefab instance root");
+    }
+
+    auto& instance = instanceRoot.get<PrefabInstanceComponent>();
+    const math::Transform rootTransform = instanceRoot.transform();
+    const Entity rootParent = parent(instanceRoot);
+
+    std::unordered_map<std::uint64_t, std::uint64_t> prefabToInstance;
+    prefabToInstance.reserve(instance.entities.size());
+    for (const PrefabEntityLink& link : instance.entities) {
+        prefabToInstance[link.prefabUuid] = link.instanceUuid;
+    }
+
+    const Scene& sourceScene = prefab.scene();
+    std::uint64_t primarySourceUuid = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t firstSourceUuid = std::numeric_limits<std::uint64_t>::max();
+    for (const auto [sourceHandle] :
+         sourceScene.m_registry.storage<entt::entity>()->each()) {
+        const std::uint64_t sourceUuid =
+            sourceScene.m_registry.get<UUIDComponent>(sourceHandle).uuid;
+        firstSourceUuid = std::min(firstSourceUuid, sourceUuid);
+        if (!sourceScene.m_registry.all_of<ParentComponent>(sourceHandle)) {
+            primarySourceUuid = std::min(primarySourceUuid, sourceUuid);
+        }
+    }
     if (primarySourceUuid == std::numeric_limits<std::uint64_t>::max()) {
         primarySourceUuid = firstSourceUuid;
     }
-    return primarySourceUuid == std::numeric_limits<std::uint64_t>::max()
-        ? Entity{}
-        : entities.at(primarySourceUuid);
+    if (primarySourceUuid != std::numeric_limits<std::uint64_t>::max()) {
+        prefabToInstance[primarySourceUuid] = instanceRoot.uuid();
+    }
+
+    std::unordered_map<std::uint64_t, Entity> entities;
+    std::unordered_set<std::uint64_t> remainingPrefabUuids;
+    PrefabInstanceComponent updated{.prefab = instance.prefab};
+
+    for (const auto [sourceHandle] :
+         sourceScene.m_registry.storage<entt::entity>()->each()) {
+        const auto& uuid = sourceScene.m_registry.get<UUIDComponent>(sourceHandle);
+        const auto& tag = sourceScene.m_registry.get<TagComponent>(sourceHandle);
+        remainingPrefabUuids.insert(uuid.uuid);
+
+        Entity destination;
+        if (const auto found = prefabToInstance.find(uuid.uuid);
+            found != prefabToInstance.end()) {
+            destination = findEntity(found->second);
+        }
+        if (!destination) {
+            destination = createEntity(tag.tag);
+        }
+
+        const bool keepTransform = destination == instanceRoot;
+        copyPrefabComponents(destination, sourceScene, sourceHandle, keepTransform);
+        entities.emplace(uuid.uuid, destination);
+        updated.entities.push_back({uuid.uuid, destination.uuid()});
+    }
+
+    for (const PrefabEntityLink& link : instance.entities) {
+        if (remainingPrefabUuids.contains(link.prefabUuid)) {
+            continue;
+        }
+        const Entity extra = findEntity(link.instanceUuid);
+        if (extra && extra != instanceRoot) {
+            destroyEntity(extra);
+        }
+    }
+
+    for (const auto [sourceHandle] :
+         sourceScene.m_registry.storage<entt::entity>()->each()) {
+        const std::uint64_t sourceUuid =
+            sourceScene.m_registry.get<UUIDComponent>(sourceHandle).uuid;
+        Entity destination = entities.at(sourceUuid);
+        if (const auto* relationship =
+                sourceScene.m_registry.try_get<ParentComponent>(sourceHandle)) {
+            setParent(destination, entities.at(relationship->parentUuid));
+        } else if (destination != instanceRoot) {
+            clearParent(destination);
+        }
+    }
+
+    if (rootParent && valid(rootParent)) {
+        setParent(instanceRoot, rootParent);
+    } else {
+        clearParent(instanceRoot);
+    }
+    instanceRoot.transform() = rootTransform;
+    std::ranges::sort(
+        updated.entities,
+        [](const PrefabEntityLink& left, const PrefabEntityLink& right) {
+            return left.prefabUuid < right.prefabUuid;
+        }
+    );
+    instanceRoot.set<PrefabInstanceComponent>(std::move(updated));
+}
+
+void Scene::applyPrefabInstances(asset::AssetManager& assets) {
+    std::vector<std::uint64_t> instanceRoots;
+    std::unordered_set<asset::AssetId> prefabIds;
+    for (const auto [handle, uuid, instance] : m_registry.view<
+             const UUIDComponent,
+             const PrefabInstanceComponent
+    >().each()) {
+        (void)handle;
+        instanceRoots.push_back(uuid.uuid);
+        if (instance.prefab.valid()) {
+            prefabIds.insert(instance.prefab.handle().id());
+        }
+    }
+
+    for (const asset::AssetId id : prefabIds) {
+        const auto prefabHandle = asset::AssetHandle<Prefab>::fromId(id);
+        if (assets.isLoaded(prefabHandle)) {
+            assets.unload(prefabHandle);
+        }
+    }
+
+    for (const std::uint64_t rootUuid : instanceRoots) {
+        const Entity root = findEntity(rootUuid);
+        if (!root || !root.has<PrefabInstanceComponent>()) {
+            continue;
+        }
+        const auto& component = root.get<PrefabInstanceComponent>();
+        if (!component.prefab.valid()) {
+            continue;
+        }
+        try {
+            const auto prefab = assets.loadResource<Prefab>(component.prefab);
+            applyPrefab(root, *prefab);
+        } catch (const std::exception& error) {
+            ENGINE_WARN(
+                "Failed to apply prefab '{}' to entity '{}': {}",
+                component.prefab.sourcePath().generic_string(),
+                std::string(root.name()),
+                error.what()
+            );
+        }
+    }
+}
+
+void Scene::copyPrefabComponents(
+    Entity destination,
+    const Scene& source,
+    const entt::entity sourceHandle,
+    const bool keepTransform
+) {
+    const auto& tag = source.m_registry.get<TagComponent>(sourceHandle);
+    destination.setName(tag.tag);
+    if (!keepTransform) {
+        destination.component<TransformComponent>() =
+            source.m_registry.get<TransformComponent>(sourceHandle);
+    }
+
+    const auto copy = [&]<typename Component>() {
+        if (source.m_registry.all_of<Component>(sourceHandle)) {
+            destination.set<Component>(source.m_registry.get<Component>(sourceHandle));
+        } else {
+            destination.remove<Component>();
+        }
+    };
+    copy.template operator()<SpriteRendererComponent>();
+    copy.template operator()<CameraComponent>();
+    copy.template operator()<ModelRendererComponent>();
+    copy.template operator()<AudioSourceComponent>();
+    copy.template operator()<AudioListenerComponent>();
+    copy.template operator()<LightComponent>();
+    copy.template operator()<RigidBody2DComponent>();
+    copy.template operator()<Collider2DComponent>();
+    copy.template operator()<RigidBody3DComponent>();
+    copy.template operator()<Collider3DComponent>();
+    copy.template operator()<ScriptComponent>();
+
+    for (const auto& handler : SceneComponentRegistry::handlers()) {
+        handler.remove(m_registry, destination.m_handle);
+        handler.clone(
+            source.m_registry,
+            sourceHandle,
+            m_registry,
+            destination.m_handle
+        );
+    }
 }
 
 void Scene::destroyEntity(const Entity entity) {
