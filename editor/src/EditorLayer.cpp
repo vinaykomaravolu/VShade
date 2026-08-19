@@ -10,11 +10,15 @@ namespace editor {
 void EditorLayer::onAttach() {}
 
 void EditorLayer::onUpdate(const float deltaTime) {
-    static_cast<void>(deltaTime);
+    m_viewport.onUpdate(deltaTime);
 }
 
 void EditorLayer::onImGuiRender() {
     DrawDockspace();
+}
+
+bool EditorLayer::wantsCursorCapture() const noexcept {
+    return m_viewport.wantsCursorCapture();
 }
 
 void EditorLayer::DrawDockspace()

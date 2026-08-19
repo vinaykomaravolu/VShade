@@ -24,6 +24,7 @@ target_compile_features(VShadeImGui PUBLIC cxx_std_20)
 add_executable(VShadeEditor
     src/main.cpp
     src/EditorApplication.cpp
+    src/EditorCamera.cpp
     src/EditorLayer.cpp
     src/panels/Console.cpp
     src/panels/InspectorPanel.cpp

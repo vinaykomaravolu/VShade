@@ -14,6 +14,7 @@ public:
     void onAttach();
     void onUpdate(float deltaTime);
     void onImGuiRender();
+    [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
 private:
     void DrawDockspace();

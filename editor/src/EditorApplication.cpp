@@ -58,6 +58,7 @@ void EditorApplication::onStart() {
 void EditorApplication::onUpdate(const float deltaTime) {
     if (m_editorLayer) {
         m_editorLayer->onUpdate(deltaTime);
+        window().setCursorCaptured(m_editorLayer->wantsCursorCapture());
     }
 }
 
@@ -77,6 +78,7 @@ void EditorApplication::onRender() {
 }
 
 void EditorApplication::onShutdown() noexcept {
+    window().setCursorCaptured(false);
     m_editorLayer.reset();
 
     if (m_openGlBackendInitialized) {
