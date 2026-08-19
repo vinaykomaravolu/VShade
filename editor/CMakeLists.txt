@@ -24,6 +24,11 @@ target_compile_features(VShadeImGui PUBLIC cxx_std_20)
 add_executable(VShadeEditor
     src/main.cpp
     src/EditorApplication.cpp
+    src/EditorLayer.cpp
+    src/panels/Console.cpp
+    src/panels/InspectorPanel.cpp
+    src/panels/SceneHierarchyPanel.cpp
+    src/panels/Viewport.cpp
 )
 target_include_directories(VShadeEditor PRIVATE include)
 target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)

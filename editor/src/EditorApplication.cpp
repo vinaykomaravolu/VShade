@@ -1,4 +1,5 @@
 #include "EditorApplication.hpp"
+#include "EditorLayer.hpp"
 
 #include <renderer/Renderer.hpp>
 
@@ -6,6 +7,7 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 
+#include <memory>
 #include <stdexcept>
 
 namespace editor {
@@ -19,6 +21,8 @@ EditorApplication::EditorApplication()
           .vsync = true,
       }}) {}
 
+EditorApplication::~EditorApplication() = default;
+
 void EditorApplication::onStart() {
     auto* glfwWindow = window().nativeHandle();
 
@@ -28,7 +32,12 @@ void EditorApplication::onStart() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.IniFilename = "VShadeEditor.ini";
     ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 0.0F;
+    style.WindowBorderSize = 1.0F;
 
     if (!ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true)) {
         throw std::runtime_error("Dear ImGui GLFW backend initialization failed");
@@ -41,6 +50,15 @@ void EditorApplication::onStart() {
     m_openGlBackendInitialized = true;
 
     vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
+
+    m_editorLayer = std::make_unique<EditorLayer>();
+    m_editorLayer->onAttach();
+}
+
+void EditorApplication::onUpdate(const float deltaTime) {
+    if (m_editorLayer) {
+        m_editorLayer->onUpdate(deltaTime);
+    }
 }
 
 void EditorApplication::onRender() {
@@ -50,13 +68,17 @@ void EditorApplication::onRender() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
+    if (m_editorLayer) {
+        m_editorLayer->onImGuiRender();
+    }
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void EditorApplication::onShutdown() noexcept {
+    m_editorLayer.reset();
+
     if (m_openGlBackendInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         m_openGlBackendInitialized = false;
