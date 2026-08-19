@@ -51,6 +51,7 @@ TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d][open
     vshade::tests::visual::HiddenRenderContext context(64, 64);
     vshade::renderer::Framebuffer framebuffer(64, 64);
     vshade::tests::visual::beginOffscreenFrame(framebuffer, {0.0F, 0.0F, 0.0F, 1.0F});
+    framebuffer.clearEntityId(-1);
     const vshade::renderer::Mesh mesh = createTriangleMesh();
 
     vshade::renderer::Camera camera;
@@ -65,12 +66,16 @@ TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d][open
     vshade::renderer::Renderer3D::drawMesh(
         vshade::math::Transform{},
         mesh,
-        vshade::renderer::Material{}
+        vshade::renderer::Material{},
+        {},
+        91
     );
     vshade::renderer::Renderer3D::endScene();
 
     CHECK(vshade::renderer::Renderer3D::stats().meshCount == 1);
     CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 1);
+    CHECK(framebuffer.readEntityId(32, 32) == 91);
+    CHECK(framebuffer.readEntityId(0, 0) == -1);
     CHECK_THROWS_AS(
         vshade::renderer::Renderer3D::drawMesh(
             vshade::math::Transform{},

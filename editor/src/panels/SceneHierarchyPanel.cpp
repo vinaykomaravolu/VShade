@@ -21,10 +21,11 @@ void SceneHierarchyPanel::setScene(
     std::shared_ptr<vshade::scene::Scene> scene
 ) {
     m_scene = std::move(scene);
-    m_selectedEntity = {};
 }
 
-void SceneHierarchyPanel::onImGuiRender() {
+void SceneHierarchyPanel::onImGuiRender(
+    vshade::scene::Entity& selectedEntity
+) {
     ImGui::Begin("Hierarchy", nullptr, panelFlags);
 
     if (m_scene) {
@@ -41,7 +42,7 @@ void SceneHierarchyPanel::onImGuiRender() {
             const vshade::scene::Entity entity =
                 m_scene->findEntity(uuid.uuid);
 
-            switch (drawEntity(entity)) {
+            switch (drawEntity(entity, selectedEntity)) {
                 case EntityAction::Duplicate:
                     entityToDuplicate = entity;
                     break;
@@ -58,7 +59,7 @@ void SceneHierarchyPanel::onImGuiRender() {
         );
         const bool keyboardAvailable =
             hierarchyFocused && !ImGui::GetIO().WantTextInput;
-        if (keyboardAvailable && m_scene->valid(m_selectedEntity)) {
+        if (keyboardAvailable && m_scene->valid(selectedEntity)) {
             using vshade::input::Input;
             using vshade::input::KeyCode;
 
@@ -66,10 +67,10 @@ void SceneHierarchyPanel::onImGuiRender() {
                 Input::isKeyDown(KeyCode::LeftControl)
                 || Input::isKeyDown(KeyCode::RightControl);
             if (controlDown && Input::isKeyPressed(KeyCode::D)) {
-                entityToDuplicate = m_selectedEntity;
+                entityToDuplicate = selectedEntity;
             }
             if (Input::isKeyPressed(KeyCode::Delete)) {
-                entityToDelete = m_selectedEntity;
+                entityToDelete = selectedEntity;
             }
         }
 
@@ -79,17 +80,17 @@ void SceneHierarchyPanel::onImGuiRender() {
                     | ImGuiPopupFlags_NoOpenOverItems
             )) {
             if (ImGui::MenuItem("Create Empty Entity")) {
-                m_selectedEntity = m_scene->create("Entity");
+                selectedEntity = m_scene->create("Entity");
             }
             ImGui::EndPopup();
         }
 
         if (m_scene->valid(entityToDuplicate)) {
-            m_selectedEntity = m_scene->duplicateEntity(entityToDuplicate);
+            selectedEntity = m_scene->duplicateEntity(entityToDuplicate);
         }
         if (m_scene->valid(entityToDelete)) {
-            if (m_selectedEntity == entityToDelete) {
-                m_selectedEntity = {};
+            if (selectedEntity == entityToDelete) {
+                selectedEntity = {};
             }
             m_scene->destroyEntity(entityToDelete);
         }
@@ -99,15 +100,16 @@ void SceneHierarchyPanel::onImGuiRender() {
 }
 
 SceneHierarchyPanel::EntityAction SceneHierarchyPanel::drawEntity(
-    vshade::scene::Entity entity
+    vshade::scene::Entity entity,
+    vshade::scene::Entity& selectedEntity
 ) {
     ImGui::PushID(static_cast<int>(entity.id()));
     const auto& tag = entity.get<vshade::scene::TagComponent>();
     if (ImGui::Selectable(
             tag.tag.c_str(),
-            m_selectedEntity == entity
+            selectedEntity == entity
         )) {
-        m_selectedEntity = entity;
+        selectedEntity = entity;
     }
 
     EntityAction action = EntityAction::None;
@@ -122,13 +124,6 @@ SceneHierarchyPanel::EntityAction SceneHierarchyPanel::drawEntity(
     }
     ImGui::PopID();
     return action;
-}
-
-vshade::scene::Entity SceneHierarchyPanel::selectedEntity() const noexcept {
-    if (!m_scene || !m_scene->valid(m_selectedEntity)) {
-        return {};
-    }
-    return m_selectedEntity;
 }
 
 } // namespace editor

@@ -74,6 +74,7 @@ Framebuffer::~Framebuffer() {
 Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     : m_rendererId(std::exchange(other.m_rendererId, 0)),
       m_colorAttachmentId(std::exchange(other.m_colorAttachmentId, 0)),
+      m_entityIdAttachmentId(std::exchange(other.m_entityIdAttachmentId, 0)),
       m_depthStencilAttachmentId(std::exchange(other.m_depthStencilAttachmentId, 0)),
       m_width(std::exchange(other.m_width, 0)),
       m_height(std::exchange(other.m_height, 0)) {}
@@ -83,6 +84,7 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept {
         release();
         m_rendererId = std::exchange(other.m_rendererId, 0);
         m_colorAttachmentId = std::exchange(other.m_colorAttachmentId, 0);
+        m_entityIdAttachmentId = std::exchange(other.m_entityIdAttachmentId, 0);
         m_depthStencilAttachmentId = std::exchange(other.m_depthStencilAttachmentId, 0);
         m_width = std::exchange(other.m_width, 0);
         m_height = std::exchange(other.m_height, 0);
@@ -191,6 +193,54 @@ std::vector<std::uint8_t> Framebuffer::readPixels() const {
     return pixels;
 }
 
+void Framebuffer::clearEntityId(const std::int32_t value) const {
+    requireRenderer();
+    GLint previousDrawFramebuffer = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_rendererId);
+    const GLint clearValue = value;
+    glClearBufferiv(GL_COLOR, 1, &clearValue);
+    glBindFramebuffer(
+        GL_DRAW_FRAMEBUFFER,
+        static_cast<GLuint>(previousDrawFramebuffer)
+    );
+}
+
+std::int32_t Framebuffer::readEntityId(
+    const std::uint32_t x,
+    const std::uint32_t y
+) const {
+    requireRenderer();
+    if (x >= m_width || y >= m_height) {
+        throw std::out_of_range("Framebuffer entity-ID coordinates are out of range");
+    }
+
+    GLint previousReadFramebuffer = 0;
+    GLint previousReadBuffer = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_rendererId);
+    glReadBuffer(GL_COLOR_ATTACHMENT1);
+
+    GLint value = -1;
+    glReadPixels(
+        static_cast<GLint>(x),
+        static_cast<GLint>(y),
+        1,
+        1,
+        GL_RED_INTEGER,
+        GL_INT,
+        &value
+    );
+
+    glBindFramebuffer(
+        GL_READ_FRAMEBUFFER,
+        static_cast<GLuint>(previousReadFramebuffer)
+    );
+    glReadBuffer(static_cast<GLenum>(previousReadBuffer));
+    return static_cast<std::int32_t>(value);
+}
+
 std::uint32_t Framebuffer::width() const noexcept {
     return m_width;
 }
@@ -242,6 +292,36 @@ void Framebuffer::create() {
         0
     );
 
+    glGenTextures(1, &m_entityIdAttachmentId);
+    glBindTexture(GL_TEXTURE_2D, m_entityIdAttachmentId);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_R32I,
+        width,
+        height,
+        0,
+        GL_RED_INTEGER,
+        GL_INT,
+        nullptr
+    );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT1,
+        GL_TEXTURE_2D,
+        m_entityIdAttachmentId,
+        0
+    );
+    constexpr GLenum drawBuffers[]{
+        GL_COLOR_ATTACHMENT0,
+        GL_COLOR_ATTACHMENT1,
+    };
+    glDrawBuffers(2, drawBuffers);
+
     glGenRenderbuffers(1, &m_depthStencilAttachmentId);
     glBindRenderbuffer(GL_RENDERBUFFER, m_depthStencilAttachmentId);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
@@ -275,12 +355,16 @@ void Framebuffer::release() noexcept {
         if (m_colorAttachmentId != 0) {
             glDeleteTextures(1, &m_colorAttachmentId);
         }
+        if (m_entityIdAttachmentId != 0) {
+            glDeleteTextures(1, &m_entityIdAttachmentId);
+        }
         if (m_rendererId != 0) {
             glDeleteFramebuffers(1, &m_rendererId);
         }
     }
 
     m_depthStencilAttachmentId = 0;
+    m_entityIdAttachmentId = 0;
     m_colorAttachmentId = 0;
     m_rendererId = 0;
 }

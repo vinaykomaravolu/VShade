@@ -23,6 +23,7 @@ struct MeshCommand {
     const Mesh* mesh = nullptr;
     Material material;
     DrawParameters parameters;
+    std::int32_t entityId = -1;
 };
 
 namespace uniform {
@@ -44,6 +45,7 @@ constexpr std::string_view directionalLightCount = "directionalLightCount";
 constexpr std::string_view pointLightCount = "pointLightCount";
 constexpr std::string_view roughness = "roughness";
 constexpr std::string_view metallic = "metallic";
+constexpr std::string_view entityId = "entityId";
 } // namespace uniform
 
 struct Renderer3DResources;
@@ -89,7 +91,8 @@ void queueMesh(
     const math::Mat4& model,
     const Mesh& mesh,
     const Material& material,
-    const DrawParameters& parameters
+    const DrawParameters& parameters,
+    const std::int32_t entityId
 ) {
     Renderer3DState& rendererState = state();
     rendererState.commands.push_back({
@@ -97,6 +100,7 @@ void queueMesh(
         .mesh = &mesh,
         .material = material,
         .parameters = parameters,
+        .entityId = entityId,
     });
     ++rendererState.currentStats.meshCount;
 }
@@ -105,16 +109,23 @@ void queueModelNode(
     const Model& model,
     const std::size_t nodeIndex,
     const math::Mat4& parentTransform,
-    const DrawParameters& parameters
+    const DrawParameters& parameters,
+    const std::int32_t entityId
 ) {
     const ModelNode& node = model.nodes()[nodeIndex];
     const math::Mat4 nodeTransform = parentTransform * node.localTransform.matrix();
     for (const std::size_t primitiveIndex : node.primitives) {
         const ModelPrimitive& primitive = model.primitives()[primitiveIndex];
-        queueMesh(nodeTransform, *primitive.mesh, *primitive.material, parameters);
+        queueMesh(
+            nodeTransform,
+            *primitive.mesh,
+            *primitive.material,
+            parameters,
+            entityId
+        );
     }
     for (const std::size_t child : node.children) {
-        queueModelNode(model, child, nodeTransform, parameters);
+        queueModelNode(model, child, nodeTransform, parameters, entityId);
     }
 }
 
@@ -189,10 +200,13 @@ uniform int pointLightCount;
 uniform PointLightData pointLights[maximumPointLights];
 uniform float roughness;
 uniform float metallic;
+uniform int entityId;
 
-out vec4 fragmentColor;
+layout(location = 0) out vec4 fragmentColor;
+layout(location = 1) out int fragmentEntityId;
 
 void main() {
+    fragmentEntityId = entityId;
     vec4 sampledAlbedo = hasAlbedoTexture != 0
         ? texture(albedoTexture, vTexCoord)
         : vec4(1.0);
@@ -427,21 +441,23 @@ void Renderer3D::drawMesh(
     const math::Transform& transform,
     const Mesh& mesh,
     const Material& material,
-    const DrawParameters& parameters
+    const DrawParameters& parameters,
+    const std::int32_t entityId
 ) {
     requireActiveScene();
-    queueMesh(transform.matrix(), mesh, material, parameters);
+    queueMesh(transform.matrix(), mesh, material, parameters, entityId);
 }
 
 void Renderer3D::drawModel(
     const math::Transform& transform,
     const Model& model,
-    const DrawParameters& parameters
+    const DrawParameters& parameters,
+    const std::int32_t entityId
 ) {
     requireActiveScene();
     const math::Mat4 worldTransform = transform.matrix();
     for (const std::size_t root : model.rootNodes()) {
-        queueModelNode(model, root, worldTransform, parameters);
+        queueModelNode(model, root, worldTransform, parameters, entityId);
     }
 }
 
@@ -509,6 +525,7 @@ void Renderer3D::endScene() {
                 );
                 shader.setFloat(uniform::alphaCutoff, command.material.alphaCutoff());
                 shader.setFloat(uniform::normalScale, command.material.normalScale());
+                shader.setInt(uniform::entityId, command.entityId);
                 shader.setInt(
                     uniform::litMaterial,
                     command.material.shading() == MaterialShading::Lit ? 1 : 0

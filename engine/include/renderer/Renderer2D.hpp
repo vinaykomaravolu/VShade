@@ -66,7 +66,8 @@ public:
     static void drawQuad(
         const math::Transform& transform,
         const math::Vec4& color,
-        std::int32_t sortingLayer = 0
+        std::int32_t sortingLayer = 0,
+        std::int32_t entityId = -1
     );
 
     /**
@@ -84,7 +85,8 @@ public:
         const Texture2D& texture,
         const math::Vec4& tint = math::Vec4{1.0F},
         const math::Vec2& tiling = math::Vec2{1.0F},
-        std::int32_t sortingLayer = 0
+        std::int32_t sortingLayer = 0,
+        std::int32_t entityId = -1
     );
 
     /**
@@ -95,7 +97,8 @@ public:
      */
     static void drawSprite(
         const math::Transform& transform,
-        const SpriteRendererComponent& sprite
+        const SpriteRendererComponent& sprite,
+        std::int32_t entityId = -1
     );
 
     /**

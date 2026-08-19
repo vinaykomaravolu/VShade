@@ -324,6 +324,14 @@ Entity Scene::findEntity(const std::uint64_t uuid) noexcept {
     return {};
 }
 
+Entity Scene::findEntityById(const std::uint32_t id) noexcept {
+    const auto handle = static_cast<entt::entity>(id);
+    if (m_registry.valid(handle)) {
+        return Entity(handle, *this, m_generation);
+    }
+    return {};
+}
+
 const std::string& Scene::name() const noexcept {
     return m_name;
 }

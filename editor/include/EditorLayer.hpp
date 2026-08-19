@@ -61,6 +61,7 @@ private:
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
+    vshade::scene::Entity m_selectedEntity;
     std::shared_ptr<vshade::scene::Scene> m_editorScene;
     std::shared_ptr<vshade::scene::Scene> m_runtimeScene;
     std::filesystem::path m_activeScenePath;

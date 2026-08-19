@@ -91,7 +91,8 @@ public:
         const math::Transform& transform,
         const Mesh& mesh,
         const Material& material,
-        const DrawParameters& parameters = {}
+        const DrawParameters& parameters = {},
+        std::int32_t entityId = -1
     );
 
     /**
@@ -104,7 +105,8 @@ public:
     static void drawModel(
         const math::Transform& transform,
         const Model& model,
-        const DrawParameters& parameters = {}
+        const DrawParameters& parameters = {},
+        std::int32_t entityId = -1
     );
 
     /**

@@ -28,6 +28,7 @@ struct QuadCommand {
     const Texture2D* texture = nullptr;
     std::shared_ptr<Texture2D> retainedTexture;
     std::int32_t sortingLayer = 0;
+    std::int32_t entityId = -1;
 };
 
 struct Renderer2DResources;
@@ -73,11 +74,14 @@ in vec2 vTexCoord;
 
 uniform sampler2D image;
 uniform vec4 tint;
+uniform int entityId;
 
-out vec4 fragmentColor;
+layout(location = 0) out vec4 fragmentColor;
+layout(location = 1) out int fragmentEntityId;
 
 void main() {
     fragmentColor = texture(image, vTexCoord) * tint;
+    fragmentEntityId = entityId;
 }
 )glsl"
           ),
@@ -138,7 +142,8 @@ void queueQuad(
     const math::Vec2& tiling,
     const Texture2D* texture,
     std::shared_ptr<Texture2D> retainedTexture,
-    const std::int32_t sortingLayer
+    const std::int32_t sortingLayer,
+    const std::int32_t entityId
 ) {
     requireActiveScene();
     Renderer2DState& rendererState = state();
@@ -149,6 +154,7 @@ void queueQuad(
         .texture = texture,
         .retainedTexture = std::move(retainedTexture),
         .sortingLayer = sortingLayer,
+        .entityId = entityId,
     });
     ++rendererState.currentStats.quadCount;
 }
@@ -191,9 +197,18 @@ void Renderer2D::beginScene(const Camera& camera) {
 void Renderer2D::drawQuad(
     const math::Transform& transform,
     const math::Vec4& color,
-    const std::int32_t sortingLayer
+    const std::int32_t sortingLayer,
+    const std::int32_t entityId
 ) {
-    queueQuad(transform, color, {1.0F, 1.0F}, nullptr, nullptr, sortingLayer);
+    queueQuad(
+        transform,
+        color,
+        {1.0F, 1.0F},
+        nullptr,
+        nullptr,
+        sortingLayer,
+        entityId
+    );
 }
 
 void Renderer2D::drawQuad(
@@ -201,14 +216,24 @@ void Renderer2D::drawQuad(
     const Texture2D& texture,
     const math::Vec4& tint,
     const math::Vec2& tiling,
-    const std::int32_t sortingLayer
+    const std::int32_t sortingLayer,
+    const std::int32_t entityId
 ) {
-    queueQuad(transform, tint, tiling, &texture, nullptr, sortingLayer);
+    queueQuad(
+        transform,
+        tint,
+        tiling,
+        &texture,
+        nullptr,
+        sortingLayer,
+        entityId
+    );
 }
 
 void Renderer2D::drawSprite(
     const math::Transform& transform,
-    const SpriteRendererComponent& sprite
+    const SpriteRendererComponent& sprite,
+    const std::int32_t entityId
 ) {
     queueQuad(
         transform,
@@ -216,7 +241,8 @@ void Renderer2D::drawSprite(
         sprite.tiling,
         sprite.texture.get(),
         sprite.texture,
-        sprite.sortingLayer
+        sprite.sortingLayer,
+        entityId
     );
 }
 
@@ -243,6 +269,7 @@ void Renderer2D::endScene() {
                 rendererResources.shader.setMat4("model", command.model);
                 rendererResources.shader.setVec4("tint", command.color);
                 rendererResources.shader.setVec2("tiling", command.tiling);
+                rendererResources.shader.setInt("entityId", command.entityId);
 
                 const Texture2D& texture = command.texture != nullptr
                     ? *command.texture

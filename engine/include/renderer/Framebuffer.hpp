@@ -60,6 +60,15 @@ public:
      */
     [[nodiscard]] std::vector<std::uint8_t> readPixels() const;
 
+    /** @brief Clears the signed integer entity-ID attachment. */
+    void clearEntityId(std::int32_t value) const;
+
+    /** @brief Reads one signed entity ID using bottom-left framebuffer coordinates. */
+    [[nodiscard]] std::int32_t readEntityId(
+        std::uint32_t x,
+        std::uint32_t y
+    ) const;
+
     /**
      * @brief Returns the attachment width.
      * @return Width in pixels.
@@ -93,6 +102,7 @@ private:
 
     std::uint32_t m_rendererId = 0;
     std::uint32_t m_colorAttachmentId = 0;
+    std::uint32_t m_entityIdAttachmentId = 0;
     std::uint32_t m_depthStencilAttachmentId = 0;
     std::uint32_t m_width = 0;
     std::uint32_t m_height = 0;

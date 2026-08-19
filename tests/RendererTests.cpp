@@ -120,6 +120,12 @@ TEST_CASE("Framebuffer restores its previous target viewport", "[renderer][frame
     CHECK(vshade::renderer::Renderer::viewport() == originalViewport);
     CHECK_THROWS_AS(vshade::renderer::Framebuffer::unbind(), std::logic_error);
 
+    framebuffer.clearEntityId(-1);
+    CHECK(framebuffer.readEntityId(0, 0) == -1);
+    framebuffer.clearEntityId(42);
+    CHECK(framebuffer.readEntityId(15, 11) == 42);
+    CHECK_THROWS_AS(framebuffer.readEntityId(16, 0), std::out_of_range);
+
     framebuffer.resize(32, 24);
     CHECK(framebuffer.width() == 32);
     CHECK(framebuffer.height() == 24);

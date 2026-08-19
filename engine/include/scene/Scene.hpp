@@ -76,6 +76,9 @@ public:
     /** @brief Finds a live entity by its stable UUID, or returns an invalid handle. */
     [[nodiscard]] Entity findEntity(std::uint64_t uuid) noexcept;
 
+    /** @brief Finds a live entity by its frame-local EnTT identifier. */
+    [[nodiscard]] Entity findEntityById(std::uint32_t id) noexcept;
+
     /** @brief Returns the human-readable scene name stored in scene files. */
     [[nodiscard]] const std::string& name() const noexcept;
 

@@ -12,6 +12,9 @@
 #include "scene/Scene.hpp"
 #include "scene/SceneLightingSystem.hpp"
 
+#include <entt/entity/entity.hpp>
+
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -119,14 +122,24 @@ bool SceneRenderer::render(
             continue;
         }
         const auto model = m_impl->assets.loadResource(modelRenderer.model);
-        renderer::Renderer3D::drawModel(modelTransform.transform, *model);
+        const auto entityId = static_cast<std::int32_t>(
+            entt::to_integral(handle)
+        );
+        renderer::Renderer3D::drawModel(
+            modelTransform.transform,
+            *model,
+            {},
+            entityId
+        );
     }
     renderer::Renderer3D::endScene();
 
     renderer::Renderer2D::beginScene(camera);
     const auto sprites = scene.view<const TransformComponent, const SpriteRendererComponent>();
     for (const auto [handle, spriteTransform, sprite] : sprites.each()) {
-        (void)handle;
+        const auto entityId = static_cast<std::int32_t>(
+            entt::to_integral(handle)
+        );
         if (sprite.texture.valid()) {
             const auto texture = m_impl->assets.loadResource(sprite.texture);
             renderer::Renderer2D::drawQuad(
@@ -134,7 +147,8 @@ bool SceneRenderer::render(
                 *texture,
                 sprite.color,
                 sprite.tiling,
-                sprite.sortingLayer
+                sprite.sortingLayer,
+                entityId
             );
         } else if (!sprite.texturePath.empty()) {
             const auto texture = m_impl->assets.loadResource<renderer::Texture2D>(
@@ -145,13 +159,15 @@ bool SceneRenderer::render(
                 *texture,
                 sprite.color,
                 sprite.tiling,
-                sprite.sortingLayer
+                sprite.sortingLayer,
+                entityId
             );
         } else {
             renderer::Renderer2D::drawQuad(
                 spriteTransform.transform,
                 sprite.color,
-                sprite.sortingLayer
+                sprite.sortingLayer,
+                entityId
             );
         }
     }

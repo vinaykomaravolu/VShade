@@ -37,20 +37,31 @@ public:
     Viewport& operator=(const Viewport&) = delete;
 
     void onUpdate(float deltaTime);
-    void onImGuiRender();
+    void onImGuiRender(vshade::scene::Entity& selectedEntity);
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
-    void setSelectedEntity(vshade::scene::Entity entity) noexcept;
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
 private:
     void renderScene();
     void resizeFramebuffer(float width, float height);
-    void drawGizmo(float x, float y, float width, float height);
+    void drawGizmo(
+        vshade::scene::Entity selectedEntity,
+        float x,
+        float y,
+        float width,
+        float height
+    );
+    void selectEntityUnderMouse(
+        vshade::scene::Entity& selectedEntity,
+        float x,
+        float y,
+        float width,
+        float height
+    );
 
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
     std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;
     std::shared_ptr<vshade::scene::Scene> m_scene;
-    vshade::scene::Entity m_selectedEntity;
     EditorCamera m_editorCamera;
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     bool m_hovered = false;

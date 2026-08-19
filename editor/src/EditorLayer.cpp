@@ -24,6 +24,78 @@ constexpr const char* saveSceneDialogKey = "SaveSceneDialog";
 constexpr const char* importModelDialogKey = "ImportModelDialog";
 constexpr const char* chooseProjectDialogKey = "ChooseProjectDialog";
 
+enum class ToolbarIcon {
+    Play,
+    Pause,
+    Step,
+    Stop,
+};
+
+bool toolbarIconButton(
+    const char* id,
+    const ToolbarIcon icon,
+    const ImVec2 size,
+    const char* tooltip
+) {
+    const bool clicked = ImGui::Button(id, size);
+    const ImVec2 minimum = ImGui::GetItemRectMin();
+    const ImVec2 maximum = ImGui::GetItemRectMax();
+    const ImVec2 center{
+        (minimum.x + maximum.x) * 0.5F,
+        (minimum.y + maximum.y) * 0.5F,
+    };
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    switch (icon) {
+        case ToolbarIcon::Play:
+            drawList->AddTriangleFilled(
+                {center.x - 5.0F, center.y - 7.0F},
+                {center.x - 5.0F, center.y + 7.0F},
+                {center.x + 7.0F, center.y},
+                color
+            );
+            break;
+        case ToolbarIcon::Pause:
+            drawList->AddRectFilled(
+                {center.x - 6.0F, center.y - 7.0F},
+                {center.x - 2.0F, center.y + 7.0F},
+                color
+            );
+            drawList->AddRectFilled(
+                {center.x + 2.0F, center.y - 7.0F},
+                {center.x + 6.0F, center.y + 7.0F},
+                color
+            );
+            break;
+        case ToolbarIcon::Step:
+            drawList->AddTriangleFilled(
+                {center.x - 7.0F, center.y - 7.0F},
+                {center.x - 7.0F, center.y + 7.0F},
+                {center.x + 4.0F, center.y},
+                color
+            );
+            drawList->AddRectFilled(
+                {center.x + 5.0F, center.y - 7.0F},
+                {center.x + 8.0F, center.y + 7.0F},
+                color
+            );
+            break;
+        case ToolbarIcon::Stop:
+            drawList->AddRectFilled(
+                {center.x - 6.0F, center.y - 6.0F},
+                {center.x + 6.0F, center.y + 6.0F},
+                color
+            );
+            break;
+    }
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", tooltip);
+    }
+    return clicked;
+}
+
 } // namespace
 
 EditorLayer::EditorLayer(
@@ -119,12 +191,9 @@ void EditorLayer::DrawDockspace()
 
     ImGui::End();
 
-    m_sceneHierarchyPanel.onImGuiRender();
-    const vshade::scene::Entity selectedEntity =
-        m_sceneHierarchyPanel.selectedEntity();
-    m_viewport.setSelectedEntity(selectedEntity);
-    m_viewport.onImGuiRender();
-    m_inspectorPanel.onImGuiRender(selectedEntity);
+    m_sceneHierarchyPanel.onImGuiRender(m_selectedEntity);
+    m_viewport.onImGuiRender(m_selectedEntity);
+    m_inspectorPanel.onImGuiRender(m_selectedEntity);
 
     m_console.onImGuiRender();
     DrawFileDialogs();
@@ -254,7 +323,7 @@ void EditorLayer::DrawToolbar() {
         return;
     }
 
-    constexpr float buttonWidth = 72.0F;
+    constexpr float buttonWidth = 42.0F;
     constexpr float spacing = 8.0F;
     constexpr float totalWidth = buttonWidth * 4.0F + spacing * 3.0F;
     ImGui::SetCursorPosX(
@@ -263,30 +332,49 @@ void EditorLayer::DrawToolbar() {
     ImGui::SetCursorPosY(5.0F);
 
     ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
-    if (ImGui::Button("Play", {buttonWidth, 28.0F})) {
+    if (toolbarIconButton(
+            "##Play",
+            ToolbarIcon::Play,
+            {buttonWidth, 28.0F},
+            "Play"
+        )) {
         playScene();
     }
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
-    const char* pauseLabel =
-        m_sceneState == SceneState::Pause ? "Resume" : "Pause";
-    if (ImGui::Button(pauseLabel, {buttonWidth, 28.0F})) {
+    const bool paused = m_sceneState == SceneState::Pause;
+    if (toolbarIconButton(
+            "##Pause",
+            paused ? ToolbarIcon::Play : ToolbarIcon::Pause,
+            {buttonWidth, 28.0F},
+            paused ? "Resume" : "Pause"
+        )) {
         pauseScene();
     }
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState != SceneState::Pause);
-    if (ImGui::Button("Step", {buttonWidth, 28.0F})) {
+    if (toolbarIconButton(
+            "##Step",
+            ToolbarIcon::Step,
+            {buttonWidth, 28.0F},
+            "Step one frame"
+        )) {
         stepScene();
     }
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
-    if (ImGui::Button("Stop", {buttonWidth, 28.0F})) {
+    if (toolbarIconButton(
+            "##Stop",
+            ToolbarIcon::Stop,
+            {buttonWidth, 28.0F},
+            "Stop"
+        )) {
         stopScene();
     }
     ImGui::EndDisabled();
@@ -496,6 +584,7 @@ void EditorLayer::bindActiveScene() {
         m_sceneState == SceneState::Edit
             ? m_editorScene
             : m_runtimeScene;
+    m_selectedEntity = {};
     m_sceneHierarchyPanel.setScene(activeScene);
     m_viewport.setScene(activeScene);
 }

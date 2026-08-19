@@ -13,8 +13,7 @@ namespace editor {
 class SceneHierarchyPanel final {
 public:
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
-    void onImGuiRender();
-    [[nodiscard]] vshade::scene::Entity selectedEntity() const noexcept;
+    void onImGuiRender(vshade::scene::Entity& selectedEntity);
 
 private:
     enum class EntityAction {
@@ -23,10 +22,12 @@ private:
         Delete,
     };
 
-    [[nodiscard]] EntityAction drawEntity(vshade::scene::Entity entity);
+    [[nodiscard]] EntityAction drawEntity(
+        vshade::scene::Entity entity,
+        vshade::scene::Entity& selectedEntity
+    );
 
     std::shared_ptr<vshade::scene::Scene> m_scene;
-    vshade::scene::Entity m_selectedEntity;
 };
 
 } // namespace editor

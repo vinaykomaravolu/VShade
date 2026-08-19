@@ -52,6 +52,7 @@ TEST_CASE("Scene owns entities and supports custom components", "[scene]") {
     vshade::scene::Entity player = scene.createEntity("Player");
 
     REQUIRE(player.valid());
+    CHECK(scene.findEntityById(player.id()) == player);
     CHECK(player.hasComponents<
         vshade::scene::TagComponent,
         vshade::scene::TransformComponent
@@ -81,6 +82,7 @@ TEST_CASE("Scene owns entities and supports custom components", "[scene]") {
 
     scene.destroyEntity(player);
     CHECK_FALSE(player.valid());
+    CHECK_FALSE(scene.findEntityById(player.id()));
 }
 
 TEST_CASE("Scene views support EnTT iteration styles", "[scene]") {

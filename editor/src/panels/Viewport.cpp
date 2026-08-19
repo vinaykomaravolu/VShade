@@ -81,16 +81,11 @@ void Viewport::setScene(
     std::shared_ptr<vshade::scene::Scene> scene
 ) {
     m_scene = std::move(scene);
-    m_selectedEntity = {};
 }
 
-void Viewport::setSelectedEntity(
-    const vshade::scene::Entity entity
-) noexcept {
-    m_selectedEntity = entity;
-}
-
-void Viewport::onImGuiRender() {
+void Viewport::onImGuiRender(
+    vshade::scene::Entity& selectedEntity
+) {
     const bool visible = ImGui::Begin("Viewport", nullptr, panelFlags);
     m_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
     if (visible) {
@@ -108,12 +103,25 @@ void Viewport::onImGuiRender() {
             {0.0F, 1.0F},
             {1.0F, 0.0F}
         );
+        const bool imageHovered = ImGui::IsItemHovered();
         drawGizmo(
+            selectedEntity,
             viewportPosition.x,
             viewportPosition.y,
             availableSize.x,
             availableSize.y
         );
+        if (imageHovered
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+            && !ImGuizmo::IsOver()) {
+            selectEntityUnderMouse(
+                selectedEntity,
+                viewportPosition.x,
+                viewportPosition.y,
+                availableSize.x,
+                availableSize.y
+            );
+        }
     } else {
         m_gizmoUsing = false;
     }
@@ -126,6 +134,7 @@ bool Viewport::wantsCursorCapture() const noexcept {
 }
 
 void Viewport::drawGizmo(
+    vshade::scene::Entity selectedEntity,
     const float x,
     const float y,
     const float width,
@@ -133,13 +142,13 @@ void Viewport::drawGizmo(
 ) {
     if (m_gizmoOperation == GizmoOperation::None
         || !m_scene
-        || !m_scene->valid(m_selectedEntity)
-        || !m_selectedEntity.has<vshade::scene::TransformComponent>()) {
+        || !m_scene->valid(selectedEntity)
+        || !selectedEntity.has<vshade::scene::TransformComponent>()) {
         m_gizmoUsing = false;
         return;
     }
 
-    auto& transform = m_selectedEntity.transform();
+    auto& transform = selectedEntity.transform();
     vshade::math::Mat4 modelMatrix = transform.matrix();
 
     ImGuizmo::SetOrthographic(false);
@@ -189,6 +198,7 @@ void Viewport::renderScene() {
     try {
         vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
         vshade::renderer::Renderer::clear();
+        m_framebuffer->clearEntityId(-1);
 
         if (m_scene && m_sceneRenderer) {
             m_sceneRenderer->render(*m_scene, m_editorCamera.camera());
@@ -198,6 +208,47 @@ void Viewport::renderScene() {
         throw;
     }
     vshade::renderer::Framebuffer::unbind();
+}
+
+void Viewport::selectEntityUnderMouse(
+    vshade::scene::Entity& selectedEntity,
+    const float x,
+    const float y,
+    const float width,
+    const float height
+) {
+    if (!m_scene || width <= 0.0F || height <= 0.0F) {
+        selectedEntity = {};
+        return;
+    }
+
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const float localX = mouse.x - x;
+    const float localY = mouse.y - y;
+    if (localX < 0.0F || localY < 0.0F
+        || localX >= width || localY >= height) {
+        return;
+    }
+
+    const std::uint32_t framebufferWidth = m_framebuffer->width();
+    const std::uint32_t framebufferHeight = m_framebuffer->height();
+    const auto pixelX = std::min(
+        static_cast<std::uint32_t>(
+            localX / width * static_cast<float>(framebufferWidth)
+        ),
+        framebufferWidth - 1
+    );
+    const auto topDownPixelY = std::min(
+        static_cast<std::uint32_t>(
+            localY / height * static_cast<float>(framebufferHeight)
+        ),
+        framebufferHeight - 1
+    );
+    const std::uint32_t pixelY = framebufferHeight - 1 - topDownPixelY;
+    const std::int32_t entityId = m_framebuffer->readEntityId(pixelX, pixelY);
+    selectedEntity = entityId == -1
+        ? vshade::scene::Entity{}
+        : m_scene->findEntityById(static_cast<std::uint32_t>(entityId));
 }
 
 void Viewport::resizeFramebuffer(const float width, const float height) {

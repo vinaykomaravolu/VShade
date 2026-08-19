@@ -16,16 +16,21 @@ TEST_CASE("Renderer2D submits colored quads and reports statistics", "[renderer2
 
     vshade::renderer::Camera camera;
     camera.setOrthographic(-1.0F, 1.0F, -1.0F, 1.0F, -1.0F, 1.0F);
+    framebuffer.clearEntityId(-1);
 
     vshade::renderer::Renderer2D::beginScene(camera);
     vshade::renderer::Renderer2D::drawQuad(
         vshade::math::Transform{},
-        {0.25F, 0.5F, 0.75F, 1.0F}
+        {0.25F, 0.5F, 0.75F, 1.0F},
+        0,
+        73
     );
     vshade::renderer::Renderer2D::endScene();
 
     CHECK(vshade::renderer::Renderer2D::stats().quadCount == 1);
     CHECK(vshade::renderer::Renderer2D::stats().drawCalls == 1);
+    CHECK(framebuffer.readEntityId(32, 32) == 73);
+    CHECK(framebuffer.readEntityId(0, 0) == -1);
     CHECK_THROWS_AS(
         vshade::renderer::Renderer2D::drawQuad(
             vshade::math::Transform{},
