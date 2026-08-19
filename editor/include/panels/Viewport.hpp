@@ -33,10 +33,7 @@ public:
 
     void onUpdate(float deltaTime);
     void onImGuiRender();
-    void setScene(
-        std::shared_ptr<vshade::scene::Scene> scene,
-        vshade::scene::Entity previewEntity
-    );
+    void setScene(std::shared_ptr<vshade::scene::Scene> scene);
     void setSelectedEntity(vshade::scene::Entity entity) noexcept;
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
@@ -47,7 +44,6 @@ private:
 
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
     std::shared_ptr<vshade::scene::Scene> m_scene;
-    vshade::scene::Entity m_previewEntity;
     vshade::scene::Entity m_selectedEntity;
     EditorCamera m_editorCamera;
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;

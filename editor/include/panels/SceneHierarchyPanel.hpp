@@ -17,6 +17,14 @@ public:
     [[nodiscard]] vshade::scene::Entity selectedEntity() const noexcept;
 
 private:
+    enum class EntityAction {
+        None,
+        Duplicate,
+        Delete,
+    };
+
+    [[nodiscard]] EntityAction drawEntity(vshade::scene::Entity entity);
+
     std::shared_ptr<vshade::scene::Scene> m_scene;
     vshade::scene::Entity m_selectedEntity;
 };

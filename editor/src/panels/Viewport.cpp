@@ -103,11 +103,10 @@ void Viewport::onUpdate(const float deltaTime) {
 }
 
 void Viewport::setScene(
-    std::shared_ptr<vshade::scene::Scene> scene,
-    const vshade::scene::Entity previewEntity
+    std::shared_ptr<vshade::scene::Scene> scene
 ) {
     m_scene = std::move(scene);
-    m_previewEntity = previewEntity;
+    m_selectedEntity = {};
 }
 
 void Viewport::setSelectedEntity(
@@ -216,8 +215,15 @@ void Viewport::renderScene() {
         vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
         vshade::renderer::Renderer::clear();
 
-        if (m_scene && m_scene->valid(m_previewEntity)) {
-            drawWireCube(m_previewEntity.transform());
+        if (m_scene) {
+            const auto entities = std::as_const(*m_scene).view<
+                vshade::scene::TransformComponent
+            >();
+            for (const auto handle : entities) {
+                const auto& component =
+                    entities.get<vshade::scene::TransformComponent>(handle);
+                drawWireCube(component.transform);
+            }
         }
         vshade::renderer::DebugDraw::line(
             {0.0F, 0.0F, 0.0F},
