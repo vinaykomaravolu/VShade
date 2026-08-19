@@ -63,7 +63,7 @@ void Viewport::onUpdate(const float deltaTime) {
 
     const bool cameraLookActive =
         Input::isMouseButtonDown(MouseButton::Right);
-    if (m_hovered && !m_gizmoUsing && !cameraLookActive) {
+    if (m_visible && m_hovered && !m_gizmoUsing && !cameraLookActive) {
         if (Input::isKeyPressed(KeyCode::W)) {
             m_gizmoOperation = GizmoOperation::Translate;
         } else if (Input::isKeyPressed(KeyCode::E)) {
@@ -73,7 +73,9 @@ void Viewport::onUpdate(const float deltaTime) {
         }
     }
 
-    m_editorCamera.setInputEnabled(m_hovered && !m_gizmoUsing);
+    m_editorCamera.setInputEnabled(
+        m_visible && m_hovered && !m_gizmoUsing
+    );
     m_editorCamera.onUpdate(deltaTime);
 }
 
@@ -81,6 +83,14 @@ void Viewport::setScene(
     std::shared_ptr<vshade::scene::Scene> scene
 ) {
     m_scene = std::move(scene);
+}
+
+void Viewport::setVisible(const bool visible) noexcept {
+    m_visible = visible;
+    if (!visible) {
+        m_hovered = false;
+        m_gizmoUsing = false;
+    }
 }
 
 void Viewport::onImGuiRender(

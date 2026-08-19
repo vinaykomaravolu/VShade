@@ -39,6 +39,7 @@ public:
     void onUpdate(float deltaTime);
     void onImGuiRender(vshade::scene::Entity& selectedEntity);
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
+    void setVisible(bool visible) noexcept;
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
 private:
@@ -66,6 +67,7 @@ private:
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     bool m_hovered = false;
     bool m_gizmoUsing = false;
+    bool m_visible = true;
 };
 
 } // namespace editor

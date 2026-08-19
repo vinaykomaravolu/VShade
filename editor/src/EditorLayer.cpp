@@ -1,16 +1,24 @@
 #include "EditorLayer.hpp"
+#include "Project.hpp"
 
 #include <asset/AssetManager.hpp>
+#include <audio/AudioClip.hpp>
 #include <core/Log.hpp>
 #include <renderer/Model.hpp>
+#include <renderer/Texture.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <exception>
+#include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <system_error>
+#include <utility>
 
 #include <ImGuiFileDialog.h>
 #include <imgui.h>
@@ -21,8 +29,20 @@ namespace {
 
 constexpr const char* openSceneDialogKey = "OpenSceneDialog";
 constexpr const char* saveSceneDialogKey = "SaveSceneDialog";
-constexpr const char* importModelDialogKey = "ImportModelDialog";
-constexpr const char* chooseProjectDialogKey = "ChooseProjectDialog";
+constexpr const char* importAssetDialogKey = "ImportAssetDialog";
+constexpr const char* openProjectDialogKey = "OpenProjectDialog";
+constexpr const char* newProjectDialogKey = "NewProjectDialog";
+
+[[nodiscard]] std::string lowercase(std::string value) {
+    std::ranges::transform(
+        value,
+        value.begin(),
+        [](const unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        }
+    );
+    return value;
+}
 
 enum class ToolbarIcon {
     Play,
@@ -100,10 +120,13 @@ bool toolbarIconButton(
 
 EditorLayer::EditorLayer(
     vshade::asset::AssetManager& assets,
-    vshade::scene::SceneRuntime& runtime
+    vshade::scene::SceneRuntime& runtime,
+    std::function<void()> requestExit
 )
     : m_assets(&assets),
       m_runtime(&runtime),
+      m_requestExit(std::move(requestExit)),
+      m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
 }
@@ -191,11 +214,26 @@ void EditorLayer::DrawDockspace()
 
     ImGui::End();
 
-    m_sceneHierarchyPanel.onImGuiRender(m_selectedEntity);
-    m_viewport.onImGuiRender(m_selectedEntity);
-    m_inspectorPanel.onImGuiRender(m_selectedEntity);
+    if (m_showHierarchy) {
+        m_sceneHierarchyPanel.onImGuiRender(m_selectedEntity);
+    }
+    m_viewport.setVisible(m_showViewport);
+    if (m_showViewport) {
+        m_viewport.onImGuiRender(m_selectedEntity);
+    }
+    if (m_showInspector) {
+        m_inspectorPanel.onImGuiRender(m_selectedEntity);
+    }
 
-    m_console.onImGuiRender();
+    if (m_showContentBrowser) {
+        if (const auto scenePath = m_contentBrowser.onImGuiRender();
+            scenePath && m_sceneState == SceneState::Edit) {
+            loadScene(*scenePath);
+        }
+    }
+    if (m_showConsole) {
+        m_console.onImGuiRender();
+    }
     DrawFileDialogs();
 }
 
@@ -232,6 +270,7 @@ void EditorLayer::BuildDefaultDockLayout(const std::uint32_t dockspaceId) {
     ImGui::DockBuilderDockWindow("Viewport", centerDockId);
     ImGui::DockBuilderDockWindow("Inspector", inspectorDockId);
     ImGui::DockBuilderDockWindow("Console", consoleDockId);
+    ImGui::DockBuilderDockWindow("Content Browser", consoleDockId);
     ImGui::DockBuilderFinish(dockspaceId);
 }
 
@@ -248,52 +287,71 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::MenuItem("Open Scene...")) {
             openScene();
         }
-        if (ImGui::MenuItem("Save")) {
+        if (ImGui::MenuItem("Save Scene")) {
             saveScene();
         }
-        if (ImGui::MenuItem("Save As...")) {
+        if (ImGui::MenuItem("Save Scene As...")) {
             saveSceneAs();
         }
         ImGui::EndDisabled();
         ImGui::Separator();
-        if (ImGui::MenuItem("Import Model...")) {
+        ImGui::BeginDisabled(!m_project);
+        if (ImGui::MenuItem("Import Asset...")) {
             IGFD::FileDialogConfig config;
-            config.path = m_projectDirectory.empty()
-                ? "."
-                : m_projectDirectory.generic_string();
+            config.path = m_project->assetDirectory().generic_string();
             config.countSelectionMax = 1;
             config.flags = ImGuiFileDialogFlags_Modal;
             ImGuiFileDialog::Instance()->OpenDialog(
-                importModelDialogKey,
-                "Import Model",
-                ".glb,.gltf",
+                importAssetDialogKey,
+                "Import Asset",
+                ".glb,.gltf,.png,.jpg,.jpeg,.bmp,.tga,.wav,.mp3,.flac,.ogg",
                 config
             );
         }
-        if (ImGui::MenuItem("Choose Project Folder...")) {
-            IGFD::FileDialogConfig config;
-            config.path = m_projectDirectory.empty()
-                ? "."
-                : m_projectDirectory.generic_string();
-            config.countSelectionMax = 1;
-            config.flags = ImGuiFileDialogFlags_Modal;
-            ImGuiFileDialog::Instance()->OpenDialog(
-                chooseProjectDialogKey,
-                "Choose Project Folder",
-                nullptr,
-                config
-            );
-        }
+        ImGui::EndDisabled();
         ImGui::Separator();
-        ImGui::MenuItem("Exit");
+        ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
+        if (ImGui::MenuItem("Open Project...")) {
+            openProject();
+        }
+        if (ImGui::MenuItem("New Project...")) {
+            newProject();
+        }
+        ImGui::EndDisabled();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit") && m_requestExit) {
+            m_requestExit();
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit")) {
-        ImGui::MenuItem("Undo");
-        ImGui::MenuItem("Redo");
+        const std::shared_ptr<vshade::scene::Scene>& activeScene =
+            m_sceneState == SceneState::Edit
+                ? m_editorScene
+                : m_runtimeScene;
+        const bool hasSelection =
+            activeScene && activeScene->valid(m_selectedEntity);
+        ImGui::BeginDisabled(!hasSelection);
+        if (ImGui::MenuItem("Duplicate Entity")) {
+            duplicateSelectedEntity();
+        }
+        if (ImGui::MenuItem("Delete Entity")) {
+            deleteSelectedEntity();
+        }
+        ImGui::EndDisabled();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Hierarchy", nullptr, &m_showHierarchy);
+        ImGui::MenuItem("Inspector", nullptr, &m_showInspector);
+        ImGui::MenuItem("Viewport", nullptr, &m_showViewport);
+        ImGui::MenuItem("Console", nullptr, &m_showConsole);
+        ImGui::MenuItem(
+            "Content Browser",
+            nullptr,
+            &m_showContentBrowser
+        );
+        ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout")) {
             m_resetDockLayoutRequested = true;
         }
@@ -387,20 +445,7 @@ void EditorLayer::DrawFileDialogs() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
-            auto scene = std::make_shared<vshade::scene::Scene>(
-                selectedPath.stem().string()
-            );
-            vshade::scene::SceneSerializer serializer(*scene);
-            if (serializer.deserialize(selectedPath)) {
-                setActiveScene(std::move(scene));
-                m_activeScenePath = selectedPath;
-            } else {
-                ENGINE_ERROR(
-                    "Failed to open scene '{}': {}",
-                    selectedPath.generic_string(),
-                    serializer.lastError()
-                );
-            }
+            loadScene(selectedPath);
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -415,18 +460,25 @@ void EditorLayer::DrawFileDialogs() {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    if (ImGuiFileDialog::Instance()->Display(importModelDialogKey)) {
-        if (ImGuiFileDialog::Instance()->IsOk() && m_assets) {
-            const std::string selectedPath =
+    if (ImGuiFileDialog::Instance()->Display(importAssetDialogKey)) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            const std::filesystem::path selectedPath =
+                ImGuiFileDialog::Instance()->GetFilePathName();
+            importAsset(selectedPath);
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    if (ImGuiFileDialog::Instance()->Display(openProjectDialogKey)) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
             try {
-                static_cast<void>(
-                    m_assets->load<vshade::renderer::Model>(selectedPath)
-                );
+                setProject(Project::open(selectedPath));
             } catch (const std::exception& error) {
                 ENGINE_ERROR(
-                    "Failed to import model '{}': {}",
-                    selectedPath,
+                    "Failed to open project '{}': {}",
+                    selectedPath.generic_string(),
                     error.what()
                 );
             }
@@ -434,10 +486,19 @@ void EditorLayer::DrawFileDialogs() {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    if (ImGuiFileDialog::Instance()->Display(chooseProjectDialogKey)) {
+    if (ImGuiFileDialog::Instance()->Display(newProjectDialogKey)) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            m_projectDirectory =
-                ImGuiFileDialog::Instance()->GetFilePathName();
+            const std::filesystem::path selectedDirectory =
+                ImGuiFileDialog::Instance()->GetCurrentPath();
+            try {
+                setProject(Project::create(selectedDirectory));
+            } catch (const std::exception& error) {
+                ENGINE_ERROR(
+                    "Failed to create project '{}': {}",
+                    selectedDirectory.generic_string(),
+                    error.what()
+                );
+            }
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -462,9 +523,9 @@ void EditorLayer::newScene() {
 
 void EditorLayer::openScene() {
     IGFD::FileDialogConfig config;
-    config.path = m_projectDirectory.empty()
-        ? "."
-        : m_projectDirectory.generic_string();
+    config.path = m_project
+        ? m_project->assetDirectory().generic_string()
+        : ".";
     config.countSelectionMax = 1;
     config.flags = ImGuiFileDialogFlags_Modal;
     ImGuiFileDialog::Instance()->OpenDialog(
@@ -473,6 +534,28 @@ void EditorLayer::openScene() {
         ".vscene,.json",
         config
     );
+}
+
+void EditorLayer::loadScene(const std::filesystem::path& path) {
+    if (m_sceneState != SceneState::Edit) {
+        return;
+    }
+
+    auto scene = std::make_shared<vshade::scene::Scene>(
+        path.stem().string()
+    );
+    vshade::scene::SceneSerializer serializer(*scene);
+    if (!serializer.deserialize(path)) {
+        ENGINE_ERROR(
+            "Failed to open scene '{}': {}",
+            path.generic_string(),
+            serializer.lastError()
+        );
+        return;
+    }
+
+    setActiveScene(std::move(scene));
+    m_activeScenePath = path;
 }
 
 void EditorLayer::saveScene() {
@@ -506,9 +589,9 @@ void EditorLayer::saveSceneAs() {
         config.path = m_activeScenePath.parent_path().generic_string();
         config.fileName = m_activeScenePath.filename().generic_string();
     } else {
-        config.path = m_projectDirectory.empty()
-            ? "."
-            : m_projectDirectory.generic_string();
+        config.path = m_project
+            ? m_project->assetDirectory().generic_string()
+            : ".";
         config.fileName = "Untitled.vscene";
     }
     config.countSelectionMax = 1;
@@ -520,6 +603,137 @@ void EditorLayer::saveSceneAs() {
         ".vscene",
         config
     );
+}
+
+void EditorLayer::newProject() {
+    IGFD::FileDialogConfig config;
+    config.path = m_project
+        ? m_project->directory().generic_string()
+        : ".";
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_Modal;
+    ImGuiFileDialog::Instance()->OpenDialog(
+        newProjectDialogKey,
+        "Create Project Directory",
+        nullptr,
+        config
+    );
+}
+
+void EditorLayer::openProject() {
+    IGFD::FileDialogConfig config;
+    config.path = m_project
+        ? m_project->directory().generic_string()
+        : ".";
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_Modal;
+    ImGuiFileDialog::Instance()->OpenDialog(
+        openProjectDialogKey,
+        "Open Project",
+        ".vshade",
+        config
+    );
+}
+
+void EditorLayer::setProject(std::shared_ptr<Project> project) {
+    if (!project) {
+        return;
+    }
+    m_project = std::move(project);
+    m_contentBrowser.setAssetDirectory(m_project->assetDirectory());
+    ENGINE_INFO(
+        "Opened project '{}'",
+        m_project->projectFile().generic_string()
+    );
+}
+
+void EditorLayer::importAsset(
+    const std::filesystem::path& sourcePath
+) {
+    if (!m_project || !m_assets || sourcePath.empty()) {
+        return;
+    }
+
+    try {
+        const std::filesystem::path destination =
+            m_project->assetDirectory() / sourcePath.filename();
+        std::error_code error;
+        const bool destinationExists =
+            std::filesystem::exists(destination, error);
+        if (error) {
+            throw std::runtime_error("Unable to inspect the asset destination");
+        }
+        if (destinationExists) {
+            error.clear();
+            if (!std::filesystem::equivalent(sourcePath, destination, error)
+                || error) {
+                throw std::runtime_error(
+                    "An asset with this filename already exists"
+                );
+            }
+        } else {
+            std::filesystem::copy_file(sourcePath, destination);
+        }
+
+        const std::string extension = lowercase(
+            destination.extension().generic_string()
+        );
+        if (extension == ".glb" || extension == ".gltf") {
+            static_cast<void>(
+                m_assets->load<vshade::renderer::Model>(destination)
+            );
+        } else if (
+            extension == ".png"
+            || extension == ".jpg"
+            || extension == ".jpeg"
+            || extension == ".bmp"
+            || extension == ".tga"
+        ) {
+            static_cast<void>(
+                m_assets->load<vshade::renderer::Texture2D>(destination)
+            );
+        } else if (
+            extension == ".wav"
+            || extension == ".mp3"
+            || extension == ".flac"
+            || extension == ".ogg"
+        ) {
+            static_cast<void>(
+                m_assets->load<vshade::audio::AudioClip>(destination)
+            );
+        } else {
+            throw std::invalid_argument("Unsupported asset file type");
+        }
+        ENGINE_INFO("Imported asset '{}'", destination.generic_string());
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to import asset '{}': {}",
+            sourcePath.generic_string(),
+            error.what()
+        );
+    }
+}
+
+void EditorLayer::duplicateSelectedEntity() {
+    const std::shared_ptr<vshade::scene::Scene>& activeScene =
+        m_sceneState == SceneState::Edit
+            ? m_editorScene
+            : m_runtimeScene;
+    if (activeScene && activeScene->valid(m_selectedEntity)) {
+        m_selectedEntity =
+            activeScene->duplicateEntity(m_selectedEntity);
+    }
+}
+
+void EditorLayer::deleteSelectedEntity() {
+    const std::shared_ptr<vshade::scene::Scene>& activeScene =
+        m_sceneState == SceneState::Edit
+            ? m_editorScene
+            : m_runtimeScene;
+    if (activeScene && activeScene->valid(m_selectedEntity)) {
+        activeScene->destroyEntity(m_selectedEntity);
+        m_selectedEntity = {};
+    }
 }
 
 void EditorLayer::playScene() {
