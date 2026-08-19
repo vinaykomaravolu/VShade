@@ -87,11 +87,11 @@ void EditorLayer::DrawDockspace()
     ImGui::End();
 
     m_sceneHierarchyPanel.onImGuiRender();
+    const vshade::scene::Entity selectedEntity =
+        m_sceneHierarchyPanel.selectedEntity();
+    m_viewport.setSelectedEntity(selectedEntity);
     m_viewport.onImGuiRender();
-
-    m_inspectorPanel.onImGuiRender(
-        m_sceneHierarchyPanel.selectedEntity()
-    );
+    m_inspectorPanel.onImGuiRender(selectedEntity);
 
     m_console.onImGuiRender();
 }

@@ -1,4 +1,5 @@
 set(VSHADE_IMGUI_DIR "${PROJECT_SOURCE_DIR}/external/imgui")
+set(VSHADE_IMGUIZMO_DIR "${PROJECT_SOURCE_DIR}/external/ImGuizmo")
 
 find_package(OpenGL REQUIRED)
 
@@ -12,11 +13,13 @@ add_library(VShadeImGui STATIC
     "${VSHADE_IMGUI_DIR}/imgui_widgets.cpp"
     "${VSHADE_IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${VSHADE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
+    "${VSHADE_IMGUIZMO_DIR}/src/ImGuizmo.cpp"
 )
 
 target_include_directories(VShadeImGui SYSTEM PUBLIC
     "${VSHADE_IMGUI_DIR}"
     "${VSHADE_IMGUI_DIR}/backends"
+    "${VSHADE_IMGUIZMO_DIR}/src"
 )
 target_link_libraries(VShadeImGui PUBLIC glfw OpenGL::GL)
 target_compile_features(VShadeImGui PUBLIC cxx_std_20)
