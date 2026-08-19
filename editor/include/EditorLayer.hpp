@@ -6,6 +6,11 @@
 #include "panels/Viewport.hpp"
 
 #include <cstdint>
+#include <memory>
+
+namespace vshade::scene {
+class Scene;
+}
 
 namespace editor {
 
@@ -25,6 +30,7 @@ private:
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
+    std::shared_ptr<vshade::scene::Scene> m_editorScene;
     bool m_resetDockLayoutRequested = false;
 };
 

@@ -1,13 +1,23 @@
 #include "EditorLayer.hpp"
 
+#include <scene/Scene.hpp>
+
 #include <algorithm>
+#include <memory>
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 namespace editor {
 
-void EditorLayer::onAttach() {}
+void EditorLayer::onAttach() {
+    m_editorScene = std::make_shared<vshade::scene::Scene>("Editor Scene");
+    static_cast<void>(m_editorScene->create("Camera"));
+    static_cast<void>(m_editorScene->create("Cube"));
+    static_cast<void>(m_editorScene->create("Light"));
+    static_cast<void>(m_editorScene->create("Player"));
+    m_sceneHierarchyPanel.setScene(m_editorScene);
+}
 
 void EditorLayer::onUpdate(const float deltaTime) {
     m_viewport.onUpdate(deltaTime);
