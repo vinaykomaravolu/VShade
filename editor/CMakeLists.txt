@@ -21,7 +21,11 @@ target_include_directories(VShadeImGui SYSTEM PUBLIC
 target_link_libraries(VShadeImGui PUBLIC glfw OpenGL::GL)
 target_compile_features(VShadeImGui PUBLIC cxx_std_20)
 
-add_executable(VShadeEditor src/main.cpp)
+add_executable(VShadeEditor
+    src/main.cpp
+    src/EditorApplication.cpp
+)
+target_include_directories(VShadeEditor PRIVATE include)
 target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)
 
 if(MSVC)
