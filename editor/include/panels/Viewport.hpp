@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorCamera.hpp"
+#include "SceneEditHooks.hpp"
 
 #include <math/Vector.hpp>
 #include <scene/Entity.hpp>
@@ -44,6 +45,7 @@ public:
     void setRuntime(vshade::scene::SceneRuntime* runtime) noexcept;
     void setEditing(bool editing) noexcept;
     void setVisible(bool visible) noexcept;
+    void setEditHooks(SceneEditHooks hooks);
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
 private:
@@ -70,6 +72,7 @@ private:
         float width,
         float height
     );
+    void finishGizmoRecording();
     [[nodiscard]] vshade::math::Vec3 spawnPositionAtCursor(
         float x,
         float y,
@@ -83,9 +86,11 @@ private:
     std::shared_ptr<vshade::scene::Scene> m_scene;
     vshade::scene::SceneRuntime* m_runtime = nullptr;
     EditorCamera m_editorCamera;
+    SceneEditHooks m_editHooks;
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     bool m_hovered = false;
     bool m_gizmoUsing = false;
+    bool m_gizmoRecording = false;
     bool m_visible = true;
     bool m_editing = true;
     bool m_runtimeCameraActive = false;

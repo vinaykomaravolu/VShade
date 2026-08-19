@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -614,10 +615,7 @@ template<typename Resource>
 
 } // namespace
 
-bool SceneSerializer::serialize(
-    const std::filesystem::path& path,
-    const SceneJsonFormat format
-) const {
+std::string SceneSerializer::serializeToString(const SceneJsonFormat format) const {
     m_lastError.clear();
     try {
         const SceneEnvironment& environment = m_scene.environment();
@@ -792,15 +790,34 @@ bool SceneSerializer::serialize(
             root["Entities"].push_back(std::move(entity));
         }
 
+        if (format == SceneJsonFormat::Compact) {
+            return root.dump();
+        }
+        return root.dump(2) + '\n';
+    } catch (const std::exception& error) {
+        setError(error.what());
+        return {};
+    } catch (...) {
+        setError("unknown scene serialization error");
+        return {};
+    }
+}
+
+bool SceneSerializer::serialize(
+    const std::filesystem::path& path,
+    const SceneJsonFormat format
+) const {
+    const std::string json = serializeToString(format);
+    if (json.empty()) {
+        return false;
+    }
+
+    try {
         std::ofstream output(path, std::ios::binary | std::ios::trunc);
         if (!output) {
             throw std::runtime_error("failed to open scene file for writing: " + path.string());
         }
-        if (format == SceneJsonFormat::Compact) {
-            output << root.dump();
-        } else {
-            output << root.dump(2) << '\n';
-        }
+        output << json;
         if (!output) {
             throw std::runtime_error("failed to write scene file: " + path.string());
         }
@@ -827,8 +844,32 @@ bool SceneSerializer::deserialize(const std::filesystem::path& path) {
             throw std::runtime_error("failed to open scene file: " + path.string());
         }
 
-        Json root;
-        input >> root;
+        const std::string json{
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()
+        };
+        if (!input && !input.eof()) {
+            throw std::runtime_error("failed to read scene file: " + path.string());
+        }
+        return deserializeFromString(json);
+    } catch (const std::exception& error) {
+        setError(error.what());
+        return false;
+    } catch (...) {
+        setError("unknown scene deserialization error");
+        return false;
+    }
+}
+
+bool SceneSerializer::deserializeFromString(const std::string& json) {
+    m_lastError.clear();
+    if (m_writableScene == nullptr) {
+        setError("Cannot deserialize into a read-only scene");
+        return false;
+    }
+
+    try {
+        const Json root = Json::parse(json);
         const int loadedFormatVersion = root.at("FormatVersion").get<int>();
         if ((loadedFormatVersion != 1 && loadedFormatVersion != sceneFormatVersion) ||
             !root.at("Entities").is_array()) {

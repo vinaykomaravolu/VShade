@@ -64,12 +64,25 @@ void drawComponent(
     );
 }
 
+void trackTransformItem(const SceneEditHooks& hooks) {
+    if (ImGui::IsItemActivated() && hooks.begin) {
+        hooks.begin();
+    }
+    if (ImGui::IsItemDeactivated() && hooks.commit) {
+        hooks.commit();
+    }
+}
+
 } // namespace
 
 void InspectorPanel::setAssetManager(
     vshade::asset::AssetManager& assets
 ) noexcept {
     m_assets = &assets;
+}
+
+void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
+    m_editHooks = std::move(hooks);
 }
 
 void InspectorPanel::onImGuiRender(
@@ -128,6 +141,7 @@ void InspectorPanel::drawTransform(vshade::scene::Entity entity) {
     if (ImGui::DragFloat3("Position", &position.x, 0.1F)) {
         transform.setPosition(position);
     }
+    trackTransformItem(m_editHooks);
 
     vshade::math::Vec3 rotationDegrees =
         glm::degrees(vshade::math::toEuler(transform.rotation()));
@@ -136,6 +150,7 @@ void InspectorPanel::drawTransform(vshade::scene::Entity entity) {
             vshade::math::fromEuler(glm::radians(rotationDegrees))
         );
     }
+    trackTransformItem(m_editHooks);
 
     vshade::math::Vec3 scale = transform.scale();
     if (ImGui::DragFloat3("Scale", &scale.x, 0.1F)) {
@@ -145,6 +160,7 @@ void InspectorPanel::drawTransform(vshade::scene::Entity entity) {
         scale.z = std::max(scale.z, minimumScale);
         transform.setScale(scale);
     }
+    trackTransformItem(m_editHooks);
 }
 
 void InspectorPanel::drawCamera(vshade::scene::Entity entity) {

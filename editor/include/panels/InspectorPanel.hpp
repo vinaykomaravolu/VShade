@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SceneEditHooks.hpp"
+
 #include <scene/Entity.hpp>
 
 namespace vshade::asset {
@@ -11,6 +13,7 @@ namespace editor {
 class InspectorPanel final {
 public:
     void setAssetManager(vshade::asset::AssetManager& assets) noexcept;
+    void setEditHooks(SceneEditHooks hooks);
     void onImGuiRender(vshade::scene::Entity selectedEntity);
 
 private:
@@ -24,6 +27,7 @@ private:
     void drawAddComponentMenu(vshade::scene::Entity entity);
 
     vshade::asset::AssetManager* m_assets = nullptr;
+    SceneEditHooks m_editHooks;
 };
 
 } // namespace editor

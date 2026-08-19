@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SceneEditHooks.hpp"
+
 #include <scene/Entity.hpp>
 
 #include <functional>
@@ -16,6 +18,7 @@ public:
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
     void setReadOnly(bool readOnly) noexcept;
     void setSavePrefabHandler(std::function<void(vshade::scene::Entity)> handler);
+    void setEditHooks(SceneEditHooks hooks);
     void onImGuiRender(vshade::scene::Entity& selectedEntity);
 
 private:
@@ -39,6 +42,7 @@ private:
 
     std::shared_ptr<vshade::scene::Scene> m_scene;
     std::function<void(vshade::scene::Entity)> m_savePrefab;
+    SceneEditHooks m_editHooks;
     bool m_readOnly = false;
 };
 

@@ -1,10 +1,13 @@
 #include "EditorLayer.hpp"
+#include "SceneEditHooks.hpp"
 #include "widgets/AssetSelector.hpp"
 
 #include <asset/Asset.hpp>
 #include <asset/AssetManager.hpp>
 #include <audio/AudioClip.hpp>
 #include <core/Log.hpp>
+#include <input/Input.hpp>
+#include <input/KeyCode.hpp>
 #include <project/Project.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Texture.hpp>
@@ -146,6 +149,15 @@ EditorLayer::EditorLayer(
         m_selectedEntity = entity;
         saveSelectedAsPrefab();
     });
+    const SceneEditHooks editHooks{
+        .begin = [this] { beginSceneEdit(); },
+        .commit = [this] { commitSceneEdit(); },
+        .revert = [this] { revertSceneEdit(); },
+        .cancel = [this] { cancelSceneEdit(); },
+    };
+    m_sceneHierarchyPanel.setEditHooks(editHooks);
+    m_viewport.setEditHooks(editHooks);
+    m_inspectorPanel.setEditHooks(editHooks);
 }
 
 EditorLayer::~EditorLayer() {
@@ -356,27 +368,40 @@ void EditorLayer::DrawMenuBar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit")) {
+        const bool editing = m_sceneState == SceneState::Edit;
+        ImGui::BeginDisabled(!editing || !m_undoHistory.canUndo());
+        if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
+            undoSceneEdit();
+        }
+        ImGui::EndDisabled();
+        ImGui::BeginDisabled(!editing || !m_undoHistory.canRedo());
+        if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
+            redoSceneEdit();
+        }
+        ImGui::EndDisabled();
+        ImGui::Separator();
         const std::shared_ptr<vshade::scene::Scene>& activeScene =
             m_sceneState == SceneState::Edit
                 ? m_editorScene
                 : m_runtimeScene;
         const bool hasSelection =
-            m_sceneState == SceneState::Edit
+            editing
             && activeScene
             && activeScene->valid(m_selectedEntity);
         ImGui::BeginDisabled(!hasSelection);
-        if (ImGui::MenuItem("Duplicate Entity")) {
+        if (ImGui::MenuItem("Duplicate Entity", "Ctrl+D")) {
             duplicateSelectedEntity();
         }
         if (ImGui::MenuItem("Save as Prefab...")) {
             saveSelectedAsPrefab();
         }
-        if (ImGui::MenuItem("Delete Entity")) {
+        if (ImGui::MenuItem("Delete Entity", "Delete")) {
             deleteSelectedEntity();
         }
         ImGui::EndDisabled();
         ImGui::EndMenu();
     }
+    handleEditHotkeys();
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Hierarchy", nullptr, &m_showHierarchy);
         ImGui::MenuItem("Inspector", nullptr, &m_showInspector);
@@ -558,6 +583,7 @@ void EditorLayer::setActiveScene(
         return;
     }
     m_editorScene = std::move(scene);
+    m_undoHistory.clear();
     bindActiveScene();
 }
 
@@ -887,13 +913,10 @@ void EditorLayer::duplicateSelectedEntity() {
     if (m_sceneState != SceneState::Edit) {
         return;
     }
-    const std::shared_ptr<vshade::scene::Scene>& activeScene =
-        m_sceneState == SceneState::Edit
-            ? m_editorScene
-            : m_runtimeScene;
-    if (activeScene && activeScene->valid(m_selectedEntity)) {
-        m_selectedEntity =
-            activeScene->duplicateEntity(m_selectedEntity);
+    if (m_editorScene && m_editorScene->valid(m_selectedEntity)) {
+        beginSceneEdit();
+        m_selectedEntity = m_editorScene->duplicateEntity(m_selectedEntity);
+        commitSceneEdit();
     }
 }
 
@@ -901,13 +924,80 @@ void EditorLayer::deleteSelectedEntity() {
     if (m_sceneState != SceneState::Edit) {
         return;
     }
-    const std::shared_ptr<vshade::scene::Scene>& activeScene =
-        m_sceneState == SceneState::Edit
-            ? m_editorScene
-            : m_runtimeScene;
-    if (activeScene && activeScene->valid(m_selectedEntity)) {
-        activeScene->destroyEntity(m_selectedEntity);
+    if (m_editorScene && m_editorScene->valid(m_selectedEntity)) {
+        beginSceneEdit();
+        m_editorScene->destroyEntity(m_selectedEntity);
         m_selectedEntity = {};
+        commitSceneEdit();
+    }
+}
+
+void EditorLayer::beginSceneEdit() {
+    if (m_sceneState != SceneState::Edit || !m_editorScene) {
+        return;
+    }
+    m_undoHistory.begin(*m_editorScene, m_selectedEntity);
+}
+
+void EditorLayer::commitSceneEdit() {
+    if (!m_editorScene) {
+        return;
+    }
+    m_undoHistory.commit(*m_editorScene, m_selectedEntity);
+}
+
+void EditorLayer::revertSceneEdit() {
+    if (!m_editorScene) {
+        m_undoHistory.cancel();
+        return;
+    }
+    m_undoHistory.revert(*m_editorScene, m_selectedEntity);
+}
+
+void EditorLayer::cancelSceneEdit() {
+    m_undoHistory.cancel();
+}
+
+void EditorLayer::undoSceneEdit() {
+    if (m_sceneState != SceneState::Edit || !m_editorScene) {
+        return;
+    }
+    m_undoHistory.undo(*m_editorScene, m_selectedEntity);
+}
+
+void EditorLayer::redoSceneEdit() {
+    if (m_sceneState != SceneState::Edit || !m_editorScene) {
+        return;
+    }
+    m_undoHistory.redo(*m_editorScene, m_selectedEntity);
+}
+
+void EditorLayer::handleEditHotkeys() {
+    if (m_sceneState != SceneState::Edit || ImGui::GetIO().WantTextInput) {
+        return;
+    }
+
+    using vshade::input::Input;
+    using vshade::input::KeyCode;
+
+    const bool controlDown =
+        Input::isKeyDown(KeyCode::LeftControl)
+        || Input::isKeyDown(KeyCode::RightControl);
+    const bool shiftDown =
+        Input::isKeyDown(KeyCode::LeftShift)
+        || Input::isKeyDown(KeyCode::RightShift);
+    if (controlDown && Input::isKeyPressed(KeyCode::Z)) {
+        if (shiftDown) {
+            redoSceneEdit();
+        } else {
+            undoSceneEdit();
+        }
+    } else if (controlDown && Input::isKeyPressed(KeyCode::Y)) {
+        redoSceneEdit();
+    } else if (controlDown && Input::isKeyPressed(KeyCode::D)) {
+        duplicateSelectedEntity();
+    } else if (Input::isKeyPressed(KeyCode::Delete) && !ImGui::IsAnyItemActive()) {
+        deleteSelectedEntity();
     }
 }
 

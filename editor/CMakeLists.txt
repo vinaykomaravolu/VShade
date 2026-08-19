@@ -34,6 +34,7 @@ add_executable(VShadeEditor
     src/EditorApplication.cpp
     src/EditorCamera.cpp
     src/EditorLayer.cpp
+    src/UndoHistory.cpp
     src/panels/Console.cpp
     src/panels/ContentBrowserPanel.cpp
     src/panels/InspectorPanel.cpp

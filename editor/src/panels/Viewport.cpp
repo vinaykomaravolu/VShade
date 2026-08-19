@@ -9,6 +9,7 @@
 #include <input/MouseCode.hpp>
 #include <math/Quaternion.hpp>
 #include <math/Ray.hpp>
+#include <math/Transform.hpp>
 #include <math/Vector.hpp>
 #include <renderer/Framebuffer.hpp>
 #include <renderer/Model.hpp>
@@ -179,6 +180,20 @@ void Viewport::setVisible(const bool visible) noexcept {
     }
 }
 
+void Viewport::setEditHooks(SceneEditHooks hooks) {
+    m_editHooks = std::move(hooks);
+}
+
+void Viewport::finishGizmoRecording() {
+    if (!m_gizmoRecording) {
+        return;
+    }
+    if (m_editHooks.commit) {
+        m_editHooks.commit();
+    }
+    m_gizmoRecording = false;
+}
+
 void Viewport::onImGuiRender(
     vshade::scene::Entity& selectedEntity
 ) {
@@ -229,6 +244,7 @@ void Viewport::onImGuiRender(
                 );
             }
         } else {
+            finishGizmoRecording();
             m_gizmoUsing = false;
             if (!m_runtimeCameraActive) {
                 const ImVec2 textSize = ImGui::CalcTextSize("No Camera");
@@ -240,6 +256,7 @@ void Viewport::onImGuiRender(
             }
         }
     } else {
+        finishGizmoRecording();
         m_gizmoUsing = false;
     }
 
@@ -262,11 +279,13 @@ void Viewport::drawGizmo(
         || !m_scene
         || !m_scene->valid(selectedEntity)
         || !selectedEntity.has<vshade::scene::TransformComponent>()) {
+        finishGizmoRecording();
         m_gizmoUsing = false;
         return;
     }
 
     auto& transform = selectedEntity.transform();
+    const vshade::math::Transform preManipulate = transform;
     vshade::math::Mat4 modelMatrix = transform.matrix();
 
     ImGuizmo::SetOrthographic(false);
@@ -279,36 +298,48 @@ void Viewport::drawGizmo(
         ImGuizmo::LOCAL,
         glm::value_ptr(modelMatrix)
     );
-    m_gizmoUsing = ImGuizmo::IsUsing();
 
-    if (!manipulated) {
-        return;
+    if (manipulated) {
+        float translation[3]{};
+        float rotationDegrees[3]{};
+        float scale[3]{};
+        ImGuizmo::DecomposeMatrixToComponents(
+            glm::value_ptr(modelMatrix),
+            translation,
+            rotationDegrees,
+            scale
+        );
+
+        constexpr float minimumScale = 0.001F;
+        transform.setPosition({translation[0], translation[1], translation[2]});
+        transform.setRotation(vshade::math::fromEuler(glm::radians(
+            vshade::math::Vec3{
+                rotationDegrees[0],
+                rotationDegrees[1],
+                rotationDegrees[2],
+            }
+        )));
+        transform.setScale({
+            std::max(scale[0], minimumScale),
+            std::max(scale[1], minimumScale),
+            std::max(scale[2], minimumScale),
+        });
     }
 
-    float translation[3]{};
-    float rotationDegrees[3]{};
-    float scale[3]{};
-    ImGuizmo::DecomposeMatrixToComponents(
-        glm::value_ptr(modelMatrix),
-        translation,
-        rotationDegrees,
-        scale
-    );
-
-    constexpr float minimumScale = 0.001F;
-    transform.setPosition({translation[0], translation[1], translation[2]});
-    transform.setRotation(vshade::math::fromEuler(glm::radians(
-        vshade::math::Vec3{
-            rotationDegrees[0],
-            rotationDegrees[1],
-            rotationDegrees[2],
+    const bool usingNow = ImGuizmo::IsUsing();
+    if (usingNow && !m_gizmoRecording) {
+        const vshade::math::Transform postManipulate = transform;
+        transform = preManipulate;
+        if (m_editHooks.begin) {
+            m_editHooks.begin();
         }
-    )));
-    transform.setScale({
-        std::max(scale[0], minimumScale),
-        std::max(scale[1], minimumScale),
-        std::max(scale[2], minimumScale),
-    });
+        transform = postManipulate;
+        m_gizmoRecording = true;
+    }
+    if (!usingNow) {
+        finishGizmoRecording();
+    }
+    m_gizmoUsing = usingNow;
 }
 
 void Viewport::renderScene() {
@@ -455,6 +486,9 @@ bool Viewport::spawnDroppedAsset(
                     *droppedPath
                 );
                 m_assets->load(model.handle());
+                if (m_editHooks.begin) {
+                    m_editHooks.begin();
+                }
                 vshade::scene::Entity entity = m_scene->create(
                     assetStemName(*droppedPath, "Model")
                 );
@@ -463,18 +497,27 @@ bool Viewport::spawnDroppedAsset(
                     vshade::scene::ModelRendererComponent{.model = model}
                 );
                 selectedEntity = entity;
+                if (m_editHooks.commit) {
+                    m_editHooks.commit();
+                }
                 return true;
             }
             case vshade::asset::AssetType::Prefab: {
                 const auto prefab = m_assets->loadResource<vshade::scene::Prefab>(
                     *droppedPath
                 );
+                if (m_editHooks.begin) {
+                    m_editHooks.begin();
+                }
                 vshade::scene::Entity entity = m_scene->instantiate(*prefab);
                 if (!entity) {
                     throw std::runtime_error("The prefab did not contain a root entity");
                 }
                 entity.transform().setPosition(position);
                 selectedEntity = entity;
+                if (m_editHooks.commit) {
+                    m_editHooks.commit();
+                }
                 return true;
             }
             default:
@@ -485,6 +528,9 @@ bool Viewport::spawnDroppedAsset(
                 return false;
         }
     } catch (const std::exception& error) {
+        if (m_editHooks.revert) {
+            m_editHooks.revert();
+        }
         ENGINE_ERROR(
             "Failed to spawn asset '{}': {}",
             droppedPath->generic_string(),

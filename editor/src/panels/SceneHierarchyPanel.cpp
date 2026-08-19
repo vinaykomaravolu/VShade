@@ -1,8 +1,6 @@
 #include "panels/SceneHierarchyPanel.hpp"
 
 #include <core/Log.hpp>
-#include <input/Input.hpp>
-#include <input/KeyCode.hpp>
 #include <scene/Scene.hpp>
 #include <scene/components/CoreComponents.hpp>
 
@@ -64,6 +62,10 @@ void SceneHierarchyPanel::setSavePrefabHandler(
     std::function<void(vshade::scene::Entity)> handler
 ) {
     m_savePrefab = std::move(handler);
+}
+
+void SceneHierarchyPanel::setEditHooks(SceneEditHooks hooks) {
+    m_editHooks = std::move(hooks);
 }
 
 void SceneHierarchyPanel::onImGuiRender(
@@ -131,7 +133,13 @@ void SceneHierarchyPanel::onImGuiRender(
                     *static_cast<const std::uint64_t*>(payload->Data);
                 const vshade::scene::Entity child = m_scene->findEntity(uuid);
                 if (m_scene->valid(child) && m_scene->parent(child)) {
+                    if (m_editHooks.begin) {
+                        m_editHooks.begin();
+                    }
                     m_scene->clearParent(child);
+                    if (m_editHooks.commit) {
+                        m_editHooks.commit();
+                    }
                 }
             }
             ImGui::EndDragDropTarget();
@@ -139,46 +147,56 @@ void SceneHierarchyPanel::onImGuiRender(
 
         if (!m_readOnly && ImGui::BeginPopupContextItem("HierarchyEmptyContext")) {
             if (ImGui::MenuItem("Create Empty Entity")) {
+                if (m_editHooks.begin) {
+                    m_editHooks.begin();
+                }
                 selectedEntity = m_scene->create("Entity");
+                if (m_editHooks.commit) {
+                    m_editHooks.commit();
+                }
             }
             ImGui::EndPopup();
         }
 
-        const bool hierarchyFocused = ImGui::IsWindowFocused(
-            ImGuiFocusedFlags_RootAndChildWindows
-        );
-        const bool keyboardAvailable =
-            !m_readOnly && hierarchyFocused && !ImGui::GetIO().WantTextInput;
-        if (keyboardAvailable && m_scene->valid(selectedEntity)) {
-            using vshade::input::Input;
-            using vshade::input::KeyCode;
-
-            const bool controlDown =
-                Input::isKeyDown(KeyCode::LeftControl)
-                || Input::isKeyDown(KeyCode::RightControl);
-            if (controlDown && Input::isKeyPressed(KeyCode::D)) {
-                entityToDuplicate = selectedEntity;
-            }
-            if (Input::isKeyPressed(KeyCode::Delete)) {
-                entityToDelete = selectedEntity;
-            }
-        }
-
         if (!m_readOnly && m_scene->valid(entityToCreateChild)) {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
             selectedEntity = m_scene->create("Entity");
             m_scene->setParent(selectedEntity, entityToCreateChild);
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
         }
         if (!m_readOnly && m_scene->valid(entityToUnparent)) {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
             m_scene->clearParent(entityToUnparent);
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
         }
         if (!m_readOnly && m_scene->valid(entityToDuplicate)) {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
             selectedEntity = m_scene->duplicateEntity(entityToDuplicate);
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
         }
         if (!m_readOnly && m_scene->valid(entityToDelete)) {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
             if (selectedEntity == entityToDelete) {
                 selectedEntity = {};
             }
             m_scene->destroyEntity(entityToDelete);
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
         }
     }
 
@@ -235,8 +253,17 @@ SceneHierarchyPanel::EntityCommand SceneHierarchyPanel::drawEntity(
             const vshade::scene::Entity child = m_scene->findEntity(uuid);
             if (m_scene->valid(child)) {
                 try {
+                    if (m_editHooks.begin) {
+                        m_editHooks.begin();
+                    }
                     m_scene->setParent(child, entity);
+                    if (m_editHooks.commit) {
+                        m_editHooks.commit();
+                    }
                 } catch (const std::exception& error) {
+                    if (m_editHooks.cancel) {
+                        m_editHooks.cancel();
+                    }
                     ENGINE_WARN(
                         "Could not parent '{}': {}",
                         std::string(child.name()),

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UndoHistory.hpp"
 #include "panels/Console.hpp"
 #include "panels/ContentBrowserPanel.hpp"
 #include "panels/InspectorPanel.hpp"
@@ -69,6 +70,13 @@ private:
     void writePrefab(const std::filesystem::path& path);
     void duplicateSelectedEntity();
     void deleteSelectedEntity();
+    void beginSceneEdit();
+    void commitSceneEdit();
+    void revertSceneEdit();
+    void cancelSceneEdit();
+    void undoSceneEdit();
+    void redoSceneEdit();
+    void handleEditHotkeys();
     void playScene();
     void pauseScene();
     void stepScene();
@@ -83,6 +91,7 @@ private:
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
+    UndoHistory m_undoHistory;
     vshade::scene::Entity m_selectedEntity;
     std::shared_ptr<vshade::scene::Scene> m_editorScene;
     std::shared_ptr<vshade::scene::Scene> m_runtimeScene;

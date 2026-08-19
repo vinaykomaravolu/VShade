@@ -36,11 +36,27 @@ public:
     ) const;
 
     /**
+     * @brief Serializes the attached scene to a JSON string.
+     * @param format Compact by default for editor snapshots and tooling.
+     * @return JSON text on success; an empty string when serialization fails.
+     */
+    [[nodiscard]] std::string serializeToString(
+        SceneJsonFormat format = SceneJsonFormat::Compact
+    ) const;
+
+    /**
      * @brief Replaces the attached scene with data loaded from a file.
      * @return True on success; false for missing, malformed, or unsupported data.
      * @note The attached scene is unchanged when loading fails.
      */
     [[nodiscard]] bool deserialize(const std::filesystem::path& path);
+
+    /**
+     * @brief Replaces the attached scene with JSON previously produced by serializeToString().
+     * @return True on success; false for malformed or unsupported data.
+     * @note The attached scene is unchanged when loading fails.
+     */
+    [[nodiscard]] bool deserializeFromString(const std::string& json);
 
     /** @brief Structured equivalent of serialize() for editor and tooling code. */
     [[nodiscard]] core::Result<void> serializeResult(

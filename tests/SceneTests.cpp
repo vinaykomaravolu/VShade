@@ -712,6 +712,35 @@ TEST_CASE("Custom components round trip through a scene file", "[scene]") {
 
 }
 
+TEST_CASE("Scene JSON strings round-trip without a file", "[scene]") {
+    vshade::scene::Scene source("Memory scene");
+    vshade::scene::Entity entity = source.create("Player");
+    entity.transform().setPosition({1.0F, 2.0F, 3.0F});
+    const std::uint64_t uuid = entity.uuid();
+
+    vshade::scene::SceneSerializer writer(source);
+    const std::string json = writer.serializeToString(
+        vshade::scene::SceneJsonFormat::Compact
+    );
+    REQUIRE_FALSE(json.empty());
+    CHECK(json.find('\n') == std::string::npos);
+
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserializeFromString(json));
+    const vshade::scene::Entity loadedEntity = loaded.findEntity(uuid);
+    REQUIRE(loadedEntity.valid());
+    CHECK(loaded.name() == "Memory scene");
+    CHECK(loadedEntity.transform().position().x == Catch::Approx(1.0F));
+    CHECK(loadedEntity.transform().position().y == Catch::Approx(2.0F));
+    CHECK(loadedEntity.transform().position().z == Catch::Approx(3.0F));
+
+    CHECK_FALSE(reader.deserializeFromString("not json"));
+    CHECK_FALSE(reader.lastError().empty());
+    CHECK(loaded.name() == "Memory scene");
+    CHECK(loaded.findEntity(uuid).valid());
+}
+
 TEST_CASE("Scene serialization rejects non-finite transforms with a diagnostic", "[scene]") {
     const std::filesystem::path path = sceneOutputPath("non-finite.json");
     vshade::scene::Scene scene;
