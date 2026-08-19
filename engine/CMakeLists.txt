@@ -21,6 +21,7 @@ set(VSHADE_SOURCES
     src/input/Input.cpp
     src/math/Matrix.cpp
     src/math/Quaternion.cpp
+    src/math/Ray.cpp
     src/math/Transform.cpp
     src/math/Vector.cpp
     src/platform/Window.cpp

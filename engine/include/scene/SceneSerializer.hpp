@@ -23,6 +23,7 @@ enum class SceneJsonFormat {
 class SceneSerializer final {
 public:
     explicit SceneSerializer(Scene& scene) noexcept;
+    explicit SceneSerializer(const Scene& scene) noexcept;
 
     /**
      * @brief Writes the attached scene to a file.
@@ -58,7 +59,8 @@ public:
 private:
     void setError(std::string error) const;
 
-    Scene& m_scene;
+    const Scene& m_scene;
+    Scene* m_writableScene = nullptr;
     mutable std::string m_lastError;
 };
 

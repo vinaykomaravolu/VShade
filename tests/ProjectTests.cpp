@@ -34,6 +34,7 @@ TEST_CASE("Projects create and load portable configuration", "[project]") {
     CHECK(std::filesystem::is_directory(created->assetDirectory() / "models"));
     CHECK(std::filesystem::is_directory(created->assetDirectory() / "textures"));
     CHECK(std::filesystem::is_directory(created->assetDirectory() / "audio"));
+    CHECK(std::filesystem::is_directory(created->prefabDirectory()));
     CHECK(std::filesystem::is_directory(created->sceneDirectory()));
     CHECK(created->assetRegistryPath()
         == created->projectDirectory() / "AssetRegistry.json");

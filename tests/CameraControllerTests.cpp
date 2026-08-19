@@ -71,3 +71,27 @@ TEST_CASE("Camera controller accepts deterministic movement and resynchronizes",
         std::invalid_argument
     );
 }
+
+TEST_CASE("Camera world rays hit a ground plane under the cursor", "[camera][ray]") {
+    vshade::renderer::Camera camera;
+    camera.setPerspective(0.785398163F, 1.0F, 0.1F, 100.0F);
+    camera.lookAt(
+        {0.0F, 2.0F, 5.0F},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+
+    const vshade::math::Ray ray = camera.worldRay(0.0F, 0.0F);
+    const auto hit = vshade::math::intersectPlane(
+        ray,
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+    REQUIRE(hit.has_value());
+    CHECK(hit->x == Catch::Approx(0.0F).margin(0.05F));
+    CHECK(hit->y == Catch::Approx(0.0F).margin(0.0001F));
+    CHECK(hit->z == Catch::Approx(0.0F).margin(0.05F));
+
+    const vshade::math::Vec3 reconstructed = camera.unproject({0.0F, 0.0F, 0.0F});
+    CHECK(reconstructed.x == Catch::Approx(0.0F).margin(0.05F));
+}

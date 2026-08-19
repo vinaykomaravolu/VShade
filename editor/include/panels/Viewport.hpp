@@ -2,6 +2,7 @@
 
 #include "EditorCamera.hpp"
 
+#include <math/Vector.hpp>
 #include <scene/Entity.hpp>
 
 #include <memory>
@@ -62,7 +63,19 @@ private:
         float width,
         float height
     );
-    bool spawnDroppedModel(vshade::scene::Entity& selectedEntity);
+    bool spawnDroppedAsset(
+        vshade::scene::Entity& selectedEntity,
+        float x,
+        float y,
+        float width,
+        float height
+    );
+    [[nodiscard]] vshade::math::Vec3 spawnPositionAtCursor(
+        float x,
+        float y,
+        float width,
+        float height
+    ) const;
 
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
     std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;

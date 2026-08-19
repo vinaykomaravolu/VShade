@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math/Matrix.hpp"
+#include "math/Ray.hpp"
 
 namespace vshade::renderer {
 
@@ -82,6 +83,19 @@ public:
      * @return Matrix that transforms world-space positions into clip space.
      */
     [[nodiscard]] math::Mat4 viewProjection() const;
+
+    /**
+     * @brief Reconstructs a world-space point from normalized device coordinates.
+     * @param ndc Clip-space position with x/y/z in the range -1 through 1.
+     */
+    [[nodiscard]] math::Vec3 unproject(const math::Vec3& ndc) const;
+
+    /**
+     * @brief Builds a world-space pick ray through an NDC viewport point.
+     * @param ndcX Horizontal coordinate in the range -1 (left) through 1 (right).
+     * @param ndcY Vertical coordinate in the range -1 (bottom) through 1 (top).
+     */
+    [[nodiscard]] math::Ray worldRay(float ndcX, float ndcY) const;
 
 private:
     math::Mat4 m_view{1.0F};

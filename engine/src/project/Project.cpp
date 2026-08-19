@@ -101,6 +101,10 @@ std::filesystem::path Project::sceneDirectory() const {
     return assetDirectory() / "scenes";
 }
 
+std::filesystem::path Project::prefabDirectory() const {
+    return assetDirectory() / "prefabs";
+}
+
 std::filesystem::path Project::assetRegistryPath() const {
     return projectDirectory() / "AssetRegistry.json";
 }
@@ -142,6 +146,7 @@ void Project::createDirectories() const {
     std::filesystem::create_directories(assetDirectory() / "models");
     std::filesystem::create_directories(assetDirectory() / "textures");
     std::filesystem::create_directories(assetDirectory() / "audio");
+    std::filesystem::create_directories(prefabDirectory());
     std::filesystem::create_directories(sceneDirectory());
 }
 

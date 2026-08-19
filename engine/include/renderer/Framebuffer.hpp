@@ -69,6 +69,9 @@ public:
         std::uint32_t y
     ) const;
 
+    /** @brief Reads one depth sample in the range 0 through 1 using bottom-left coordinates. */
+    [[nodiscard]] float readDepth(std::uint32_t x, std::uint32_t y) const;
+
     /**
      * @brief Returns the attachment width.
      * @return Width in pixels.

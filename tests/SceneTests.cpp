@@ -185,6 +185,48 @@ TEST_CASE("Prefab instantiation remaps entity identity and hierarchy", "[scene][
     CHECK(destination.parent(destination.children(first)[0]) == first);
 }
 
+TEST_CASE("Prefab extraction copies a subtree and can round-trip through JSON", "[scene][prefab]") {
+    vshade::scene::Scene source("Level");
+    auto root = source.create("Turret");
+    auto child = source.create("Barrel");
+    auto ignored = source.create("Decor");
+    source.setParent(child, root);
+    root.transform().setPosition({1.0F, 2.0F, 3.0F});
+    child.transform().setPosition({0.0F, 1.0F, 0.0F});
+    ignored.transform().setPosition({9.0F, 9.0F, 9.0F});
+    root.add<vshade::scene::LightComponent>();
+
+    const auto prefab = vshade::scene::Prefab::fromEntity(source, root);
+    CHECK(prefab.scene().name() == "Turret");
+    std::size_t prefabEntityCount = 0;
+    for (const auto handle : prefab.scene().view<vshade::scene::TagComponent>()) {
+        static_cast<void>(handle);
+        ++prefabEntityCount;
+    }
+    CHECK(prefabEntityCount == 2);
+
+    vshade::scene::Scene destination("Spawned");
+    const auto instance = destination.instantiate(prefab);
+    REQUIRE(instance);
+    CHECK(std::string(instance.name()) == "Turret");
+    CHECK(instance.has<vshade::scene::LightComponent>());
+    CHECK(instance.transform().position().x == Catch::Approx(1.0F));
+    REQUIRE(destination.children(instance).size() == 1);
+    CHECK(std::string(destination.children(instance)[0].name()) == "Barrel");
+
+    const std::filesystem::path path = sceneOutputPath("turret.vsprefab");
+    REQUIRE(prefab.save(path));
+
+    vshade::asset::AssetManager assets;
+    const auto loaded = assets.loadResource<vshade::scene::Prefab>(path);
+    REQUIRE(loaded);
+    vshade::scene::Scene loadedDestination("Loaded");
+    const auto loadedInstance = loadedDestination.instantiate(*loaded);
+    REQUIRE(loadedInstance);
+    CHECK(loadedInstance.has<vshade::scene::LightComponent>());
+    REQUIRE(loadedDestination.children(loadedInstance).size() == 1);
+}
+
 TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
     REQUIRE(std::filesystem::is_regular_file(
         std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "player.png"

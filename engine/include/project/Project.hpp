@@ -30,6 +30,7 @@ public:
     [[nodiscard]] std::filesystem::path projectDirectory() const;
     [[nodiscard]] std::filesystem::path assetDirectory() const;
     [[nodiscard]] std::filesystem::path sceneDirectory() const;
+    [[nodiscard]] std::filesystem::path prefabDirectory() const;
     [[nodiscard]] std::filesystem::path startScenePath() const;
     [[nodiscard]] std::filesystem::path assetRegistryPath() const;
 

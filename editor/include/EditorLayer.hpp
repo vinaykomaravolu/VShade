@@ -65,6 +65,8 @@ private:
     void saveProjectCatalog();
     void recordStartSceneIfUnset();
     void importAsset(const std::filesystem::path& sourcePath);
+    void saveSelectedAsPrefab();
+    void writePrefab(const std::filesystem::path& path);
     void duplicateSelectedEntity();
     void deleteSelectedEntity();
     void playScene();

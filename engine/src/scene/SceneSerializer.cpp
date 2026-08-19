@@ -23,6 +23,10 @@
 namespace vshade::scene {
 
 SceneSerializer::SceneSerializer(Scene& scene) noexcept
+    : m_scene(scene),
+      m_writableScene(&scene) {}
+
+SceneSerializer::SceneSerializer(const Scene& scene) noexcept
     : m_scene(scene) {}
 
 const std::string& SceneSerializer::lastError() const noexcept {
@@ -812,6 +816,11 @@ bool SceneSerializer::serialize(
 
 bool SceneSerializer::deserialize(const std::filesystem::path& path) {
     m_lastError.clear();
+    if (m_writableScene == nullptr) {
+        setError("Cannot deserialize into a read-only scene");
+        return false;
+    }
+
     try {
         std::ifstream input(path, std::ios::binary);
         if (!input) {
@@ -1069,13 +1078,13 @@ bool SceneSerializer::deserialize(const std::filesystem::path& path) {
             }
         }
 
-        m_scene.m_registry = std::move(loadedRegistry);
-        m_scene.m_entitiesByUuid = std::move(loadedEntitiesByUuid);
-        m_scene.m_name = loadedSceneName;
-        m_scene.m_environment = loadedEnvironment;
-        ++m_scene.m_generation;
-        if (m_scene.m_generation == 0) {
-            ++m_scene.m_generation;
+        m_writableScene->m_registry = std::move(loadedRegistry);
+        m_writableScene->m_entitiesByUuid = std::move(loadedEntitiesByUuid);
+        m_writableScene->m_name = loadedSceneName;
+        m_writableScene->m_environment = loadedEnvironment;
+        ++m_writableScene->m_generation;
+        if (m_writableScene->m_generation == 0) {
+            ++m_writableScene->m_generation;
         }
         return true;
     } catch (const std::exception& error) {

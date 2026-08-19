@@ -8,11 +8,13 @@
 #include <project/Project.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Texture.hpp>
+#include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -32,6 +34,7 @@ constexpr const char* saveSceneDialogKey = "SaveSceneDialog";
 constexpr const char* importAssetDialogKey = "ImportAssetDialog";
 constexpr const char* openProjectDialogKey = "OpenProjectDialog";
 constexpr const char* newProjectDialogKey = "NewProjectDialog";
+constexpr const char* savePrefabDialogKey = "SavePrefabDialog";
 
 [[nodiscard]] std::filesystem::path importDestinationDirectory(
     const vshade::project::Project& project,
@@ -44,6 +47,8 @@ constexpr const char* newProjectDialogKey = "NewProjectDialog";
             return project.assetDirectory() / "textures";
         case vshade::asset::AssetType::Audio:
             return project.assetDirectory() / "audio";
+        case vshade::asset::AssetType::Prefab:
+            return project.prefabDirectory();
         default:
             throw std::invalid_argument("Unsupported asset file type");
     }
@@ -136,6 +141,10 @@ EditorLayer::EditorLayer(
     m_inspectorPanel.setAssetManager(assets);
     AssetSelector::setCatalogChangedCallback([this] {
         saveProjectCatalog();
+    });
+    m_sceneHierarchyPanel.setSavePrefabHandler([this](vshade::scene::Entity entity) {
+        m_selectedEntity = entity;
+        saveSelectedAsPrefab();
     });
 }
 
@@ -308,6 +317,13 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::MenuItem("Save Scene As...")) {
             saveSceneAs();
         }
+        ImGui::BeginDisabled(
+            !m_editorScene || !m_editorScene->valid(m_selectedEntity)
+        );
+        if (ImGui::MenuItem("Save as Prefab...")) {
+            saveSelectedAsPrefab();
+        }
+        ImGui::EndDisabled();
         ImGui::EndDisabled();
         ImGui::Separator();
         ImGui::BeginDisabled(!m_project);
@@ -319,7 +335,7 @@ void EditorLayer::DrawMenuBar() {
             ImGuiFileDialog::Instance()->OpenDialog(
                 importAssetDialogKey,
                 "Import Asset",
-                ".glb,.gltf,.png,.jpg,.jpeg,.bmp,.tga,.wav,.mp3,.flac,.ogg",
+                ".glb,.gltf,.png,.jpg,.jpeg,.bmp,.tga,.wav,.mp3,.flac,.ogg,.vsprefab",
                 config
             );
         }
@@ -351,6 +367,9 @@ void EditorLayer::DrawMenuBar() {
         ImGui::BeginDisabled(!hasSelection);
         if (ImGui::MenuItem("Duplicate Entity")) {
             duplicateSelectedEntity();
+        }
+        if (ImGui::MenuItem("Save as Prefab...")) {
+            saveSelectedAsPrefab();
         }
         if (ImGui::MenuItem("Delete Entity")) {
             deleteSelectedEntity();
@@ -518,6 +537,15 @@ void EditorLayer::DrawFileDialogs() {
                     error.what()
                 );
             }
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    if (ImGuiFileDialog::Instance()->Display(savePrefabDialogKey)) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            writePrefab(ImGuiFileDialog::Instance()->GetFilePathName(
+                IGFD_ResultMode_OverwriteFileExt
+            ));
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -775,6 +803,11 @@ void EditorLayer::importAsset(
                     m_assets->load<vshade::audio::AudioClip>(destination)
                 );
                 break;
+            case vshade::asset::AssetType::Prefab:
+                static_cast<void>(
+                    m_assets->load<vshade::scene::Prefab>(destination)
+                );
+                break;
             default:
                 throw std::invalid_argument("Unsupported asset file type");
         }
@@ -785,6 +818,66 @@ void EditorLayer::importAsset(
         ENGINE_ERROR(
             "Failed to import asset '{}': {}",
             sourcePath.generic_string(),
+            error.what()
+        );
+    }
+}
+
+void EditorLayer::saveSelectedAsPrefab() {
+    if (m_sceneState != SceneState::Edit
+        || !m_editorScene
+        || !m_editorScene->valid(m_selectedEntity)) {
+        return;
+    }
+
+    IGFD::FileDialogConfig config;
+    if (m_project) {
+        config.path = m_project->prefabDirectory().generic_string();
+    } else {
+        config.path = ".";
+    }
+    config.fileName = std::string(m_selectedEntity.name()) + ".vsprefab";
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_Modal
+        | ImGuiFileDialogFlags_ConfirmOverwrite;
+    ImGuiFileDialog::Instance()->OpenDialog(
+        savePrefabDialogKey,
+        "Save Prefab As",
+        ".vsprefab",
+        config
+    );
+}
+
+void EditorLayer::writePrefab(const std::filesystem::path& path) {
+    if (m_sceneState != SceneState::Edit
+        || !m_editorScene
+        || !m_editorScene->valid(m_selectedEntity)
+        || path.empty()) {
+        return;
+    }
+
+    try {
+        std::filesystem::create_directories(path.parent_path());
+        const auto prefab = vshade::scene::Prefab::fromEntity(
+            *m_editorScene,
+            m_selectedEntity
+        );
+        const auto result = prefab.save(path);
+        if (!result) {
+            throw std::runtime_error(result.error().message);
+        }
+        if (m_assets) {
+            static_cast<void>(
+                m_assets->reference<vshade::scene::Prefab>(path)
+            );
+            saveProjectCatalog();
+            AssetSelector::discover(*m_assets);
+        }
+        ENGINE_INFO("Saved prefab '{}'", path.generic_string());
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to save prefab '{}': {}",
+            path.generic_string(),
             error.what()
         );
     }

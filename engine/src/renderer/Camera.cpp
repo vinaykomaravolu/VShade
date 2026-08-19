@@ -123,4 +123,25 @@ math::Mat4 Camera::viewProjection() const {
     return m_projection * m_view;
 }
 
+math::Vec3 Camera::unproject(const math::Vec3& ndc) const {
+    validateVector(ndc, "Camera NDC point");
+    const math::Mat4 inverse = glm::inverse(viewProjection());
+    const math::Vec4 world = inverse * math::Vec4{ndc, 1.0F};
+    if (!std::isfinite(world.w) || std::abs(world.w) <= 0.000001F) {
+        return math::Vec3{world};
+    }
+    return math::Vec3{world} / world.w;
+}
+
+math::Ray Camera::worldRay(const float ndcX, const float ndcY) const {
+    validateFinite(ndcX, "Camera NDC x");
+    validateFinite(ndcY, "Camera NDC y");
+    const math::Vec3 nearPoint = unproject({ndcX, ndcY, -1.0F});
+    const math::Vec3 farPoint = unproject({ndcX, ndcY, 1.0F});
+    return {
+        .origin = nearPoint,
+        .direction = math::normalizedOrZero(farPoint - nearPoint),
+    };
+}
+
 } // namespace vshade::renderer

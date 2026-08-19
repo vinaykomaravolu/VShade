@@ -96,6 +96,7 @@ public:
 
 private:
     friend class Entity;
+    friend class Prefab;
     friend class SceneSerializer;
 
     [[nodiscard]] Entity createEntityWithUuid(std::string name, std::uint64_t uuid);

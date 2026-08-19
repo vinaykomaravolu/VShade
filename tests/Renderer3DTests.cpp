@@ -76,6 +76,9 @@ TEST_CASE("Renderer3D submits meshes and reports statistics", "[renderer3d][open
     CHECK(vshade::renderer::Renderer3D::stats().drawCalls == 1);
     CHECK(framebuffer.readEntityId(32, 32) == 91);
     CHECK(framebuffer.readEntityId(0, 0) == -1);
+    CHECK(framebuffer.readDepth(32, 32) < 0.999F);
+    CHECK(framebuffer.readDepth(0, 0) > 0.999F);
+    CHECK_THROWS_AS(framebuffer.readDepth(64, 0), std::out_of_range);
     CHECK_THROWS_AS(
         vshade::renderer::Renderer3D::drawMesh(
             vshade::math::Transform{},

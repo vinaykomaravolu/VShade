@@ -6,6 +6,7 @@
 #include <core/Log.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Texture.hpp>
+#include <scene/Prefab.hpp>
 
 #include <algorithm>
 #include <array>
@@ -82,6 +83,11 @@ void discoverAssetsInDirectory(
                 case vshade::asset::AssetType::Audio:
                     static_cast<void>(
                         assets.reference<vshade::audio::AudioClip>(path)
+                    );
+                    break;
+                case vshade::asset::AssetType::Prefab:
+                    static_cast<void>(
+                        assets.reference<vshade::scene::Prefab>(path)
                     );
                     break;
                 default:

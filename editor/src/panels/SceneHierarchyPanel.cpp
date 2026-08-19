@@ -27,6 +27,12 @@ void SceneHierarchyPanel::setReadOnly(const bool readOnly) noexcept {
     m_readOnly = readOnly;
 }
 
+void SceneHierarchyPanel::setSavePrefabHandler(
+    std::function<void(vshade::scene::Entity)> handler
+) {
+    m_savePrefab = std::move(handler);
+}
+
 void SceneHierarchyPanel::onImGuiRender(
     vshade::scene::Entity& selectedEntity
 ) {
@@ -125,6 +131,9 @@ SceneHierarchyPanel::EntityAction SceneHierarchyPanel::drawEntity(
     if (!m_readOnly && ImGui::BeginPopupContextItem()) {
         if (ImGui::MenuItem("Duplicate")) {
             action = EntityAction::Duplicate;
+        }
+        if (ImGui::MenuItem("Save as Prefab...") && m_savePrefab) {
+            m_savePrefab(entity);
         }
         if (ImGui::MenuItem("Delete")) {
             action = EntityAction::Delete;

@@ -241,6 +241,34 @@ std::int32_t Framebuffer::readEntityId(
     return static_cast<std::int32_t>(value);
 }
 
+float Framebuffer::readDepth(const std::uint32_t x, const std::uint32_t y) const {
+    requireRenderer();
+    if (x >= m_width || y >= m_height) {
+        throw std::out_of_range("Framebuffer depth coordinates are out of range");
+    }
+
+    GLint previousReadFramebuffer = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_rendererId);
+
+    GLfloat depth = 1.0F;
+    glReadPixels(
+        static_cast<GLint>(x),
+        static_cast<GLint>(y),
+        1,
+        1,
+        GL_DEPTH_COMPONENT,
+        GL_FLOAT,
+        &depth
+    );
+
+    glBindFramebuffer(
+        GL_READ_FRAMEBUFFER,
+        static_cast<GLuint>(previousReadFramebuffer)
+    );
+    return static_cast<float>(depth);
+}
+
 std::uint32_t Framebuffer::width() const noexcept {
     return m_width;
 }

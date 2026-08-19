@@ -380,3 +380,28 @@ TEST_CASE("Look at moves the camera eye to view-space origin", "[math]") {
         {0.0F, 0.0F, -5.0F, 1.0F}
     );
 }
+
+TEST_CASE("Rays intersect planes in front of their origin", "[math][ray]") {
+    const vshade::math::Ray ray{
+        .origin = {0.0F, 2.0F, 0.0F},
+        .direction = {0.0F, -1.0F, 0.0F},
+    };
+    const auto hit = vshade::math::intersectPlane(
+        ray,
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    );
+    REQUIRE(hit.has_value());
+    checkVec3(*hit, {0.0F, 0.0F, 0.0F});
+
+    CHECK_FALSE(vshade::math::intersectPlane(
+        ray,
+        {0.0F, 0.0F, 0.0F},
+        {1.0F, 0.0F, 0.0F}
+    ));
+    CHECK_FALSE(vshade::math::intersectPlane(
+        {.origin = {0.0F, 2.0F, 0.0F}, .direction = {0.0F, 1.0F, 0.0F}},
+        {0.0F, 0.0F, 0.0F},
+        {0.0F, 1.0F, 0.0F}
+    ));
+}

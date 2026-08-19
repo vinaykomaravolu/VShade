@@ -7,5 +7,6 @@
 
 #include "math/Matrix.hpp"
 #include "math/Quaternion.hpp"
+#include "math/Ray.hpp"
 #include "math/Transform.hpp"
 #include "math/Vector.hpp"

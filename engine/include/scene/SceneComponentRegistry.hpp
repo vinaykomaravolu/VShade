@@ -126,6 +126,7 @@ private:
     };
 
     friend class Scene;
+    friend class Prefab;
     friend class SceneSerializer;
 
     static void add(Handler handler);

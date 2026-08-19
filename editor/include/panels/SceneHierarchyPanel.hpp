@@ -2,6 +2,7 @@
 
 #include <scene/Entity.hpp>
 
+#include <functional>
 #include <memory>
 
 namespace vshade::scene {
@@ -14,6 +15,7 @@ class SceneHierarchyPanel final {
 public:
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
     void setReadOnly(bool readOnly) noexcept;
+    void setSavePrefabHandler(std::function<void(vshade::scene::Entity)> handler);
     void onImGuiRender(vshade::scene::Entity& selectedEntity);
 
 private:
@@ -29,6 +31,7 @@ private:
     );
 
     std::shared_ptr<vshade::scene::Scene> m_scene;
+    std::function<void(vshade::scene::Entity)> m_savePrefab;
     bool m_readOnly = false;
 };
 
