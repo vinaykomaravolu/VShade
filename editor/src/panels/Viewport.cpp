@@ -4,19 +4,17 @@
 #include <input/KeyCode.hpp>
 #include <input/MouseCode.hpp>
 #include <math/Quaternion.hpp>
-#include <renderer/DebugDraw.hpp>
 #include <renderer/Framebuffer.hpp>
 #include <renderer/Renderer.hpp>
 #include <scene/Scene.hpp>
+#include <scene/SceneRenderer.hpp>
 #include <scene/components/CoreComponents.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <utility>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
@@ -45,37 +43,14 @@ ImGuizmo::OPERATION toImGuizmoOperation(
     return ImGuizmo::TRANSLATE;
 }
 
-void drawWireCube(const vshade::math::Transform& transform) {
-    constexpr std::array<vshade::math::Vec3, 8> corners{{
-        {-0.5F, -0.5F, -0.5F},
-        { 0.5F, -0.5F, -0.5F},
-        { 0.5F,  0.5F, -0.5F},
-        {-0.5F,  0.5F, -0.5F},
-        {-0.5F, -0.5F,  0.5F},
-        { 0.5F, -0.5F,  0.5F},
-        { 0.5F,  0.5F,  0.5F},
-        {-0.5F,  0.5F,  0.5F},
-    }};
-    constexpr std::array<std::pair<std::size_t, std::size_t>, 12> edges{{
-        {0, 1}, {1, 2}, {2, 3}, {3, 0},
-        {4, 5}, {5, 6}, {6, 7}, {7, 4},
-        {0, 4}, {1, 5}, {2, 6}, {3, 7},
-    }};
-
-    for (const auto [start, end] : edges) {
-        vshade::renderer::DebugDraw::line(
-            transform.transformPoint(corners[start]),
-            transform.transformPoint(corners[end]),
-            {0.2F, 0.75F, 1.0F, 1.0F}
-        );
-    }
-}
-
 } // namespace
 
-Viewport::Viewport()
+Viewport::Viewport(vshade::asset::AssetManager& assets)
     : m_framebuffer(
           std::make_unique<vshade::renderer::Framebuffer>(1280, 720)
+      ),
+      m_sceneRenderer(
+          std::make_unique<vshade::scene::SceneRenderer>(assets)
       ),
       m_editorCamera(0.785398163F, 16.0F / 9.0F, 0.1F, 1000.0F) {}
 
@@ -215,34 +190,10 @@ void Viewport::renderScene() {
         vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
         vshade::renderer::Renderer::clear();
 
-        if (m_scene) {
-            const auto entities = std::as_const(*m_scene).view<
-                vshade::scene::TransformComponent
-            >();
-            for (const auto handle : entities) {
-                const auto& component =
-                    entities.get<vshade::scene::TransformComponent>(handle);
-                drawWireCube(component.transform);
-            }
+        if (m_scene && m_sceneRenderer) {
+            m_sceneRenderer->render(*m_scene, m_editorCamera.camera());
         }
-        vshade::renderer::DebugDraw::line(
-            {0.0F, 0.0F, 0.0F},
-            {2.0F, 0.0F, 0.0F},
-            {1.0F, 0.2F, 0.2F, 1.0F}
-        );
-        vshade::renderer::DebugDraw::line(
-            {0.0F, 0.0F, 0.0F},
-            {0.0F, 2.0F, 0.0F},
-            {0.2F, 1.0F, 0.2F, 1.0F}
-        );
-        vshade::renderer::DebugDraw::line(
-            {0.0F, 0.0F, 0.0F},
-            {0.0F, 0.0F, 2.0F},
-            {0.2F, 0.4F, 1.0F, 1.0F}
-        );
-        vshade::renderer::DebugDraw::flush(m_editorCamera.camera());
     } catch (...) {
-        vshade::renderer::DebugDraw::clear();
         vshade::renderer::Framebuffer::unbind();
         throw;
     }

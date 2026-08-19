@@ -100,8 +100,18 @@ bool SceneRenderer::render(
         renderer::Renderer::clear(clearFlags);
     }
 
+    return render(scene, m_impl->camera);
+}
+
+bool SceneRenderer::render(
+    Scene& scene,
+    const renderer::Camera& camera
+) {
+    m_impl->camera = camera;
+    m_impl->hasCamera = true;
+
     renderer::Renderer3D::setLighting(SceneLightingSystem::collect(scene));
-    renderer::Renderer3D::beginScene(m_impl->camera);
+    renderer::Renderer3D::beginScene(camera);
     const auto models = scene.view<const TransformComponent, const ModelRendererComponent>();
     for (const auto [handle, modelTransform, modelRenderer] : models.each()) {
         (void)handle;
@@ -113,7 +123,7 @@ bool SceneRenderer::render(
     }
     renderer::Renderer3D::endScene();
 
-    renderer::Renderer2D::beginScene(m_impl->camera);
+    renderer::Renderer2D::beginScene(camera);
     const auto sprites = scene.view<const TransformComponent, const SpriteRendererComponent>();
     for (const auto [handle, spriteTransform, sprite] : sprites.each()) {
         (void)handle;
@@ -149,7 +159,7 @@ bool SceneRenderer::render(
 
     const std::size_t debugLines = renderer::DebugDraw::lineCount();
     if (debugLines != 0) {
-        renderer::DebugDraw::flush(m_impl->camera);
+        renderer::DebugDraw::flush(camera);
     }
     const auto& modelStats = renderer::Renderer3D::stats();
     const auto& spriteStats = renderer::Renderer2D::stats();

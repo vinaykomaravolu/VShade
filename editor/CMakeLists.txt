@@ -1,5 +1,8 @@
 set(VSHADE_IMGUI_DIR "${PROJECT_SOURCE_DIR}/external/imgui")
 set(VSHADE_IMGUIZMO_DIR "${PROJECT_SOURCE_DIR}/external/ImGuizmo")
+set(VSHADE_IMGUI_FILE_DIALOG_DIR
+    "${PROJECT_SOURCE_DIR}/external/ImGuiFileDialog"
+)
 
 find_package(OpenGL REQUIRED)
 
@@ -14,12 +17,14 @@ add_library(VShadeImGui STATIC
     "${VSHADE_IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${VSHADE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
     "${VSHADE_IMGUIZMO_DIR}/src/ImGuizmo.cpp"
+    "${VSHADE_IMGUI_FILE_DIALOG_DIR}/ImGuiFileDialog.cpp"
 )
 
 target_include_directories(VShadeImGui SYSTEM PUBLIC
     "${VSHADE_IMGUI_DIR}"
     "${VSHADE_IMGUI_DIR}/backends"
     "${VSHADE_IMGUIZMO_DIR}/src"
+    "${VSHADE_IMGUI_FILE_DIALOG_DIR}"
 )
 target_link_libraries(VShadeImGui PUBLIC glfw OpenGL::GL)
 target_compile_features(VShadeImGui PUBLIC cxx_std_20)
@@ -33,6 +38,7 @@ add_executable(VShadeEditor
     src/panels/InspectorPanel.cpp
     src/panels/SceneHierarchyPanel.cpp
     src/panels/Viewport.cpp
+    src/widgets/AssetSelector.cpp
 )
 target_include_directories(VShadeEditor PRIVATE include)
 target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)

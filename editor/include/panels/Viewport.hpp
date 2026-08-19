@@ -8,10 +8,15 @@
 
 namespace vshade::scene {
 class Scene;
+class SceneRenderer;
 }
 
 namespace vshade::renderer {
 class Framebuffer;
+}
+
+namespace vshade::asset {
+class AssetManager;
 }
 
 namespace editor {
@@ -25,7 +30,7 @@ public:
         Scale,
     };
 
-    Viewport();
+    explicit Viewport(vshade::asset::AssetManager& assets);
     ~Viewport();
 
     Viewport(const Viewport&) = delete;
@@ -43,6 +48,7 @@ private:
     void drawGizmo(float x, float y, float width, float height);
 
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
+    std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;
     std::shared_ptr<vshade::scene::Scene> m_scene;
     vshade::scene::Entity m_selectedEntity;
     EditorCamera m_editorCamera;

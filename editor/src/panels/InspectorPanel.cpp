@@ -1,11 +1,9 @@
 #include "panels/InspectorPanel.hpp"
+#include "widgets/AssetSelector.hpp"
 
-#include <asset/AssetManager.hpp>
 #include <audio/AudioClip.hpp>
 #include <math/Quaternion.hpp>
 #include <renderer/Lighting.hpp>
-#include <renderer/Model.hpp>
-#include <renderer/Texture.hpp>
 #include <scene/components/AudioComponents.hpp>
 #include <scene/components/CoreComponents.hpp>
 #include <scene/components/LightComponent.hpp>
@@ -47,56 +45,6 @@ void drawComponent(
         std::forward<UiFunction>(uiFunction)(component);
     }
     ImGui::PopID();
-}
-
-template<typename Resource>
-bool drawAssetSelector(
-    const char* label,
-    const char* popupId,
-    vshade::asset::AssetReference<Resource>& reference,
-    vshade::asset::AssetManager* assets
-) {
-    const std::string currentName = reference
-        ? reference.sourcePath().filename().generic_string()
-        : "None";
-    ImGui::Text("%s: %s", label, currentName.c_str());
-    ImGui::SameLine();
-    const std::string buttonLabel = std::string("Select##") + popupId;
-    if (ImGui::Button(buttonLabel.c_str())) {
-        ImGui::OpenPopup(popupId);
-    }
-
-    bool changed = false;
-    if (ImGui::BeginPopup(popupId)) {
-        if (ImGui::MenuItem("None", nullptr, !reference)) {
-            reference = {};
-            changed = true;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::Separator();
-
-        if (!assets) {
-            ImGui::TextDisabled("Asset manager unavailable");
-        } else {
-            const auto availableAssets = assets->knownAssets<Resource>();
-            if (availableAssets.empty()) {
-                ImGui::TextDisabled("No known assets");
-            }
-            for (const auto& asset : availableAssets) {
-                const std::string name =
-                    asset.sourcePath.filename().generic_string();
-                const bool selected =
-                    reference && reference.handle().id() == asset.id;
-                if (ImGui::MenuItem(name.c_str(), nullptr, selected)) {
-                    reference = assets->reference<Resource>(asset.sourcePath);
-                    changed = true;
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-        }
-        ImGui::EndPopup();
-    }
-    return changed;
 }
 
 } // namespace
@@ -258,11 +206,11 @@ void InspectorPanel::drawSpriteRenderer(vshade::scene::Entity entity) {
         "Sprite Renderer",
         entity,
         [this](vshade::scene::SpriteRendererComponent& sprite) {
-            if (drawAssetSelector(
+            if (m_assets
+                && AssetSelector::draw(
                     "Texture",
-                    "TextureSelector",
                     sprite.texture,
-                    m_assets
+                    *m_assets
                 )) {
                 sprite.texturePath = sprite.texture
                     ? sprite.texture.sourcePath()
@@ -280,12 +228,13 @@ void InspectorPanel::drawModelRenderer(vshade::scene::Entity entity) {
         "Model Renderer",
         entity,
         [this](vshade::scene::ModelRendererComponent& modelRenderer) {
-            drawAssetSelector(
-                "Model",
-                "ModelSelector",
-                modelRenderer.model,
-                m_assets
-            );
+            if (m_assets) {
+                AssetSelector::draw(
+                    "Model",
+                    modelRenderer.model,
+                    *m_assets
+                );
+            }
             ImGui::Checkbox("Visible", &modelRenderer.visible);
         }
     );
@@ -296,11 +245,11 @@ void InspectorPanel::drawAudioSource(vshade::scene::Entity entity) {
         "Audio Source",
         entity,
         [this](vshade::scene::AudioSourceComponent& source) {
-            if (drawAssetSelector(
+            if (m_assets
+                && AssetSelector::draw(
                     "Clip",
-                    "AudioClipSelector",
                     source.clipAsset,
-                    m_assets
+                    *m_assets
                 )) {
                 source.clip = source.clipAsset
                     ? source.clipAsset.handle()

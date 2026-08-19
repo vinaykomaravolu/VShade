@@ -88,6 +88,13 @@ if(VSHADE_BUILD_EDITOR AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/ImGu
     )
 endif()
 
+if(VSHADE_BUILD_EDITOR AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/ImGuiFileDialog/ImGuiFileDialog.cpp")
+    message(FATAL_ERROR
+        "Missing dependency: external/ImGuiFileDialog. "
+        "Run: git submodule update --init --recursive"
+    )
+endif()
+
 # Keep dependency builds small and avoid installing their examples and tests.
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
