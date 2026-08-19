@@ -101,6 +101,10 @@ std::filesystem::path Project::sceneDirectory() const {
     return assetDirectory() / "scenes";
 }
 
+std::filesystem::path Project::assetRegistryPath() const {
+    return projectDirectory() / "AssetRegistry.json";
+}
+
 std::filesystem::path Project::startScenePath() const {
     if (m_config.startScene.empty()) {
         return {};
@@ -135,6 +139,9 @@ core::Result<void> Project::save() const {
 
 void Project::createDirectories() const {
     std::filesystem::create_directories(assetDirectory());
+    std::filesystem::create_directories(assetDirectory() / "models");
+    std::filesystem::create_directories(assetDirectory() / "textures");
+    std::filesystem::create_directories(assetDirectory() / "audio");
     std::filesystem::create_directories(sceneDirectory());
 }
 

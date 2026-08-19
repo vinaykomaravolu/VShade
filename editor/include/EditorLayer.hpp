@@ -39,6 +39,8 @@ public:
         std::function<void()> requestExit
     );
 
+    ~EditorLayer();
+
     void onAttach();
     void onUpdate(float deltaTime);
     void onImGuiRender();
@@ -59,6 +61,8 @@ private:
     void newProject();
     void openProject();
     void setProject(std::shared_ptr<vshade::project::Project> project);
+    void loadProjectCatalog();
+    void saveProjectCatalog();
     void recordStartSceneIfUnset();
     void importAsset(const std::filesystem::path& sourcePath);
     void duplicateSelectedEntity();

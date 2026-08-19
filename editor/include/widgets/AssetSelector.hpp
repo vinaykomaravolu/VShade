@@ -3,6 +3,7 @@
 #include <asset/AssetReference.hpp>
 
 #include <filesystem>
+#include <functional>
 
 namespace vshade::asset {
 class AssetManager;
@@ -25,6 +26,7 @@ inline constexpr const char* assetDragDropType = "VShadeAsset";
 class AssetSelector final {
 public:
     static void setSearchDirectory(std::filesystem::path directory);
+    static void setCatalogChangedCallback(std::function<void()> callback);
     static void discover(vshade::asset::AssetManager& assets);
     static bool acceptDroppedAsset(
         vshade::asset::AssetReference<vshade::renderer::Texture2D>& reference,

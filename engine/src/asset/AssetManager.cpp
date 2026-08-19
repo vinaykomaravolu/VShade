@@ -16,6 +16,7 @@
 #include "scene/Prefab.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -44,6 +45,55 @@ namespace {
     return id == invalidAssetId ? 1 : id;
 }
 
+[[nodiscard]] AssetType assetTypeFor(const std::type_index type) {
+    if (type == typeid(renderer::Texture2D)) {
+        return AssetType::Texture;
+    }
+    if (type == typeid(renderer::Model)) {
+        return AssetType::Model;
+    }
+    if (type == typeid(audio::AudioClip)) {
+        return AssetType::Audio;
+    }
+    if (type == typeid(scene::Scene)) {
+        return AssetType::Scene;
+    }
+    if (type == typeid(scene::Prefab)) {
+        return AssetType::Prefab;
+    }
+    if (type == typeid(renderer::Shader)) {
+        return AssetType::Shader;
+    }
+    if (type == typeid(renderer::Mesh)) {
+        return AssetType::Mesh;
+    }
+    return AssetType::Unknown;
+}
+
+[[nodiscard]] std::optional<std::type_index> typeIndexFor(
+    const AssetType type
+) {
+    switch (type) {
+        case AssetType::Texture:
+            return typeid(renderer::Texture2D);
+        case AssetType::Model:
+            return typeid(renderer::Model);
+        case AssetType::Audio:
+            return typeid(audio::AudioClip);
+        case AssetType::Scene:
+            return typeid(scene::Scene);
+        case AssetType::Prefab:
+            return typeid(scene::Prefab);
+        case AssetType::Shader:
+            return typeid(renderer::Shader);
+        case AssetType::Mesh:
+            return typeid(renderer::Mesh);
+        case AssetType::Unknown:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 AssetManager::AssetManager() {
@@ -67,31 +117,47 @@ void AssetManager::registerAssetErased(
     AssetMetadata metadata,
     const std::type_index type
 ) {
+    metadata.sourcePath = toCatalogPath(metadata.sourcePath);
+    if (metadata.type == AssetType::Unknown) {
+        metadata.type = assetTypeFor(type);
+    }
     const AssetId id = metadata.id;
     m_registry.registerAsset(std::move(metadata));
-    m_assetTypes.insert_or_assign(id, type);
+    rememberType(id, type);
 }
 
 AssetMetadata AssetManager::referenceErased(
     const std::type_index type,
     const std::filesystem::path& path
 ) {
-    const std::filesystem::path normalizedPath = normalizedAssetPath(path);
-    if (const std::optional<AssetMetadata> registered = m_registry.find(normalizedPath)) {
+    const std::filesystem::path catalogPath = toCatalogPath(path);
+    const AssetType catalogType = assetTypeFor(type);
+    if (const std::optional<AssetMetadata> registered =
+            m_registry.find(catalogPath)) {
         if (const auto knownType = m_assetTypes.find(registered->id);
             knownType != m_assetTypes.end() && knownType->second != type) {
-            throw std::logic_error("An asset path is already used by another resource type");
+            throw std::logic_error(
+                "An asset path is already used by another resource type"
+            );
         }
-        m_assetTypes.insert_or_assign(registered->id, type);
-        return *registered;
+        if (catalogType != AssetType::Unknown) {
+            m_registry.setType(registered->id, catalogType);
+        }
+        rememberType(registered->id, type);
+        auto metadata = *registered;
+        metadata.type = catalogType == AssetType::Unknown
+            ? metadata.type
+            : catalogType;
+        return metadata;
     }
 
     AssetMetadata metadata{
-        .id = assetIdForPath(normalizedPath),
-        .sourcePath = normalizedPath,
+        .id = assetIdForPath(catalogPath),
+        .sourcePath = catalogPath,
+        .type = catalogType,
     };
     m_registry.registerAsset(metadata);
-    m_assetTypes.insert_or_assign(metadata.id, type);
+    rememberType(metadata.id, type);
     return metadata;
 }
 
@@ -99,18 +165,23 @@ void AssetManager::registerReferenceErased(
     const std::type_index type,
     AssetMetadata metadata
 ) {
-    const std::filesystem::path normalizedPath = normalizedAssetPath(metadata.sourcePath);
-    const AssetId expectedId = assetIdForPath(normalizedPath);
+    const std::filesystem::path catalogPath = toCatalogPath(metadata.sourcePath);
+    const AssetId expectedId = assetIdForPath(catalogPath);
     if (metadata.id != expectedId) {
         throw std::invalid_argument("Asset reference ID does not match its normalized path");
     }
     if (const auto existing = m_registry.find(metadata.id)) {
-        if (existing->sourcePath != normalizedPath) {
+        if (existing->sourcePath != catalogPath) {
             throw std::logic_error("Asset reference ID collides with another path");
         }
+    } else if (const auto existingPath = m_registry.find(catalogPath)) {
+        if (existingPath->id != metadata.id) {
+            throw std::logic_error("An asset path is already registered");
+        }
     } else {
-        metadata.sourcePath = normalizedPath;
-        m_registry.registerAsset(std::move(metadata));
+        metadata.sourcePath = catalogPath;
+        metadata.type = assetTypeFor(type);
+        m_registry.registerAsset(metadata);
     }
     if (const auto loaded = m_assets.find(expectedId);
         loaded != m_assets.end() && loaded->second.type != type) {
@@ -120,7 +191,11 @@ void AssetManager::registerReferenceErased(
         knownType != m_assetTypes.end() && knownType->second != type) {
         throw std::logic_error("An asset ID is already used by another resource type");
     }
-    m_assetTypes.insert_or_assign(expectedId, type);
+    if (const auto catalogType = assetTypeFor(type);
+        catalogType != AssetType::Unknown) {
+        m_registry.setType(expectedId, catalogType);
+    }
+    rememberType(expectedId, type);
 }
 
 AssetId AssetManager::loadErased(
@@ -159,7 +234,9 @@ void AssetManager::loadErased(const std::type_index type, const AssetId id) {
         throw std::invalid_argument("No loader is registered for the requested asset type");
     }
 
-    std::shared_ptr<void> resource = loader->second(metadata->sourcePath);
+    std::shared_ptr<void> resource = loader->second(
+        resolveSourcePath(metadata->sourcePath)
+    );
     if (!resource) {
         throw std::runtime_error("The asset loader returned a null resource");
     }
@@ -283,6 +360,24 @@ void AssetManager::clear() noexcept {
     m_assets.clear();
 }
 
+void AssetManager::clearCatalog() noexcept {
+    m_assets.clear();
+    m_assetTypes.clear();
+    m_registry.clear();
+}
+
+void AssetManager::setRootDirectory(std::filesystem::path directory) {
+    if (directory.empty()) {
+        m_rootDirectory.clear();
+        return;
+    }
+    m_rootDirectory = std::filesystem::absolute(directory).lexically_normal();
+}
+
+const std::filesystem::path& AssetManager::rootDirectory() const noexcept {
+    return m_rootDirectory;
+}
+
 void AssetManager::saveCatalog(const std::filesystem::path& path) const {
     m_registry.save(path);
 }
@@ -293,6 +388,40 @@ void AssetManager::loadCatalog(const std::filesystem::path& path) {
     }
     m_registry.load(path);
     m_assetTypes.clear();
+    for (const AssetMetadata& metadata : m_registry.all()) {
+        if (const auto type = typeIndexFor(metadata.type)) {
+            m_assetTypes.insert_or_assign(metadata.id, *type);
+        }
+    }
+}
+
+std::filesystem::path AssetManager::toCatalogPath(
+    const std::filesystem::path& path
+) const {
+    const std::filesystem::path normalized = normalizedAssetPath(path);
+    if (m_rootDirectory.empty() || normalized.is_relative()) {
+        return std::filesystem::path(normalized.generic_string());
+    }
+
+    const std::filesystem::path relative =
+        normalized.lexically_relative(m_rootDirectory);
+    if (relative.empty() || *relative.begin() == "..") {
+        return std::filesystem::path(normalized.generic_string());
+    }
+    return std::filesystem::path(relative.generic_string());
+}
+
+std::filesystem::path AssetManager::resolveSourcePath(
+    const std::filesystem::path& catalogPath
+) const {
+    if (catalogPath.is_absolute() || m_rootDirectory.empty()) {
+        return catalogPath;
+    }
+    return (m_rootDirectory / catalogPath).lexically_normal();
+}
+
+void AssetManager::rememberType(const AssetId id, const std::type_index type) {
+    m_assetTypes.insert_or_assign(id, type);
 }
 
 std::size_t AssetManager::size() const noexcept {

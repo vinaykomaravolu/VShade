@@ -2,6 +2,7 @@ set(VSHADE_SOURCES
     src/audio/AudioClip.cpp
     src/audio/AudioEngine.cpp
     src/audio/AudioService.cpp
+    src/asset/Asset.cpp
     src/asset/AssetManager.cpp
     src/asset/AssetRegistry.cpp
     src/asset/loader/MeshLoader.cpp

@@ -127,12 +127,17 @@ public:
         if (!assetReference.valid()) {
             throw std::invalid_argument("Cannot load an invalid asset reference");
         }
-        registerReferenceErased(
+        const AssetMetadata metadata = referenceErased(
             typeid(Resource),
-            {assetReference.handle().id(), assetReference.sourcePath()}
+            assetReference.sourcePath()
         );
-        load(assetReference.handle());
-        return {assetReference, get(assetReference.handle())};
+        const AssetHandle<Resource> handle =
+            AssetHandle<Resource>::fromId(metadata.id);
+        load(handle);
+        return {
+            {handle, metadata.sourcePath},
+            get(handle)
+        };
     }
 
     /** @brief Loads the resource for a previously registered handle. */
@@ -190,6 +195,17 @@ public:
     /** @brief Removes every resource while external shared owners remain valid. */
     void clear() noexcept;
 
+    /** @brief Removes loaded resources and the persistent catalog. */
+    void clearCatalog() noexcept;
+
+    /**
+     * @brief Sets the project root used to store catalog paths relatively.
+     * @note An empty path disables relativizing.
+     */
+    void setRootDirectory(std::filesystem::path directory);
+
+    [[nodiscard]] const std::filesystem::path& rootDirectory() const noexcept;
+
     /** @brief Writes the persistent asset ID-to-path catalog. */
     void saveCatalog(const std::filesystem::path& path) const;
 
@@ -241,11 +257,19 @@ private:
         std::type_index type
     ) const;
     bool unregisterAssetErased(AssetId id, std::type_index type);
+    [[nodiscard]] std::filesystem::path toCatalogPath(
+        const std::filesystem::path& path
+    ) const;
+    [[nodiscard]] std::filesystem::path resolveSourcePath(
+        const std::filesystem::path& catalogPath
+    ) const;
+    void rememberType(AssetId id, std::type_index type);
 
     std::unordered_map<std::type_index, ErasedLoader> m_loaders;
     std::unordered_map<AssetId, Record> m_assets;
     std::unordered_map<AssetId, std::type_index> m_assetTypes;
     AssetRegistry m_registry;
+    std::filesystem::path m_rootDirectory;
 };
 
 } // namespace vshade::asset

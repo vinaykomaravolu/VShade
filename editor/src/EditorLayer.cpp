@@ -1,6 +1,7 @@
 #include "EditorLayer.hpp"
 #include "widgets/AssetSelector.hpp"
 
+#include <asset/Asset.hpp>
 #include <asset/AssetManager.hpp>
 #include <audio/AudioClip.hpp>
 #include <core/Log.hpp>
@@ -11,8 +12,6 @@
 #include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 
-#include <algorithm>
-#include <cctype>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -34,15 +33,20 @@ constexpr const char* importAssetDialogKey = "ImportAssetDialog";
 constexpr const char* openProjectDialogKey = "OpenProjectDialog";
 constexpr const char* newProjectDialogKey = "NewProjectDialog";
 
-[[nodiscard]] std::string lowercase(std::string value) {
-    std::ranges::transform(
-        value,
-        value.begin(),
-        [](const unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        }
-    );
-    return value;
+[[nodiscard]] std::filesystem::path importDestinationDirectory(
+    const vshade::project::Project& project,
+    const vshade::asset::AssetType type
+) {
+    switch (type) {
+        case vshade::asset::AssetType::Model:
+            return project.assetDirectory() / "models";
+        case vshade::asset::AssetType::Texture:
+            return project.assetDirectory() / "textures";
+        case vshade::asset::AssetType::Audio:
+            return project.assetDirectory() / "audio";
+        default:
+            throw std::invalid_argument("Unsupported asset file type");
+    }
 }
 
 enum class ToolbarIcon {
@@ -130,6 +134,13 @@ EditorLayer::EditorLayer(
       m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
+    AssetSelector::setCatalogChangedCallback([this] {
+        saveProjectCatalog();
+    });
+}
+
+EditorLayer::~EditorLayer() {
+    AssetSelector::setCatalogChangedCallback({});
 }
 
 void EditorLayer::onAttach() {
@@ -653,6 +664,7 @@ void EditorLayer::setProject(
     m_project = std::move(project);
     m_contentBrowser.setRoot(m_project->assetDirectory());
     AssetSelector::setSearchDirectory(m_project->assetDirectory());
+    loadProjectCatalog();
     if (m_assets) {
         AssetSelector::discover(*m_assets);
     }
@@ -674,6 +686,46 @@ void EditorLayer::setProject(
     }
 }
 
+void EditorLayer::loadProjectCatalog() {
+    if (!m_project || !m_assets) {
+        return;
+    }
+
+    m_assets->setRootDirectory(m_project->projectDirectory());
+    m_assets->clearCatalog();
+    const std::filesystem::path catalogPath = m_project->assetRegistryPath();
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(catalogPath, error) || error) {
+        return;
+    }
+
+    try {
+        m_assets->loadCatalog(catalogPath);
+    } catch (const std::exception& catalogError) {
+        ENGINE_ERROR(
+            "Failed to load asset catalog '{}': {}",
+            catalogPath.generic_string(),
+            catalogError.what()
+        );
+    }
+}
+
+void EditorLayer::saveProjectCatalog() {
+    if (!m_project || !m_assets) {
+        return;
+    }
+
+    try {
+        m_assets->saveCatalog(m_project->assetRegistryPath());
+    } catch (const std::exception& catalogError) {
+        ENGINE_ERROR(
+            "Failed to save asset catalog '{}': {}",
+            m_project->assetRegistryPath().generic_string(),
+            catalogError.what()
+        );
+    }
+}
+
 void EditorLayer::importAsset(
     const std::filesystem::path& sourcePath
 ) {
@@ -682,8 +734,13 @@ void EditorLayer::importAsset(
     }
 
     try {
+        const vshade::asset::AssetType type =
+            vshade::asset::assetTypeFromExtension(sourcePath.extension());
+        const std::filesystem::path destinationDirectory =
+            importDestinationDirectory(*m_project, type);
+        std::filesystem::create_directories(destinationDirectory);
         const std::filesystem::path destination =
-            m_project->assetDirectory() / sourcePath.filename();
+            destinationDirectory / sourcePath.filename();
         std::error_code error;
         const bool destinationExists =
             std::filesystem::exists(destination, error);
@@ -702,36 +759,27 @@ void EditorLayer::importAsset(
             std::filesystem::copy_file(sourcePath, destination);
         }
 
-        const std::string extension = lowercase(
-            destination.extension().generic_string()
-        );
-        if (extension == ".glb" || extension == ".gltf") {
-            static_cast<void>(
-                m_assets->load<vshade::renderer::Model>(destination)
-            );
-        } else if (
-            extension == ".png"
-            || extension == ".jpg"
-            || extension == ".jpeg"
-            || extension == ".bmp"
-            || extension == ".tga"
-        ) {
-            static_cast<void>(
-                m_assets->load<vshade::renderer::Texture2D>(destination)
-            );
-        } else if (
-            extension == ".wav"
-            || extension == ".mp3"
-            || extension == ".flac"
-            || extension == ".ogg"
-        ) {
-            static_cast<void>(
-                m_assets->load<vshade::audio::AudioClip>(destination)
-            );
-        } else {
-            throw std::invalid_argument("Unsupported asset file type");
+        switch (type) {
+            case vshade::asset::AssetType::Model:
+                static_cast<void>(
+                    m_assets->load<vshade::renderer::Model>(destination)
+                );
+                break;
+            case vshade::asset::AssetType::Texture:
+                static_cast<void>(
+                    m_assets->load<vshade::renderer::Texture2D>(destination)
+                );
+                break;
+            case vshade::asset::AssetType::Audio:
+                static_cast<void>(
+                    m_assets->load<vshade::audio::AudioClip>(destination)
+                );
+                break;
+            default:
+                throw std::invalid_argument("Unsupported asset file type");
         }
         ENGINE_INFO("Imported asset '{}'", destination.generic_string());
+        saveProjectCatalog();
         AssetSelector::discover(*m_assets);
     } catch (const std::exception& error) {
         ENGINE_ERROR(

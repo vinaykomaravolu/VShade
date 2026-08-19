@@ -93,6 +93,20 @@ void AssetRegistry::updatePath(
     m_idsByPath.insert_or_assign(newKey, id);
 }
 
+void AssetRegistry::setType(const AssetId id, const AssetType type) {
+    const auto asset = m_assetsById.find(id);
+    if (asset == m_assetsById.end()) {
+        throw std::out_of_range("The asset ID is not registered");
+    }
+    if (asset->second.type != AssetType::Unknown
+        && asset->second.type != type) {
+        throw std::logic_error(
+            "The asset ID is already used by another resource type"
+        );
+    }
+    asset->second.type = type;
+}
+
 void AssetRegistry::save(const std::filesystem::path& path) const {
     std::vector<AssetMetadata> ordered;
     ordered.reserve(m_assetsById.size());
@@ -103,13 +117,14 @@ void AssetRegistry::save(const std::filesystem::path& path) const {
     std::ranges::sort(ordered, {}, &AssetMetadata::id);
 
     nlohmann::json root{
-        {"FormatVersion", 1},
+        {"FormatVersion", 2},
         {"Assets", nlohmann::json::array()},
     };
     for (const AssetMetadata& metadata : ordered) {
         root["Assets"].push_back({
             {"Id", std::to_string(metadata.id)},
             {"Path", metadata.sourcePath.generic_string()},
+            {"Type", toString(metadata.type)},
         });
     }
 
@@ -130,7 +145,9 @@ void AssetRegistry::load(const std::filesystem::path& path) {
     }
     nlohmann::json root;
     input >> root;
-    if (root.at("FormatVersion").get<int>() != 1 || !root.at("Assets").is_array()) {
+    const int formatVersion = root.at("FormatVersion").get<int>();
+    if ((formatVersion != 1 && formatVersion != 2)
+        || !root.at("Assets").is_array()) {
         throw std::invalid_argument("Unsupported asset catalog format");
     }
 
@@ -142,9 +159,20 @@ void AssetRegistry::load(const std::filesystem::path& path) {
         if (parsed != idText.size()) {
             throw std::invalid_argument("Invalid asset ID in catalog");
         }
+        AssetType type = AssetType::Unknown;
+        if (entry.contains("Type")) {
+            const auto parsedType = assetTypeFromString(
+                entry.at("Type").get<std::string>()
+            );
+            if (!parsedType) {
+                throw std::invalid_argument("Invalid asset type in catalog");
+            }
+            type = *parsedType;
+        }
         loaded.registerAsset({
             .id = id,
             .sourcePath = entry.at("Path").get<std::string>(),
+            .type = type,
         });
     }
     *this = std::move(loaded);
@@ -153,6 +181,17 @@ void AssetRegistry::load(const std::filesystem::path& path) {
 void AssetRegistry::clear() noexcept {
     m_assetsById.clear();
     m_idsByPath.clear();
+}
+
+std::vector<AssetMetadata> AssetRegistry::all() const {
+    std::vector<AssetMetadata> assets;
+    assets.reserve(m_assetsById.size());
+    for (const auto& [id, metadata] : m_assetsById) {
+        static_cast<void>(id);
+        assets.push_back(metadata);
+    }
+    std::ranges::sort(assets, {}, &AssetMetadata::id);
+    return assets;
 }
 
 std::size_t AssetRegistry::size() const noexcept {

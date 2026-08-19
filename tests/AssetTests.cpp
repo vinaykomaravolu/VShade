@@ -21,6 +21,7 @@
 #include <scene/Prefab.hpp>
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -230,6 +231,105 @@ TEST_CASE("Asset registry catalogs stable IDs and normalized paths", "[asset]") 
     CHECK(registry.unregisterAsset(42));
     CHECK_FALSE(registry.unregisterAsset(42));
     CHECK(registry.size() == 0);
+}
+
+TEST_CASE("Asset catalog persists types and project-relative paths", "[asset]") {
+    const std::filesystem::path root =
+        std::filesystem::path(VSHADE_FILESYSTEM_OUTPUT_DIR) / "typed-root";
+    const std::filesystem::path catalog = root / "AssetRegistry.json";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "assets" / "models");
+
+    vshade::asset::AssetReference<vshade::renderer::Model> reference;
+    {
+        vshade::asset::AssetManager assets;
+        assets.setRootDirectory(root);
+        reference = assets.reference<vshade::renderer::Model>(
+            root / "assets" / "models" / "robot.glb"
+        );
+        CHECK(
+            reference.sourcePath()
+            == std::filesystem::path("assets/models/robot.glb")
+        );
+        const auto metadata = assets.metadata(reference.handle());
+        REQUIRE(metadata.has_value());
+        CHECK(metadata->type == vshade::asset::AssetType::Model);
+        assets.saveCatalog(catalog);
+    }
+
+    vshade::asset::AssetManager fresh;
+    fresh.setRootDirectory(root);
+    fresh.loadCatalog(catalog);
+    const auto known = fresh.knownAssets<vshade::renderer::Model>();
+    REQUIRE(known.size() == 1);
+    CHECK(known[0].id == reference.handle().id());
+    CHECK(known[0].type == vshade::asset::AssetType::Model);
+    CHECK(known[0].sourcePath == std::filesystem::path("assets/models/robot.glb"));
+    CHECK_FALSE(fresh.isLoaded(reference.handle()));
+    CHECK(fresh.size() == 0);
+}
+
+TEST_CASE("Asset manager resolves catalog paths from the project root", "[asset]") {
+    const std::filesystem::path root =
+        std::filesystem::path(VSHADE_FILESYSTEM_OUTPUT_DIR) / "relative-root";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "assets");
+    const std::filesystem::path source = root / "assets" / "note.txt";
+    {
+        std::ofstream output(source);
+        REQUIRE(output);
+        output << "hello";
+    }
+
+    vshade::asset::AssetManager assets;
+    std::filesystem::path loadedPath;
+    assets.registerLoader<TextAsset>([&loadedPath](const std::filesystem::path& path) {
+        loadedPath = path;
+        return std::make_shared<TextAsset>(TextAsset{path.generic_string()});
+    });
+    assets.setRootDirectory(root);
+
+    const auto relative = assets.reference<TextAsset>("assets/note.txt");
+    const auto absolute = assets.reference<TextAsset>(source);
+    CHECK(relative.handle() == absolute.handle());
+    CHECK(relative.sourcePath() == std::filesystem::path("assets/note.txt"));
+
+    assets.load(relative.handle());
+    REQUIRE(assets.isLoaded(relative.handle()));
+    CHECK(std::filesystem::equivalent(loadedPath, source));
+}
+
+TEST_CASE("Asset catalog loads format 1 entries without types", "[asset]") {
+    const std::filesystem::path catalog =
+        std::filesystem::path(VSHADE_FILESYSTEM_OUTPUT_DIR) / "format-1-catalog.json";
+    std::filesystem::create_directories(catalog.parent_path());
+    {
+        std::ofstream output(catalog);
+        REQUIRE(output);
+        output << R"({
+  "FormatVersion": 1,
+  "Assets": [
+    {
+      "Id": "42",
+      "Path": "assets/models/robot.glb"
+    }
+  ]
+}
+)";
+    }
+
+    vshade::asset::AssetRegistry registry;
+    registry.load(catalog);
+    REQUIRE(registry.size() == 1);
+    const auto metadata = registry.find(42);
+    REQUIRE(metadata.has_value());
+    CHECK(metadata->sourcePath == std::filesystem::path("assets/models/robot.glb"));
+    CHECK(metadata->type == vshade::asset::AssetType::Unknown);
+
+    vshade::asset::AssetManager assets;
+    assets.loadCatalog(catalog);
+    CHECK(assets.registeredAssetCount() == 1);
+    CHECK(assets.knownAssets<vshade::renderer::Model>().empty());
 }
 
 TEST_CASE("Default scene loader deserializes a scene asset", "[asset]") {

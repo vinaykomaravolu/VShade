@@ -31,7 +31,12 @@ TEST_CASE("Projects create and load portable configuration", "[project]") {
     CHECK(created->config().startScene.empty());
     CHECK(std::filesystem::is_regular_file(created->projectFile()));
     CHECK(std::filesystem::is_directory(created->assetDirectory()));
+    CHECK(std::filesystem::is_directory(created->assetDirectory() / "models"));
+    CHECK(std::filesystem::is_directory(created->assetDirectory() / "textures"));
+    CHECK(std::filesystem::is_directory(created->assetDirectory() / "audio"));
     CHECK(std::filesystem::is_directory(created->sceneDirectory()));
+    CHECK(created->assetRegistryPath()
+        == created->projectDirectory() / "AssetRegistry.json");
 
     nlohmann::json json;
     {

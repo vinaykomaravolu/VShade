@@ -31,6 +31,7 @@ public:
     [[nodiscard]] std::filesystem::path assetDirectory() const;
     [[nodiscard]] std::filesystem::path sceneDirectory() const;
     [[nodiscard]] std::filesystem::path startScenePath() const;
+    [[nodiscard]] std::filesystem::path assetRegistryPath() const;
 
     void setStartScene(const std::filesystem::path& path);
     [[nodiscard]] core::Result<void> save() const;

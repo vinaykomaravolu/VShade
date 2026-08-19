@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace vshade::asset {
 
@@ -53,6 +54,7 @@ public:
 
     /** @brief Updates the source path while preserving the stable asset ID. */
     void updatePath(AssetId id, std::filesystem::path path);
+    void setType(AssetId id, AssetType type);
 
     /** @brief Writes the stable ID-to-path catalog as deterministic JSON. */
     void save(const std::filesystem::path& path) const;
@@ -62,6 +64,9 @@ public:
 
     /** @brief Removes all registered metadata. */
     void clear() noexcept;
+
+    /** @brief Returns copied metadata for every registered asset. */
+    [[nodiscard]] std::vector<AssetMetadata> all() const;
 
     /** @brief Returns the number of known project assets. */
     [[nodiscard]] std::size_t size() const noexcept;

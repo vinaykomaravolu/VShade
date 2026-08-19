@@ -1,5 +1,6 @@
 #include "widgets/AssetSelector.hpp"
 
+#include <asset/Asset.hpp>
 #include <asset/AssetManager.hpp>
 #include <audio/AudioClip.hpp>
 #include <core/Log.hpp>
@@ -12,6 +13,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -26,6 +28,7 @@ namespace editor {
 namespace {
 
 std::filesystem::path g_searchDirectory;
+std::function<void()> g_catalogChanged;
 
 [[nodiscard]] std::string lowercase(std::string value) {
     std::ranges::transform(
@@ -63,33 +66,25 @@ void discoverAssetsInDirectory(
             continue;
         }
 
-        const std::string extension = lowercase(
-            path.extension().generic_string()
-        );
         try {
-            if (extension == ".glb" || extension == ".gltf") {
-                static_cast<void>(
-                    assets.reference<vshade::renderer::Model>(path)
-                );
-            } else if (
-                extension == ".png"
-                || extension == ".jpg"
-                || extension == ".jpeg"
-                || extension == ".bmp"
-                || extension == ".tga"
-            ) {
-                static_cast<void>(
-                    assets.reference<vshade::renderer::Texture2D>(path)
-                );
-            } else if (
-                extension == ".wav"
-                || extension == ".mp3"
-                || extension == ".flac"
-                || extension == ".ogg"
-            ) {
-                static_cast<void>(
-                    assets.reference<vshade::audio::AudioClip>(path)
-                );
+            switch (vshade::asset::assetTypeFromExtension(path.extension())) {
+                case vshade::asset::AssetType::Model:
+                    static_cast<void>(
+                        assets.reference<vshade::renderer::Model>(path)
+                    );
+                    break;
+                case vshade::asset::AssetType::Texture:
+                    static_cast<void>(
+                        assets.reference<vshade::renderer::Texture2D>(path)
+                    );
+                    break;
+                case vshade::asset::AssetType::Audio:
+                    static_cast<void>(
+                        assets.reference<vshade::audio::AudioClip>(path)
+                    );
+                    break;
+                default:
+                    break;
             }
         } catch (const std::exception& discoverError) {
             ENGINE_WARN(
@@ -98,6 +93,10 @@ void discoverAssetsInDirectory(
                 discoverError.what()
             );
         }
+    }
+
+    if (g_catalogChanged) {
+        g_catalogChanged();
     }
 }
 
@@ -273,6 +272,10 @@ bool drawTypedAssetSelector(
 
 void AssetSelector::setSearchDirectory(std::filesystem::path directory) {
     g_searchDirectory = std::move(directory).lexically_normal();
+}
+
+void AssetSelector::setCatalogChangedCallback(std::function<void()> callback) {
+    g_catalogChanged = std::move(callback);
 }
 
 void AssetSelector::discover(vshade::asset::AssetManager& assets) {
