@@ -62,9 +62,11 @@ private:
         float width,
         float height
     );
+    bool spawnDroppedModel(vshade::scene::Entity& selectedEntity);
 
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
     std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;
+    vshade::asset::AssetManager* m_assets = nullptr;
     std::shared_ptr<vshade::scene::Scene> m_scene;
     vshade::scene::SceneRuntime* m_runtime = nullptr;
     EditorCamera m_editorCamera;

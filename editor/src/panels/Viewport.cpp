@@ -1,22 +1,33 @@
 #include "panels/Viewport.hpp"
+#include "widgets/AssetSelector.hpp"
 
+#include <asset/Asset.hpp>
+#include <asset/AssetManager.hpp>
+#include <core/Log.hpp>
 #include <input/Input.hpp>
 #include <input/KeyCode.hpp>
 #include <input/MouseCode.hpp>
 #include <math/Quaternion.hpp>
+#include <math/Vector.hpp>
 #include <renderer/Framebuffer.hpp>
+#include <renderer/Model.hpp>
 #include <renderer/Renderer.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneRenderer.hpp>
 #include <scene/SceneRuntime.hpp>
 #include <scene/components/CoreComponents.hpp>
+#include <scene/components/RenderComponents.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <limits>
 #include <memory>
+#include <string>
 
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
@@ -44,6 +55,20 @@ ImGuizmo::OPERATION toImGuizmoOperation(
     return ImGuizmo::TRANSLATE;
 }
 
+[[nodiscard]] vshade::math::Vec3 spawnPositionInFrontOfCamera(
+    const vshade::renderer::Camera& camera
+) {
+    const vshade::math::Mat4 inverseView = glm::inverse(camera.view());
+    const vshade::math::Vec3 eye{inverseView[3]};
+    const vshade::math::Vec3 forward =
+        vshade::math::normalizedOrZero(-vshade::math::Vec3{inverseView[2]});
+    constexpr float spawnDistance = 5.0F;
+    if (vshade::math::lengthSquared(forward) <= 0.0F) {
+        return eye;
+    }
+    return eye + forward * spawnDistance;
+}
+
 } // namespace
 
 Viewport::Viewport(vshade::asset::AssetManager& assets)
@@ -53,6 +78,7 @@ Viewport::Viewport(vshade::asset::AssetManager& assets)
       m_sceneRenderer(
           std::make_unique<vshade::scene::SceneRenderer>(assets)
       ),
+      m_assets(&assets),
       m_editorCamera(0.785398163F, 16.0F / 9.0F, 0.1F, 1000.0F) {}
 
 Viewport::~Viewport() = default;
@@ -128,6 +154,7 @@ void Viewport::onImGuiRender(
         );
         const bool imageHovered = ImGui::IsItemHovered();
         if (m_editing) {
+            const bool spawnedModel = spawnDroppedModel(selectedEntity);
             drawGizmo(
                 selectedEntity,
                 viewportPosition.x,
@@ -135,9 +162,11 @@ void Viewport::onImGuiRender(
                 availableSize.x,
                 availableSize.y
             );
-            if (imageHovered
+            if (!spawnedModel
+                && imageHovered
                 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
-                && !ImGuizmo::IsOver()) {
+                && !ImGuizmo::IsOver()
+                && ImGui::GetDragDropPayload() == nullptr) {
                 selectEntityUnderMouse(
                     selectedEntity,
                     viewportPosition.x,
@@ -293,6 +322,54 @@ void Viewport::selectEntityUnderMouse(
     selectedEntity = entityId == -1
         ? vshade::scene::Entity{}
         : m_scene->findEntityById(static_cast<std::uint32_t>(entityId));
+}
+
+bool Viewport::spawnDroppedModel(vshade::scene::Entity& selectedEntity) {
+    if (!m_editing || !m_scene || m_assets == nullptr) {
+        return false;
+    }
+
+    const auto droppedPath = AssetSelector::acceptDroppedPath();
+    if (!droppedPath) {
+        return false;
+    }
+
+    if (vshade::asset::assetTypeFromExtension(droppedPath->extension())
+        != vshade::asset::AssetType::Model) {
+        ENGINE_WARN(
+            "Viewport drop currently supports models only: '{}'",
+            droppedPath->generic_string()
+        );
+        return false;
+    }
+
+    try {
+        const auto model = m_assets->reference<vshade::renderer::Model>(
+            *droppedPath
+        );
+        m_assets->load(model.handle());
+
+        std::string name = droppedPath->stem().generic_string();
+        if (name.empty()) {
+            name = "Model";
+        }
+        vshade::scene::Entity entity = m_scene->create(std::move(name));
+        entity.transform().setPosition(
+            spawnPositionInFrontOfCamera(m_editorCamera.camera())
+        );
+        entity.add<vshade::scene::ModelRendererComponent>(
+            vshade::scene::ModelRendererComponent{.model = model}
+        );
+        selectedEntity = entity;
+        return true;
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to spawn model '{}': {}",
+            droppedPath->generic_string(),
+            error.what()
+        );
+        return false;
+    }
 }
 
 void Viewport::resizeFramebuffer(const float width, const float height) {

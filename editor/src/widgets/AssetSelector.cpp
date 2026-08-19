@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -280,6 +281,24 @@ void AssetSelector::setCatalogChangedCallback(std::function<void()> callback) {
 
 void AssetSelector::discover(vshade::asset::AssetManager& assets) {
     discoverAssetsInDirectory(assets, g_searchDirectory);
+}
+
+std::optional<std::filesystem::path> AssetSelector::acceptDroppedPath() {
+    if (!ImGui::BeginDragDropTarget()) {
+        return std::nullopt;
+    }
+
+    std::optional<std::filesystem::path> path;
+    if (const ImGuiPayload* payload =
+            ImGui::AcceptDragDropPayload(assetDragDropType)) {
+        if (payload->Data != nullptr && payload->DataSize > 0) {
+            path = std::filesystem::path{
+                static_cast<const char*>(payload->Data)
+            };
+        }
+    }
+    ImGui::EndDragDropTarget();
+    return path;
 }
 
 bool AssetSelector::acceptDroppedAsset(

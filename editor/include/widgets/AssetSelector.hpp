@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 
 namespace vshade::asset {
 class AssetManager;
@@ -28,6 +29,7 @@ public:
     static void setSearchDirectory(std::filesystem::path directory);
     static void setCatalogChangedCallback(std::function<void()> callback);
     static void discover(vshade::asset::AssetManager& assets);
+    [[nodiscard]] static std::optional<std::filesystem::path> acceptDroppedPath();
     static bool acceptDroppedAsset(
         vshade::asset::AssetReference<vshade::renderer::Texture2D>& reference,
         vshade::asset::AssetManager& assets
