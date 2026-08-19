@@ -15,6 +15,7 @@
 #include "scene/Scene.hpp"
 #include "scene/Prefab.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -62,8 +63,13 @@ void AssetManager::registerLoaderErased(
     m_loaders.insert_or_assign(type, std::move(loader));
 }
 
-void AssetManager::registerAssetErased(AssetMetadata metadata) {
+void AssetManager::registerAssetErased(
+    AssetMetadata metadata,
+    const std::type_index type
+) {
+    const AssetId id = metadata.id;
     m_registry.registerAsset(std::move(metadata));
+    m_assetTypes.insert_or_assign(id, type);
 }
 
 AssetMetadata AssetManager::referenceErased(
@@ -72,10 +78,11 @@ AssetMetadata AssetManager::referenceErased(
 ) {
     const std::filesystem::path normalizedPath = normalizedAssetPath(path);
     if (const std::optional<AssetMetadata> registered = m_registry.find(normalizedPath)) {
-        if (const auto loaded = m_assets.find(registered->id);
-            loaded != m_assets.end() && loaded->second.type != type) {
+        if (const auto knownType = m_assetTypes.find(registered->id);
+            knownType != m_assetTypes.end() && knownType->second != type) {
             throw std::logic_error("An asset path is already used by another resource type");
         }
+        m_assetTypes.insert_or_assign(registered->id, type);
         return *registered;
     }
 
@@ -84,6 +91,7 @@ AssetMetadata AssetManager::referenceErased(
         .sourcePath = normalizedPath,
     };
     m_registry.registerAsset(metadata);
+    m_assetTypes.insert_or_assign(metadata.id, type);
     return metadata;
 }
 
@@ -108,6 +116,11 @@ void AssetManager::registerReferenceErased(
         loaded != m_assets.end() && loaded->second.type != type) {
         throw std::logic_error("An asset ID is already loaded as another type");
     }
+    if (const auto knownType = m_assetTypes.find(expectedId);
+        knownType != m_assetTypes.end() && knownType->second != type) {
+        throw std::logic_error("An asset ID is already used by another resource type");
+    }
+    m_assetTypes.insert_or_assign(expectedId, type);
 }
 
 AssetId AssetManager::loadErased(
@@ -128,6 +141,11 @@ void AssetManager::loadErased(const std::type_index type, const AssetId id) {
     if (!metadata.has_value()) {
         throw std::invalid_argument("The asset handle is not registered");
     }
+    if (const auto knownType = m_assetTypes.find(id);
+        knownType != m_assetTypes.end() && knownType->second != type) {
+        throw std::logic_error("The asset handle type does not match the registered resource");
+    }
+    m_assetTypes.insert_or_assign(id, type);
 
     if (const auto existing = m_assets.find(id); existing != m_assets.end()) {
         if (existing->second.type != type) {
@@ -194,17 +212,62 @@ std::optional<AssetMetadata> AssetManager::metadataErased(
     const AssetId id,
     const std::type_index type
 ) const {
-    const auto asset = m_assets.find(id);
-    if (asset != m_assets.end() && asset->second.type != type) {
-        throw std::logic_error("The asset handle type does not match the cached resource");
+    const auto knownType = m_assetTypes.find(id);
+    if (knownType != m_assetTypes.end() && knownType->second != type) {
+        throw std::logic_error("The asset handle type does not match the registered resource");
     }
     return m_registry.find(id);
+}
+
+std::vector<AssetMetadata> AssetManager::loadedAssetsErased(
+    const std::type_index type
+) const {
+    std::vector<AssetMetadata> assets;
+    for (const auto& [id, record] : m_assets) {
+        static_cast<void>(id);
+        if (record.type == type) {
+            assets.push_back(record.metadata);
+        }
+    }
+    std::ranges::sort(
+        assets,
+        {},
+        [](const AssetMetadata& metadata) {
+            return metadata.sourcePath.generic_string();
+        }
+    );
+    return assets;
+}
+
+std::vector<AssetMetadata> AssetManager::knownAssetsErased(
+    const std::type_index type
+) const {
+    std::vector<AssetMetadata> assets;
+    for (const auto& [id, knownType] : m_assetTypes) {
+        if (knownType == type) {
+            if (const auto metadata = m_registry.find(id)) {
+                assets.push_back(*metadata);
+            }
+        }
+    }
+    std::ranges::sort(
+        assets,
+        {},
+        [](const AssetMetadata& metadata) {
+            return metadata.sourcePath.generic_string();
+        }
+    );
+    return assets;
 }
 
 bool AssetManager::unregisterAssetErased(
     const AssetId id,
     const std::type_index type
 ) {
+    const auto knownType = m_assetTypes.find(id);
+    if (knownType != m_assetTypes.end() && knownType->second != type) {
+        throw std::logic_error("The asset handle type does not match the registered resource");
+    }
     const auto asset = m_assets.find(id);
     if (asset != m_assets.end()) {
         if (asset->second.type != type) {
@@ -212,6 +275,7 @@ bool AssetManager::unregisterAssetErased(
         }
         m_assets.erase(asset);
     }
+    m_assetTypes.erase(id);
     return m_registry.unregisterAsset(id);
 }
 
@@ -228,6 +292,7 @@ void AssetManager::loadCatalog(const std::filesystem::path& path) {
         throw std::logic_error("Cannot replace the asset catalog while resources are loaded");
     }
     m_registry.load(path);
+    m_assetTypes.clear();
 }
 
 std::size_t AssetManager::size() const noexcept {

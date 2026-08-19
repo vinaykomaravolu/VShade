@@ -52,7 +52,7 @@ void EditorApplication::onStart() {
 
     vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
 
-    m_editorLayer = std::make_unique<EditorLayer>();
+    m_editorLayer = std::make_unique<EditorLayer>(assets());
     m_editorLayer->onAttach();
 }
 

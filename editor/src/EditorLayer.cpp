@@ -10,6 +10,10 @@
 
 namespace editor {
 
+EditorLayer::EditorLayer(vshade::asset::AssetManager& assets) {
+    m_inspectorPanel.setAssetManager(assets);
+}
+
 void EditorLayer::onAttach() {
     m_editorScene = std::make_shared<vshade::scene::Scene>("Editor Scene");
     static_cast<void>(m_editorScene->create("Cube"));

@@ -12,10 +12,16 @@ namespace vshade::scene {
 class Scene;
 }
 
+namespace vshade::asset {
+class AssetManager;
+}
+
 namespace editor {
 
 class EditorLayer final {
 public:
+    explicit EditorLayer(vshade::asset::AssetManager& assets);
+
     void onAttach();
     void onUpdate(float deltaTime);
     void onImGuiRender();

@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace vshade::asset {
 
@@ -80,7 +81,10 @@ public:
         const AssetId id,
         const std::filesystem::path& path
     ) {
-        registerAssetErased({.id = id, .sourcePath = path});
+        registerAssetErased(
+            {.id = id, .sourcePath = path},
+            typeid(Resource)
+        );
         return AssetHandle<Resource>(id);
     }
 
@@ -163,6 +167,18 @@ public:
         return metadataErased(handle.id(), typeid(Resource));
     }
 
+    /** @brief Returns path metadata for every currently loaded asset of a type. */
+    template<typename Resource>
+    [[nodiscard]] std::vector<AssetMetadata> loadedAssets() const {
+        return loadedAssetsErased(typeid(Resource));
+    }
+
+    /** @brief Returns path metadata for every known asset of a type. */
+    template<typename Resource>
+    [[nodiscard]] std::vector<AssetMetadata> knownAssets() const {
+        return knownAssetsErased(typeid(Resource));
+    }
+
     /**
      * @brief Removes a registered asset and any resource currently cached for it.
      */
@@ -197,7 +213,7 @@ private:
     };
 
     void registerLoaderErased(std::type_index type, ErasedLoader loader);
-    void registerAssetErased(AssetMetadata metadata);
+    void registerAssetErased(AssetMetadata metadata, std::type_index type);
     [[nodiscard]] AssetMetadata referenceErased(
         std::type_index type,
         const std::filesystem::path& path
@@ -218,10 +234,17 @@ private:
         AssetId id,
         std::type_index type
     ) const;
+    [[nodiscard]] std::vector<AssetMetadata> loadedAssetsErased(
+        std::type_index type
+    ) const;
+    [[nodiscard]] std::vector<AssetMetadata> knownAssetsErased(
+        std::type_index type
+    ) const;
     bool unregisterAssetErased(AssetId id, std::type_index type);
 
     std::unordered_map<std::type_index, ErasedLoader> m_loaders;
     std::unordered_map<AssetId, Record> m_assets;
+    std::unordered_map<AssetId, std::type_index> m_assetTypes;
     AssetRegistry m_registry;
 };
 
