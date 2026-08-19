@@ -4,6 +4,7 @@
 #include <core/Log.hpp>
 #include <renderer/Model.hpp>
 #include <scene/Scene.hpp>
+#include <scene/SceneSerializer.hpp>
 
 #include <algorithm>
 #include <exception>
@@ -18,6 +19,7 @@ namespace editor {
 namespace {
 
 constexpr const char* openSceneDialogKey = "OpenSceneDialog";
+constexpr const char* saveSceneDialogKey = "SaveSceneDialog";
 constexpr const char* importModelDialogKey = "ImportModelDialog";
 constexpr const char* chooseProjectDialogKey = "ChooseProjectDialog";
 
@@ -30,8 +32,7 @@ EditorLayer::EditorLayer(vshade::asset::AssetManager& assets)
 }
 
 void EditorLayer::onAttach() {
-    auto scene = std::make_shared<vshade::scene::Scene>("Editor Scene");
-    SetEditorScene(scene);
+    newScene();
 }
 
 void EditorLayer::onUpdate(const float deltaTime) {
@@ -157,24 +158,18 @@ void EditorLayer::DrawMenuBar() {
 
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New Scene")) {
-            SetEditorScene(
-                std::make_shared<vshade::scene::Scene>("Untitled Scene")
-            );
+            newScene();
         }
         if (ImGui::MenuItem("Open Scene...")) {
-            IGFD::FileDialogConfig config;
-            config.path = m_projectDirectory.empty()
-                ? "."
-                : m_projectDirectory.generic_string();
-            config.countSelectionMax = 1;
-            config.flags = ImGuiFileDialogFlags_Modal;
-            ImGuiFileDialog::Instance()->OpenDialog(
-                openSceneDialogKey,
-                "Open Scene",
-                ".vscene,.json",
-                config
-            );
+            openScene();
         }
+        if (ImGui::MenuItem("Save")) {
+            saveScene();
+        }
+        if (ImGui::MenuItem("Save As...")) {
+            saveSceneAs();
+        }
+        ImGui::Separator();
         if (ImGui::MenuItem("Import Model...")) {
             IGFD::FileDialogConfig config;
             config.path = m_projectDirectory.empty()
@@ -229,20 +224,33 @@ void EditorLayer::DrawMenuBar() {
 
 void EditorLayer::DrawFileDialogs() {
     if (ImGuiFileDialog::Instance()->Display(openSceneDialogKey)) {
-        if (ImGuiFileDialog::Instance()->IsOk() && m_assets) {
-            const std::string selectedPath =
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
-            try {
-                const auto scene =
-                    m_assets->loadResource<vshade::scene::Scene>(selectedPath);
-                SetEditorScene(scene.shared());
-            } catch (const std::exception& error) {
+            auto scene = std::make_shared<vshade::scene::Scene>(
+                selectedPath.stem().string()
+            );
+            vshade::scene::SceneSerializer serializer(*scene);
+            if (serializer.deserialize(selectedPath)) {
+                setActiveScene(std::move(scene));
+                m_activeScenePath = selectedPath;
+            } else {
                 ENGINE_ERROR(
                     "Failed to open scene '{}': {}",
-                    selectedPath,
-                    error.what()
+                    selectedPath.generic_string(),
+                    serializer.lastError()
                 );
             }
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    if (ImGuiFileDialog::Instance()->Display(saveSceneDialogKey)) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            m_activeScenePath = ImGuiFileDialog::Instance()->GetFilePathName(
+                IGFD_ResultMode_OverwriteFileExt
+            );
+            saveScene();
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -275,15 +283,84 @@ void EditorLayer::DrawFileDialogs() {
     }
 }
 
-void EditorLayer::SetEditorScene(
+void EditorLayer::setActiveScene(
     std::shared_ptr<vshade::scene::Scene> scene
 ) {
     if (!scene) {
         return;
     }
-    m_editorScene = std::move(scene);
-    m_sceneHierarchyPanel.setScene(m_editorScene);
-    m_viewport.setScene(m_editorScene);
+    m_activeScene = std::move(scene);
+    m_sceneHierarchyPanel.setScene(m_activeScene);
+    m_viewport.setScene(m_activeScene);
+}
+
+void EditorLayer::newScene() {
+    setActiveScene(
+        std::make_shared<vshade::scene::Scene>("Untitled Scene")
+    );
+    m_activeScenePath.clear();
+}
+
+void EditorLayer::openScene() {
+    IGFD::FileDialogConfig config;
+    config.path = m_projectDirectory.empty()
+        ? "."
+        : m_projectDirectory.generic_string();
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_Modal;
+    ImGuiFileDialog::Instance()->OpenDialog(
+        openSceneDialogKey,
+        "Open Scene",
+        ".vscene,.json",
+        config
+    );
+}
+
+void EditorLayer::saveScene() {
+    if (!m_activeScene) {
+        return;
+    }
+    if (m_activeScenePath.empty()) {
+        saveSceneAs();
+        return;
+    }
+
+    vshade::scene::SceneSerializer serializer(*m_activeScene);
+    if (!serializer.serialize(m_activeScenePath, vshade::scene::SceneJsonFormat::Compact)) {
+        ENGINE_ERROR(
+            "Failed to save scene '{}': {}",
+            m_activeScenePath.generic_string(),
+            serializer.lastError()
+        );
+        return;
+    }
+    ENGINE_INFO("Saved scene '{}'", m_activeScenePath.generic_string());
+}
+
+void EditorLayer::saveSceneAs() {
+    if (!m_activeScene) {
+        return;
+    }
+
+    IGFD::FileDialogConfig config;
+    if (!m_activeScenePath.empty()) {
+        config.path = m_activeScenePath.parent_path().generic_string();
+        config.fileName = m_activeScenePath.filename().generic_string();
+    } else {
+        config.path = m_projectDirectory.empty()
+            ? "."
+            : m_projectDirectory.generic_string();
+        config.fileName = "Untitled.vscene";
+    }
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_Modal
+        | ImGuiFileDialogFlags_ConfirmOverwrite;
+    ImGuiFileDialog::Instance()->OpenDialog(
+        saveSceneDialogKey,
+        "Save Scene As",
+        ".vscene",
+        config
+    );
 }
 
 } // namespace editor

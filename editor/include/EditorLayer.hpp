@@ -33,14 +33,19 @@ private:
     void DrawMenuBar();
     void DrawFileDialogs();
     void BuildDefaultDockLayout(std::uint32_t dockspaceId);
-    void SetEditorScene(std::shared_ptr<vshade::scene::Scene> scene);
+    void setActiveScene(std::shared_ptr<vshade::scene::Scene> scene);
+    void newScene();
+    void openScene();
+    void saveScene();
+    void saveSceneAs();
 
     vshade::asset::AssetManager* m_assets = nullptr;
     Console m_console;
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
-    std::shared_ptr<vshade::scene::Scene> m_editorScene;
+    std::shared_ptr<vshade::scene::Scene> m_activeScene;
+    std::filesystem::path m_activeScenePath;
     std::filesystem::path m_projectDirectory;
     bool m_resetDockLayoutRequested = false;
 };
