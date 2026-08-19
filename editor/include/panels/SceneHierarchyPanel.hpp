@@ -23,9 +23,16 @@ private:
         None,
         Duplicate,
         Delete,
+        Unparent,
+        CreateChild,
     };
 
-    [[nodiscard]] EntityAction drawEntity(
+    struct EntityCommand {
+        EntityAction action = EntityAction::None;
+        vshade::scene::Entity entity;
+    };
+
+    [[nodiscard]] EntityCommand drawEntity(
         vshade::scene::Entity entity,
         vshade::scene::Entity& selectedEntity
     );

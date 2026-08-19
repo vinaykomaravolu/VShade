@@ -1,11 +1,18 @@
 #include "panels/SceneHierarchyPanel.hpp"
 
+#include <core/Log.hpp>
 #include <input/Input.hpp>
 #include <input/KeyCode.hpp>
 #include <scene/Scene.hpp>
 #include <scene/components/CoreComponents.hpp>
 
+#include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <imgui.h>
 
@@ -14,6 +21,32 @@ namespace {
 
 constexpr ImGuiWindowFlags panelFlags =
     ImGuiWindowFlags_NoCollapse;
+
+constexpr const char* entityDragDropType = "VShadeEntity";
+
+void sortEntities(std::vector<vshade::scene::Entity>& entities) {
+    std::ranges::sort(
+        entities,
+        [](const vshade::scene::Entity& left,
+           const vshade::scene::Entity& right) {
+            const std::string_view leftName = left.name();
+            const std::string_view rightName = right.name();
+            if (leftName != rightName) {
+                return leftName < rightName;
+            }
+            return left.uuid() < right.uuid();
+        }
+    );
+}
+
+[[nodiscard]] std::vector<vshade::scene::Entity> sortedChildren(
+    vshade::scene::Scene& scene,
+    const vshade::scene::Entity parent
+) {
+    std::vector<vshade::scene::Entity> children = scene.children(parent);
+    sortEntities(children);
+    return children;
+}
 
 } // namespace
 
@@ -41,31 +74,74 @@ void SceneHierarchyPanel::onImGuiRender(
     if (m_scene) {
         vshade::scene::Entity entityToDuplicate;
         vshade::scene::Entity entityToDelete;
+        vshade::scene::Entity entityToUnparent;
+        vshade::scene::Entity entityToCreateChild;
+
+        std::vector<vshade::scene::Entity> roots;
         const auto entities = std::as_const(*m_scene).view<
             vshade::scene::UUIDComponent,
             vshade::scene::TagComponent
         >();
-
         for (const auto handle : entities) {
             const auto& uuid =
                 entities.get<vshade::scene::UUIDComponent>(handle);
             const vshade::scene::Entity entity =
                 m_scene->findEntity(uuid.uuid);
+            if (entity && !m_scene->parent(entity)) {
+                roots.push_back(entity);
+            }
+        }
+        sortEntities(roots);
 
-            switch (drawEntity(entity, selectedEntity)) {
+        for (const vshade::scene::Entity entity : roots) {
+            const EntityCommand command = drawEntity(entity, selectedEntity);
+            switch (command.action) {
                 case EntityAction::Duplicate:
-                    if (!m_readOnly) {
-                        entityToDuplicate = entity;
-                    }
+                    entityToDuplicate = command.entity;
                     break;
                 case EntityAction::Delete:
-                    if (!m_readOnly) {
-                        entityToDelete = entity;
-                    }
+                    entityToDelete = command.entity;
+                    break;
+                case EntityAction::Unparent:
+                    entityToUnparent = command.entity;
+                    break;
+                case EntityAction::CreateChild:
+                    entityToCreateChild = command.entity;
                     break;
                 case EntityAction::None:
                     break;
             }
+        }
+
+        const ImVec2 leftover = ImGui::GetContentRegionAvail();
+        ImGui::InvisibleButton(
+            "##HierarchyEmpty",
+            {
+                leftover.x > 1.0F ? leftover.x : 1.0F,
+                leftover.y > 24.0F ? leftover.y : 24.0F,
+            }
+        );
+        if (ImGui::IsItemClicked()) {
+            selectedEntity = {};
+        }
+        if (!m_readOnly && ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload =
+                    ImGui::AcceptDragDropPayload(entityDragDropType)) {
+                const auto uuid =
+                    *static_cast<const std::uint64_t*>(payload->Data);
+                const vshade::scene::Entity child = m_scene->findEntity(uuid);
+                if (m_scene->valid(child) && m_scene->parent(child)) {
+                    m_scene->clearParent(child);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (!m_readOnly && ImGui::BeginPopupContextItem("HierarchyEmptyContext")) {
+            if (ImGui::MenuItem("Create Empty Entity")) {
+                selectedEntity = m_scene->create("Entity");
+            }
+            ImGui::EndPopup();
         }
 
         const bool hierarchyFocused = ImGui::IsWindowFocused(
@@ -88,22 +164,17 @@ void SceneHierarchyPanel::onImGuiRender(
             }
         }
 
-        if (!m_readOnly
-            && ImGui::BeginPopupContextWindow(
-                "HierarchyContext",
-                ImGuiPopupFlags_MouseButtonRight
-                    | ImGuiPopupFlags_NoOpenOverItems
-            )) {
-            if (ImGui::MenuItem("Create Empty Entity")) {
-                selectedEntity = m_scene->create("Entity");
-            }
-            ImGui::EndPopup();
+        if (!m_readOnly && m_scene->valid(entityToCreateChild)) {
+            selectedEntity = m_scene->create("Entity");
+            m_scene->setParent(selectedEntity, entityToCreateChild);
         }
-
-        if (m_scene->valid(entityToDuplicate)) {
+        if (!m_readOnly && m_scene->valid(entityToUnparent)) {
+            m_scene->clearParent(entityToUnparent);
+        }
+        if (!m_readOnly && m_scene->valid(entityToDuplicate)) {
             selectedEntity = m_scene->duplicateEntity(entityToDuplicate);
         }
-        if (m_scene->valid(entityToDelete)) {
+        if (!m_readOnly && m_scene->valid(entityToDelete)) {
             if (selectedEntity == entityToDelete) {
                 selectedEntity = {};
             }
@@ -114,34 +185,101 @@ void SceneHierarchyPanel::onImGuiRender(
     ImGui::End();
 }
 
-SceneHierarchyPanel::EntityAction SceneHierarchyPanel::drawEntity(
+SceneHierarchyPanel::EntityCommand SceneHierarchyPanel::drawEntity(
     vshade::scene::Entity entity,
     vshade::scene::Entity& selectedEntity
 ) {
-    ImGui::PushID(static_cast<int>(entity.id()));
+    const std::vector<vshade::scene::Entity> children =
+        sortedChildren(*m_scene, entity);
+    const bool hasChildren = !children.empty();
     const auto& tag = entity.get<vshade::scene::TagComponent>();
-    if (ImGui::Selectable(
-            tag.tag.c_str(),
-            selectedEntity == entity
-        )) {
+
+    ImGuiTreeNodeFlags flags =
+        ImGuiTreeNodeFlags_OpenOnArrow
+        | ImGuiTreeNodeFlags_SpanAvailWidth
+        | ImGuiTreeNodeFlags_FramePadding
+        | ImGuiTreeNodeFlags_DefaultOpen;
+    if (selectedEntity == entity) {
+        flags |= ImGuiTreeNodeFlags_Selected;
+    }
+    if (!hasChildren) {
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+    }
+
+    const auto* const nodeId = reinterpret_cast<void*>(entity.uuid());
+    const bool opened = ImGui::TreeNodeEx(
+        nodeId,
+        flags,
+        "%s",
+        tag.tag.c_str()
+    );
+    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         selectedEntity = entity;
     }
 
-    EntityAction action = EntityAction::None;
+    if (!m_readOnly && ImGui::BeginDragDropSource()) {
+        const std::uint64_t uuid = entity.uuid();
+        ImGui::SetDragDropPayload(
+            entityDragDropType,
+            &uuid,
+            sizeof(uuid)
+        );
+        ImGui::TextUnformatted(tag.tag.c_str());
+        ImGui::EndDragDropSource();
+    }
+
+    if (!m_readOnly && ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload =
+                ImGui::AcceptDragDropPayload(entityDragDropType)) {
+            const auto uuid = *static_cast<const std::uint64_t*>(payload->Data);
+            const vshade::scene::Entity child = m_scene->findEntity(uuid);
+            if (m_scene->valid(child)) {
+                try {
+                    m_scene->setParent(child, entity);
+                } catch (const std::exception& error) {
+                    ENGINE_WARN(
+                        "Could not parent '{}': {}",
+                        std::string(child.name()),
+                        error.what()
+                    );
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    EntityCommand command;
     if (!m_readOnly && ImGui::BeginPopupContextItem()) {
+        if (ImGui::MenuItem("Create Child Entity")) {
+            command = {EntityAction::CreateChild, entity};
+        }
         if (ImGui::MenuItem("Duplicate")) {
-            action = EntityAction::Duplicate;
+            command = {EntityAction::Duplicate, entity};
         }
         if (ImGui::MenuItem("Save as Prefab...") && m_savePrefab) {
             m_savePrefab(entity);
         }
+        if (m_scene->parent(entity)
+            && ImGui::MenuItem("Unparent")) {
+            command = {EntityAction::Unparent, entity};
+        }
         if (ImGui::MenuItem("Delete")) {
-            action = EntityAction::Delete;
+            command = {EntityAction::Delete, entity};
         }
         ImGui::EndPopup();
     }
-    ImGui::PopID();
-    return action;
+
+    if (opened && hasChildren) {
+        for (const vshade::scene::Entity child : children) {
+            const EntityCommand childCommand = drawEntity(child, selectedEntity);
+            if (childCommand.action != EntityAction::None) {
+                command = childCommand;
+            }
+        }
+        ImGui::TreePop();
+    }
+
+    return command;
 }
 
 } // namespace editor
