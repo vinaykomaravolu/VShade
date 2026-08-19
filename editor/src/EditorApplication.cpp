@@ -14,13 +14,16 @@
 namespace editor {
 
 EditorApplication::EditorApplication()
-    : vshade::core::Application({.window = {
-          .title = "VShade Editor",
-          .width = 1920,
-          .height = 1080,
-          .fullscreen = false,
-          .vsync = true,
-      }}) {}
+    : vshade::core::Application({
+          .window = {
+              .title = "VShade Editor",
+              .width = 1920,
+              .height = 1080,
+              .fullscreen = false,
+              .vsync = true,
+          },
+          .presentRuntime = false,
+      }) {}
 
 EditorApplication::~EditorApplication() = default;
 

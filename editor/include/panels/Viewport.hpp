@@ -9,6 +9,7 @@
 namespace vshade::scene {
 class Scene;
 class SceneRenderer;
+class SceneRuntime;
 }
 
 namespace vshade::renderer {
@@ -39,6 +40,8 @@ public:
     void onUpdate(float deltaTime);
     void onImGuiRender(vshade::scene::Entity& selectedEntity);
     void setScene(std::shared_ptr<vshade::scene::Scene> scene);
+    void setRuntime(vshade::scene::SceneRuntime* runtime) noexcept;
+    void setEditing(bool editing) noexcept;
     void setVisible(bool visible) noexcept;
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
@@ -63,11 +66,14 @@ private:
     std::unique_ptr<vshade::renderer::Framebuffer> m_framebuffer;
     std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;
     std::shared_ptr<vshade::scene::Scene> m_scene;
+    vshade::scene::SceneRuntime* m_runtime = nullptr;
     EditorCamera m_editorCamera;
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
     bool m_hovered = false;
     bool m_gizmoUsing = false;
     bool m_visible = true;
+    bool m_editing = true;
+    bool m_runtimeCameraActive = false;
 };
 
 } // namespace editor

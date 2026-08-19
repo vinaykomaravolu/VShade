@@ -8,6 +8,7 @@
 #include <renderer/Renderer.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneRenderer.hpp>
+#include <scene/SceneRuntime.hpp>
 #include <scene/components/CoreComponents.hpp>
 
 #include <algorithm>
@@ -63,7 +64,7 @@ void Viewport::onUpdate(const float deltaTime) {
 
     const bool cameraLookActive =
         Input::isMouseButtonDown(MouseButton::Right);
-    if (m_visible && m_hovered && !m_gizmoUsing && !cameraLookActive) {
+    if (m_editing && m_visible && m_hovered && !m_gizmoUsing && !cameraLookActive) {
         if (Input::isKeyPressed(KeyCode::W)) {
             m_gizmoOperation = GizmoOperation::Translate;
         } else if (Input::isKeyPressed(KeyCode::E)) {
@@ -74,7 +75,7 @@ void Viewport::onUpdate(const float deltaTime) {
     }
 
     m_editorCamera.setInputEnabled(
-        m_visible && m_hovered && !m_gizmoUsing
+        m_editing && m_visible && m_hovered && !m_gizmoUsing
     );
     m_editorCamera.onUpdate(deltaTime);
 }
@@ -83,6 +84,18 @@ void Viewport::setScene(
     std::shared_ptr<vshade::scene::Scene> scene
 ) {
     m_scene = std::move(scene);
+}
+
+void Viewport::setRuntime(vshade::scene::SceneRuntime* runtime) noexcept {
+    m_runtime = runtime;
+}
+
+void Viewport::setEditing(const bool editing) noexcept {
+    m_editing = editing;
+    if (!editing) {
+        m_gizmoUsing = false;
+        m_editorCamera.setInputEnabled(false);
+    }
 }
 
 void Viewport::setVisible(const bool visible) noexcept {
@@ -114,23 +127,35 @@ void Viewport::onImGuiRender(
             {1.0F, 0.0F}
         );
         const bool imageHovered = ImGui::IsItemHovered();
-        drawGizmo(
-            selectedEntity,
-            viewportPosition.x,
-            viewportPosition.y,
-            availableSize.x,
-            availableSize.y
-        );
-        if (imageHovered
-            && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
-            && !ImGuizmo::IsOver()) {
-            selectEntityUnderMouse(
+        if (m_editing) {
+            drawGizmo(
                 selectedEntity,
                 viewportPosition.x,
                 viewportPosition.y,
                 availableSize.x,
                 availableSize.y
             );
+            if (imageHovered
+                && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+                && !ImGuizmo::IsOver()) {
+                selectEntityUnderMouse(
+                    selectedEntity,
+                    viewportPosition.x,
+                    viewportPosition.y,
+                    availableSize.x,
+                    availableSize.y
+                );
+            }
+        } else {
+            m_gizmoUsing = false;
+            if (!m_runtimeCameraActive) {
+                const ImVec2 textSize = ImGui::CalcTextSize("No Camera");
+                ImGui::SetCursorScreenPos({
+                    viewportPosition.x + (availableSize.x - textSize.x) * 0.5F,
+                    viewportPosition.y + (availableSize.y - textSize.y) * 0.5F,
+                });
+                ImGui::TextUnformatted("No Camera");
+            }
         }
     } else {
         m_gizmoUsing = false;
@@ -140,7 +165,7 @@ void Viewport::onImGuiRender(
 }
 
 bool Viewport::wantsCursorCapture() const noexcept {
-    return m_editorCamera.isLooking();
+    return m_editing && m_editorCamera.isLooking();
 }
 
 void Viewport::drawGizmo(
@@ -150,7 +175,8 @@ void Viewport::drawGizmo(
     const float width,
     const float height
 ) {
-    if (m_gizmoOperation == GizmoOperation::None
+    if (!m_editing
+        || m_gizmoOperation == GizmoOperation::None
         || !m_scene
         || !m_scene->valid(selectedEntity)
         || !selectedEntity.has<vshade::scene::TransformComponent>()) {
@@ -209,9 +235,17 @@ void Viewport::renderScene() {
         vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
         vshade::renderer::Renderer::clear();
         m_framebuffer->clearEntityId(-1);
+        m_runtimeCameraActive = false;
 
-        if (m_scene && m_sceneRenderer) {
-            m_sceneRenderer->render(*m_scene, m_editorCamera.camera());
+        if (m_editing) {
+            if (m_scene && m_sceneRenderer) {
+                m_sceneRenderer->render(*m_scene, m_editorCamera.camera());
+            }
+        } else if (m_runtime != nullptr && m_runtime->isPlaying()) {
+            m_runtimeCameraActive = m_runtime->render(
+                m_framebuffer->width(),
+                m_framebuffer->height()
+            );
         }
     } catch (...) {
         vshade::renderer::Framebuffer::unbind();

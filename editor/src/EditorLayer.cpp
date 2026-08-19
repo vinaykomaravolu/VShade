@@ -216,9 +216,12 @@ void EditorLayer::DrawDockspace()
     ImGui::End();
 
     if (m_showHierarchy) {
+        m_sceneHierarchyPanel.setReadOnly(m_sceneState != SceneState::Edit);
         m_sceneHierarchyPanel.onImGuiRender(m_selectedEntity);
     }
     m_viewport.setVisible(m_showViewport);
+    m_viewport.setEditing(m_sceneState == SceneState::Edit);
+    m_viewport.setRuntime(m_runtime);
     if (m_showViewport) {
         m_viewport.onImGuiRender(m_selectedEntity);
     }
@@ -331,7 +334,9 @@ void EditorLayer::DrawMenuBar() {
                 ? m_editorScene
                 : m_runtimeScene;
         const bool hasSelection =
-            activeScene && activeScene->valid(m_selectedEntity);
+            m_sceneState == SceneState::Edit
+            && activeScene
+            && activeScene->valid(m_selectedEntity);
         ImGui::BeginDisabled(!hasSelection);
         if (ImGui::MenuItem("Duplicate Entity")) {
             duplicateSelectedEntity();
@@ -738,6 +743,9 @@ void EditorLayer::importAsset(
 }
 
 void EditorLayer::duplicateSelectedEntity() {
+    if (m_sceneState != SceneState::Edit) {
+        return;
+    }
     const std::shared_ptr<vshade::scene::Scene>& activeScene =
         m_sceneState == SceneState::Edit
             ? m_editorScene
@@ -749,6 +757,9 @@ void EditorLayer::duplicateSelectedEntity() {
 }
 
 void EditorLayer::deleteSelectedEntity() {
+    if (m_sceneState != SceneState::Edit) {
+        return;
+    }
     const std::shared_ptr<vshade::scene::Scene>& activeScene =
         m_sceneState == SceneState::Edit
             ? m_editorScene

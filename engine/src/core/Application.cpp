@@ -84,7 +84,7 @@ int Application::run() {
             }
 
             renderer::Renderer::beginFrame();
-            if (m_runtime->isPlaying()) {
+            if (m_config.presentRuntime && m_runtime->isPlaying()) {
                 m_runtime->render(m_window->width(), m_window->height());
             }
             onRender();

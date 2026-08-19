@@ -26,6 +26,11 @@ struct ApplicationConfig {
     float maximumDeltaTime = 0.25F;
     /** @brief Settings used if the lazily initialized audio service is requested. */
     audio::AudioEngineConfig audio{};
+    /**
+     * @brief When true, a playing SceneRuntime is presented to the window.
+     * @note Editors should disable this and render play mode into a viewport.
+     */
+    bool presentRuntime = true;
 };
 
 /**

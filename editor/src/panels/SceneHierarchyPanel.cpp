@@ -23,6 +23,10 @@ void SceneHierarchyPanel::setScene(
     m_scene = std::move(scene);
 }
 
+void SceneHierarchyPanel::setReadOnly(const bool readOnly) noexcept {
+    m_readOnly = readOnly;
+}
+
 void SceneHierarchyPanel::onImGuiRender(
     vshade::scene::Entity& selectedEntity
 ) {
@@ -44,10 +48,14 @@ void SceneHierarchyPanel::onImGuiRender(
 
             switch (drawEntity(entity, selectedEntity)) {
                 case EntityAction::Duplicate:
-                    entityToDuplicate = entity;
+                    if (!m_readOnly) {
+                        entityToDuplicate = entity;
+                    }
                     break;
                 case EntityAction::Delete:
-                    entityToDelete = entity;
+                    if (!m_readOnly) {
+                        entityToDelete = entity;
+                    }
                     break;
                 case EntityAction::None:
                     break;
@@ -58,7 +66,7 @@ void SceneHierarchyPanel::onImGuiRender(
             ImGuiFocusedFlags_RootAndChildWindows
         );
         const bool keyboardAvailable =
-            hierarchyFocused && !ImGui::GetIO().WantTextInput;
+            !m_readOnly && hierarchyFocused && !ImGui::GetIO().WantTextInput;
         if (keyboardAvailable && m_scene->valid(selectedEntity)) {
             using vshade::input::Input;
             using vshade::input::KeyCode;
@@ -74,7 +82,8 @@ void SceneHierarchyPanel::onImGuiRender(
             }
         }
 
-        if (ImGui::BeginPopupContextWindow(
+        if (!m_readOnly
+            && ImGui::BeginPopupContextWindow(
                 "HierarchyContext",
                 ImGuiPopupFlags_MouseButtonRight
                     | ImGuiPopupFlags_NoOpenOverItems
@@ -113,7 +122,7 @@ SceneHierarchyPanel::EntityAction SceneHierarchyPanel::drawEntity(
     }
 
     EntityAction action = EntityAction::None;
-    if (ImGui::BeginPopupContextItem()) {
+    if (!m_readOnly && ImGui::BeginPopupContextItem()) {
         if (ImGui::MenuItem("Duplicate")) {
             action = EntityAction::Duplicate;
         }
