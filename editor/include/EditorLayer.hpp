@@ -11,6 +11,7 @@
 
 namespace vshade::scene {
 class Scene;
+class SceneRuntime;
 }
 
 namespace vshade::asset {
@@ -21,7 +22,16 @@ namespace editor {
 
 class EditorLayer final {
 public:
-    explicit EditorLayer(vshade::asset::AssetManager& assets);
+    enum class SceneState {
+        Edit,
+        Play,
+        Pause,
+    };
+
+    EditorLayer(
+        vshade::asset::AssetManager& assets,
+        vshade::scene::SceneRuntime& runtime
+    );
 
     void onAttach();
     void onUpdate(float deltaTime);
@@ -31,6 +41,7 @@ public:
 private:
     void DrawDockspace();
     void DrawMenuBar();
+    void DrawToolbar();
     void DrawFileDialogs();
     void BuildDefaultDockLayout(std::uint32_t dockspaceId);
     void setActiveScene(std::shared_ptr<vshade::scene::Scene> scene);
@@ -38,15 +49,21 @@ private:
     void openScene();
     void saveScene();
     void saveSceneAs();
+    void playScene();
+    void stopScene();
+    void bindActiveScene();
 
     vshade::asset::AssetManager* m_assets = nullptr;
+    vshade::scene::SceneRuntime* m_runtime = nullptr;
     Console m_console;
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
-    std::shared_ptr<vshade::scene::Scene> m_activeScene;
+    std::shared_ptr<vshade::scene::Scene> m_editorScene;
+    std::shared_ptr<vshade::scene::Scene> m_runtimeScene;
     std::filesystem::path m_activeScenePath;
     std::filesystem::path m_projectDirectory;
+    SceneState m_sceneState = SceneState::Edit;
     bool m_resetDockLayoutRequested = false;
 };
 

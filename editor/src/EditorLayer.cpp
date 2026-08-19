@@ -4,6 +4,7 @@
 #include <core/Log.hpp>
 #include <renderer/Model.hpp>
 #include <scene/Scene.hpp>
+#include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 
 #include <algorithm>
@@ -25,8 +26,12 @@ constexpr const char* chooseProjectDialogKey = "ChooseProjectDialog";
 
 } // namespace
 
-EditorLayer::EditorLayer(vshade::asset::AssetManager& assets)
+EditorLayer::EditorLayer(
+    vshade::asset::AssetManager& assets,
+    vshade::scene::SceneRuntime& runtime
+)
     : m_assets(&assets),
+      m_runtime(&runtime),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
 }
@@ -50,6 +55,7 @@ bool EditorLayer::wantsCursorCapture() const noexcept {
 void EditorLayer::DrawDockspace()
 {
     DrawMenuBar();
+    DrawToolbar();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
@@ -157,6 +163,7 @@ void EditorLayer::DrawMenuBar() {
     }
 
     if (ImGui::BeginMenu("File")) {
+        ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
         if (ImGui::MenuItem("New Scene")) {
             newScene();
         }
@@ -169,6 +176,7 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::MenuItem("Save As...")) {
             saveSceneAs();
         }
+        ImGui::EndDisabled();
         ImGui::Separator();
         if (ImGui::MenuItem("Import Model...")) {
             IGFD::FileDialogConfig config;
@@ -220,6 +228,50 @@ void EditorLayer::DrawMenuBar() {
     );
     ImGui::TextUnformatted("VShade");
     ImGui::EndMainMenuBar();
+}
+
+void EditorLayer::DrawToolbar() {
+    constexpr float toolbarHeight = 38.0F;
+    constexpr ImGuiWindowFlags toolbarFlags =
+        ImGuiWindowFlags_NoScrollbar
+        | ImGuiWindowFlags_NoSavedSettings;
+    if (!ImGui::BeginViewportSideBar(
+            "##VShadeToolbar",
+            ImGui::GetMainViewport(),
+            ImGuiDir_Up,
+            toolbarHeight,
+            toolbarFlags
+        )) {
+        return;
+    }
+
+    constexpr float buttonWidth = 72.0F;
+    constexpr float spacing = 8.0F;
+    constexpr float totalWidth = buttonWidth * 3.0F + spacing * 2.0F;
+    ImGui::SetCursorPosX(
+        std::max(0.0F, (ImGui::GetWindowWidth() - totalWidth) * 0.5F)
+    );
+    ImGui::SetCursorPosY(5.0F);
+
+    ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
+    if (ImGui::Button("Play", {buttonWidth, 28.0F})) {
+        playScene();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::BeginDisabled();
+    ImGui::Button("Pause", {buttonWidth, 28.0F});
+    ImGui::EndDisabled();
+
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
+    if (ImGui::Button("Stop", {buttonWidth, 28.0F})) {
+        stopScene();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::End();
 }
 
 void EditorLayer::DrawFileDialogs() {
@@ -289,9 +341,8 @@ void EditorLayer::setActiveScene(
     if (!scene) {
         return;
     }
-    m_activeScene = std::move(scene);
-    m_sceneHierarchyPanel.setScene(m_activeScene);
-    m_viewport.setScene(m_activeScene);
+    m_editorScene = std::move(scene);
+    bindActiveScene();
 }
 
 void EditorLayer::newScene() {
@@ -317,7 +368,7 @@ void EditorLayer::openScene() {
 }
 
 void EditorLayer::saveScene() {
-    if (!m_activeScene) {
+    if (!m_editorScene) {
         return;
     }
     if (m_activeScenePath.empty()) {
@@ -325,7 +376,7 @@ void EditorLayer::saveScene() {
         return;
     }
 
-    vshade::scene::SceneSerializer serializer(*m_activeScene);
+    vshade::scene::SceneSerializer serializer(*m_editorScene);
     if (!serializer.serialize(m_activeScenePath, vshade::scene::SceneJsonFormat::Compact)) {
         ENGINE_ERROR(
             "Failed to save scene '{}': {}",
@@ -338,7 +389,7 @@ void EditorLayer::saveScene() {
 }
 
 void EditorLayer::saveSceneAs() {
-    if (!m_activeScene) {
+    if (!m_editorScene) {
         return;
     }
 
@@ -361,6 +412,50 @@ void EditorLayer::saveSceneAs() {
         ".vscene",
         config
     );
+}
+
+void EditorLayer::playScene() {
+    if (m_sceneState != SceneState::Edit
+        || !m_editorScene
+        || !m_runtime) {
+        return;
+    }
+
+    try {
+        m_runtimeScene = std::shared_ptr<vshade::scene::Scene>(
+            m_editorScene->instantiate()
+        );
+        m_runtime->play(*m_runtimeScene);
+        m_sceneState = SceneState::Play;
+        bindActiveScene();
+    } catch (const std::exception& error) {
+        m_runtime->stop();
+        m_runtimeScene.reset();
+        m_sceneState = SceneState::Edit;
+        bindActiveScene();
+        ENGINE_ERROR("Failed to enter play mode: {}", error.what());
+    }
+}
+
+void EditorLayer::stopScene() {
+    if (m_sceneState == SceneState::Edit) {
+        return;
+    }
+    if (m_runtime) {
+        m_runtime->stop();
+    }
+    m_sceneState = SceneState::Edit;
+    bindActiveScene();
+    m_runtimeScene.reset();
+}
+
+void EditorLayer::bindActiveScene() {
+    const std::shared_ptr<vshade::scene::Scene>& activeScene =
+        m_sceneState == SceneState::Edit
+            ? m_editorScene
+            : m_runtimeScene;
+    m_sceneHierarchyPanel.setScene(activeScene);
+    m_viewport.setScene(activeScene);
 }
 
 } // namespace editor
