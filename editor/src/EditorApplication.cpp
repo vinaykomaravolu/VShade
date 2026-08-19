@@ -1,4 +1,5 @@
 #include "EditorApplication.hpp"
+#include "EditorIcons.hpp"
 #include "EditorLayer.hpp"
 
 #include <renderer/Renderer.hpp>
@@ -55,6 +56,7 @@ void EditorApplication::onStart() {
 
     vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
 
+    EditorIcons::initialize();
     m_editorLayer = std::make_unique<EditorLayer>(
         assets(),
         runtime(),
@@ -89,6 +91,7 @@ void EditorApplication::onRender() {
 void EditorApplication::onShutdown() noexcept {
     window().setCursorCaptured(false);
     m_editorLayer.reset();
+    EditorIcons::shutdown();
 
     if (m_openGlBackendInitialized) {
         ImGui_ImplOpenGL3_Shutdown();

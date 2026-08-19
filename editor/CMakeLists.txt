@@ -33,6 +33,7 @@ add_executable(VShadeEditor
     src/main.cpp
     src/EditorApplication.cpp
     src/EditorCamera.cpp
+    src/EditorIcons.cpp
     src/EditorLayer.cpp
     src/UndoHistory.cpp
     src/panels/Console.cpp
@@ -44,6 +45,36 @@ add_executable(VShadeEditor
 )
 target_include_directories(VShadeEditor PRIVATE include)
 target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)
+target_compile_definitions(VShadeEditor PRIVATE
+    VSHADE_EDITOR_ICON_DIR="$<TARGET_FILE_DIR:VShadeEditor>/icons"
+)
+
+set(VSHADE_EDITOR_ICONS
+    assets/icons/folder.png
+    assets/icons/file.png
+    assets/icons/texture.png
+    assets/icons/model.png
+    assets/icons/audio.png
+    assets/icons/scene.png
+    assets/icons/prefab.png
+)
+set_source_files_properties(${VSHADE_EDITOR_ICONS} PROPERTIES HEADER_FILE_ONLY TRUE)
+target_sources(VShadeEditor PRIVATE ${VSHADE_EDITOR_ICONS})
+
+add_custom_command(TARGET VShadeEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:VShadeEditor>/icons"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/folder.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/file.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/texture.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/model.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/audio.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/scene.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/prefab.png"
+        "$<TARGET_FILE_DIR:VShadeEditor>/icons"
+    COMMENT "Copying editor Content Browser icons"
+)
 
 if(MSVC)
     target_compile_options(VShadeEditor PRIVATE /W4 /permissive-)

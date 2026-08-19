@@ -18,6 +18,7 @@ public:
 private:
     std::filesystem::path m_rootDirectory;
     std::filesystem::path m_currentDirectory;
+    std::filesystem::path m_selectedPath;
 };
 
 } // namespace editor
