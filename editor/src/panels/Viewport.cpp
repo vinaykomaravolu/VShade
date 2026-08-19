@@ -3,11 +3,14 @@
 #include <renderer/DebugDraw.hpp>
 #include <renderer/Framebuffer.hpp>
 #include <renderer/Renderer.hpp>
+#include <scene/Scene.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include <imgui.h>
 
@@ -16,6 +19,32 @@ namespace {
 
 constexpr ImGuiWindowFlags panelFlags =
     ImGuiWindowFlags_NoCollapse;
+
+void drawWireCube(const vshade::math::Transform& transform) {
+    constexpr std::array<vshade::math::Vec3, 8> corners{{
+        {-0.5F, -0.5F, -0.5F},
+        { 0.5F, -0.5F, -0.5F},
+        { 0.5F,  0.5F, -0.5F},
+        {-0.5F,  0.5F, -0.5F},
+        {-0.5F, -0.5F,  0.5F},
+        { 0.5F, -0.5F,  0.5F},
+        { 0.5F,  0.5F,  0.5F},
+        {-0.5F,  0.5F,  0.5F},
+    }};
+    constexpr std::array<std::pair<std::size_t, std::size_t>, 12> edges{{
+        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7},
+    }};
+
+    for (const auto [start, end] : edges) {
+        vshade::renderer::DebugDraw::line(
+            transform.transformPoint(corners[start]),
+            transform.transformPoint(corners[end]),
+            {0.2F, 0.75F, 1.0F, 1.0F}
+        );
+    }
+}
 
 } // namespace
 
@@ -30,6 +59,14 @@ Viewport::~Viewport() = default;
 void Viewport::onUpdate(const float deltaTime) {
     m_editorCamera.setInputEnabled(m_hovered);
     m_editorCamera.onUpdate(deltaTime);
+}
+
+void Viewport::setScene(
+    std::shared_ptr<vshade::scene::Scene> scene,
+    const vshade::scene::Entity previewEntity
+) {
+    m_scene = std::move(scene);
+    m_previewEntity = previewEntity;
 }
 
 void Viewport::onImGuiRender() {
@@ -64,13 +101,9 @@ void Viewport::renderScene() {
         vshade::renderer::Renderer::setClearColor({0.08F, 0.09F, 0.11F, 1.0F});
         vshade::renderer::Renderer::clear();
 
-        vshade::renderer::DebugDraw::box(
-            {
-                .minimum = {-0.5F, -0.5F, -0.5F},
-                .maximum = {0.5F, 0.5F, 0.5F},
-            },
-            {0.2F, 0.75F, 1.0F, 1.0F}
-        );
+        if (m_scene && m_scene->valid(m_previewEntity)) {
+            drawWireCube(m_previewEntity.transform());
+        }
         vshade::renderer::DebugDraw::line(
             {0.0F, 0.0F, 0.0F},
             {2.0F, 0.0F, 0.0F},
@@ -88,6 +121,7 @@ void Viewport::renderScene() {
         );
         vshade::renderer::DebugDraw::flush(m_editorCamera.camera());
     } catch (...) {
+        vshade::renderer::DebugDraw::clear();
         vshade::renderer::Framebuffer::unbind();
         throw;
     }

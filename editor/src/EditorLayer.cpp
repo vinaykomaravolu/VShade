@@ -12,11 +12,9 @@ namespace editor {
 
 void EditorLayer::onAttach() {
     m_editorScene = std::make_shared<vshade::scene::Scene>("Editor Scene");
-    static_cast<void>(m_editorScene->create("Camera"));
-    static_cast<void>(m_editorScene->create("Cube"));
-    static_cast<void>(m_editorScene->create("Light"));
-    static_cast<void>(m_editorScene->create("Player"));
+    const vshade::scene::Entity cube = m_editorScene->create("Cube");
     m_sceneHierarchyPanel.setScene(m_editorScene);
+    m_viewport.setScene(m_editorScene, cube);
 }
 
 void EditorLayer::onUpdate(const float deltaTime) {
