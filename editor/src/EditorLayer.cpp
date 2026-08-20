@@ -134,14 +134,17 @@ bool toolbarIconButton(
 EditorLayer::EditorLayer(
     vshade::asset::AssetManager& assets,
     vshade::scene::SceneRuntime& runtime,
+    vshade::script::NativeScriptRegistry& scripts,
     std::function<void()> requestExit
 )
     : m_assets(&assets),
       m_runtime(&runtime),
+      m_scripts(&scripts),
       m_requestExit(std::move(requestExit)),
       m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
+    m_inspectorPanel.setScriptRegistry(scripts);
     m_inspectorPanel.setRevealAssetHandler(
         [this](std::filesystem::path path) {
             m_showContentBrowser = true;

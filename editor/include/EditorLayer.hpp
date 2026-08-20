@@ -21,6 +21,10 @@ namespace vshade::asset {
 class AssetManager;
 }
 
+namespace vshade::script {
+class NativeScriptRegistry;
+}
+
 namespace vshade::project {
 class Project;
 }
@@ -37,6 +41,7 @@ public:
     EditorLayer(
         vshade::asset::AssetManager& assets,
         vshade::scene::SceneRuntime& runtime,
+        vshade::script::NativeScriptRegistry& scripts,
         std::function<void()> requestExit
     );
 
@@ -85,6 +90,7 @@ private:
 
     vshade::asset::AssetManager* m_assets = nullptr;
     vshade::scene::SceneRuntime* m_runtime = nullptr;
+    vshade::script::NativeScriptRegistry* m_scripts = nullptr;
     std::function<void()> m_requestExit;
     Console m_console;
     ContentBrowserPanel m_contentBrowser;

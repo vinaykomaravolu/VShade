@@ -5,14 +5,21 @@
 #include <core/Log.hpp>
 #include <audio/AudioClip.hpp>
 #include <math/Quaternion.hpp>
+#include <physics/PhysicsTypes.hpp>
+#include <physics/physics2d/PhysicsShape2D.hpp>
+#include <physics/physics3d/PhysicsShape3D.hpp>
 #include <renderer/Lighting.hpp>
 #include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
 #include <scene/components/AudioComponents.hpp>
 #include <scene/components/CoreComponents.hpp>
 #include <scene/components/LightComponent.hpp>
+#include <scene/components/PhysicsComponents2D.hpp>
+#include <scene/components/PhysicsComponents3D.hpp>
 #include <scene/components/PrefabInstanceComponent.hpp>
 #include <scene/components/RenderComponents.hpp>
+#include <scene/components/ScriptComponent.hpp>
+#include <script/NativeScriptRegistry.hpp>
 
 #include <algorithm>
 #include <array>
@@ -22,6 +29,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
@@ -79,12 +87,48 @@ void trackTransformItem(const SceneEditHooks& hooks) {
     }
 }
 
+void activateExclusiveListener(vshade::scene::Entity entity) {
+    auto& selected = entity.get<vshade::scene::AudioListenerComponent>();
+    selected.active = true;
+    for (auto [handle, listener] :
+         entity.scene().view<vshade::scene::AudioListenerComponent>().each()) {
+        if (handle != entity.handle()) {
+            listener.active = false;
+        }
+    }
+}
+
+void drawBodyType(vshade::physics::BodyType& type) {
+    int value = static_cast<int>(type);
+    constexpr const char* names[] = {"Static", "Dynamic", "Kinematic"};
+    if (ImGui::Combo("Body Type", &value, names, IM_ARRAYSIZE(names))) {
+        type = static_cast<vshade::physics::BodyType>(value);
+    }
+}
+
+template<typename Action>
+void commitAdd(const SceneEditHooks& hooks, Action&& action) {
+    if (hooks.begin) {
+        hooks.begin();
+    }
+    std::forward<Action>(action)();
+    if (hooks.commit) {
+        hooks.commit();
+    }
+}
+
 } // namespace
 
 void InspectorPanel::setAssetManager(
     vshade::asset::AssetManager& assets
 ) noexcept {
     m_assets = &assets;
+}
+
+void InspectorPanel::setScriptRegistry(
+    vshade::script::NativeScriptRegistry& scripts
+) noexcept {
+    m_scripts = &scripts;
 }
 
 void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
@@ -111,7 +155,13 @@ void InspectorPanel::onImGuiRender(
         drawSpriteRenderer(selectedEntity);
         drawModelRenderer(selectedEntity);
         drawAudioSource(selectedEntity);
+        drawAudioListener(selectedEntity);
         drawLight(selectedEntity);
+        drawRigidBody2D(selectedEntity);
+        drawCollider2D(selectedEntity);
+        drawRigidBody3D(selectedEntity);
+        drawCollider3D(selectedEntity);
+        drawScripts(selectedEntity);
         ImGui::Separator();
         drawAddComponentMenu(selectedEntity);
     } else {
@@ -475,6 +525,234 @@ void InspectorPanel::drawLight(vshade::scene::Entity entity) {
     );
 }
 
+void InspectorPanel::drawAudioListener(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::AudioListenerComponent>(
+        "Audio Listener",
+        entity,
+        [entity](vshade::scene::AudioListenerComponent& listener) {
+            if (ImGui::Checkbox("Active", &listener.active) && listener.active) {
+                activateExclusiveListener(entity);
+            }
+        }
+    );
+}
+
+void InspectorPanel::drawRigidBody2D(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::RigidBody2DComponent>(
+        "Rigid Body 2D",
+        entity,
+        [](vshade::scene::RigidBody2DComponent& body) {
+            auto& settings = body.settings;
+            drawBodyType(settings.type);
+            ImGui::DragFloat("Linear Damping", &settings.linearDamping, 0.01F);
+            settings.linearDamping = std::max(settings.linearDamping, 0.0F);
+            ImGui::DragFloat("Angular Damping", &settings.angularDamping, 0.01F);
+            settings.angularDamping = std::max(settings.angularDamping, 0.0F);
+            ImGui::DragFloat("Gravity Scale", &settings.gravityScale, 0.05F);
+            ImGui::Checkbox("Fixed Rotation", &settings.fixedRotation);
+            ImGui::Checkbox("Continuous Collision", &settings.continuousCollision);
+            ImGui::Checkbox("Enabled", &settings.enabled);
+        }
+    );
+}
+
+void InspectorPanel::drawCollider2D(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::Collider2DComponent>(
+        "Collider 2D",
+        entity,
+        [](vshade::scene::Collider2DComponent& collider) {
+            int shape = static_cast<int>(collider.shape.index());
+            constexpr const char* shapeNames[] = {"Box", "Circle", "Capsule"};
+            if (ImGui::Combo(
+                    "Shape",
+                    &shape,
+                    shapeNames,
+                    IM_ARRAYSIZE(shapeNames)
+                )) {
+                if (shape == 0) {
+                    collider.shape = vshade::physics::BoxShape2D{};
+                } else if (shape == 1) {
+                    collider.shape = vshade::physics::CircleShape2D{};
+                } else {
+                    collider.shape = vshade::physics::CapsuleShape2D{};
+                }
+            }
+
+            if (auto* box = std::get_if<vshade::physics::BoxShape2D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat2("Half Extents", &box->halfExtents.x, 0.05F);
+                box->halfExtents.x = std::max(box->halfExtents.x, 0.001F);
+                box->halfExtents.y = std::max(box->halfExtents.y, 0.001F);
+            } else if (auto* circle = std::get_if<vshade::physics::CircleShape2D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat("Radius", &circle->radius, 0.05F);
+                circle->radius = std::max(circle->radius, 0.001F);
+            } else if (auto* capsule = std::get_if<vshade::physics::CapsuleShape2D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat("Half Height", &capsule->halfHeight, 0.05F);
+                ImGui::DragFloat("Radius", &capsule->radius, 0.05F);
+                capsule->halfHeight = std::max(capsule->halfHeight, 0.001F);
+                capsule->radius = std::max(capsule->radius, 0.001F);
+            }
+
+            ImGui::DragFloat2("Offset", &collider.offset.x, 0.05F);
+            ImGui::DragFloat("Density", &collider.material.density, 0.05F);
+            ImGui::DragFloat("Friction", &collider.material.friction, 0.01F);
+            ImGui::DragFloat("Restitution", &collider.material.restitution, 0.01F);
+            collider.material.density = std::max(collider.material.density, 0.001F);
+            collider.material.friction = std::max(collider.material.friction, 0.0F);
+            collider.material.restitution =
+                std::max(collider.material.restitution, 0.0F);
+            ImGui::Checkbox("Sensor", &collider.sensor);
+        }
+    );
+}
+
+void InspectorPanel::drawRigidBody3D(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::RigidBody3DComponent>(
+        "Rigid Body 3D",
+        entity,
+        [](vshade::scene::RigidBody3DComponent& body) {
+            auto& settings = body.settings;
+            drawBodyType(settings.type);
+            ImGui::DragFloat("Mass", &settings.mass, 0.05F);
+            settings.mass = std::max(settings.mass, 0.001F);
+            ImGui::DragFloat("Linear Damping", &settings.linearDamping, 0.01F);
+            settings.linearDamping = std::max(settings.linearDamping, 0.0F);
+            ImGui::DragFloat("Angular Damping", &settings.angularDamping, 0.01F);
+            settings.angularDamping = std::max(settings.angularDamping, 0.0F);
+            ImGui::DragFloat("Gravity Scale", &settings.gravityScale, 0.05F);
+            ImGui::Checkbox("Continuous Collision", &settings.continuousCollision);
+            ImGui::Checkbox("Enabled", &settings.enabled);
+        }
+    );
+}
+
+void InspectorPanel::drawCollider3D(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::Collider3DComponent>(
+        "Collider 3D",
+        entity,
+        [](vshade::scene::Collider3DComponent& collider) {
+            int shape = static_cast<int>(collider.shape.index());
+            constexpr const char* shapeNames[] = {"Box", "Sphere", "Capsule"};
+            if (ImGui::Combo(
+                    "Shape",
+                    &shape,
+                    shapeNames,
+                    IM_ARRAYSIZE(shapeNames)
+                )) {
+                if (shape == 0) {
+                    collider.shape = vshade::physics::BoxShape3D{};
+                } else if (shape == 1) {
+                    collider.shape = vshade::physics::SphereShape3D{};
+                } else {
+                    collider.shape = vshade::physics::CapsuleShape3D{};
+                }
+            }
+
+            if (auto* box = std::get_if<vshade::physics::BoxShape3D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat3("Half Extents", &box->halfExtents.x, 0.05F);
+                box->halfExtents.x = std::max(box->halfExtents.x, 0.001F);
+                box->halfExtents.y = std::max(box->halfExtents.y, 0.001F);
+                box->halfExtents.z = std::max(box->halfExtents.z, 0.001F);
+            } else if (auto* sphere = std::get_if<vshade::physics::SphereShape3D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat("Radius", &sphere->radius, 0.05F);
+                sphere->radius = std::max(sphere->radius, 0.001F);
+            } else if (auto* capsule = std::get_if<vshade::physics::CapsuleShape3D>(
+                    &collider.shape
+                )) {
+                ImGui::DragFloat("Half Height", &capsule->halfHeight, 0.05F);
+                ImGui::DragFloat("Radius", &capsule->radius, 0.05F);
+                capsule->halfHeight = std::max(capsule->halfHeight, 0.001F);
+                capsule->radius = std::max(capsule->radius, 0.001F);
+            }
+
+            ImGui::DragFloat3("Offset", &collider.offset.x, 0.05F);
+            ImGui::DragFloat("Friction", &collider.material.friction, 0.01F);
+            ImGui::DragFloat("Restitution", &collider.material.restitution, 0.01F);
+            collider.material.friction = std::max(collider.material.friction, 0.0F);
+            collider.material.restitution =
+                std::max(collider.material.restitution, 0.0F);
+            ImGui::Checkbox("Sensor", &collider.sensor);
+        }
+    );
+}
+
+void InspectorPanel::drawScripts(vshade::scene::Entity entity) {
+    drawComponent<vshade::scene::ScriptComponent>(
+        "Scripts",
+        entity,
+        [this](vshade::scene::ScriptComponent& component) {
+            const std::vector<std::string> typeNames = m_scripts
+                ? m_scripts->typeNames()
+                : std::vector<std::string>{};
+
+            int removeIndex = -1;
+            for (std::size_t index = 0; index < component.scripts.size(); ++index) {
+                auto& binding = component.scripts[index];
+                ImGui::PushID(static_cast<int>(index));
+                ImGui::Checkbox("##Enabled", &binding.enabled);
+                ImGui::SameLine();
+
+                const std::string preview = binding.typeName.empty()
+                    ? std::string("<None>")
+                    : binding.typeName;
+                if (!typeNames.empty()) {
+                    if (ImGui::BeginCombo("Type", preview.c_str())) {
+                        for (const std::string& name : typeNames) {
+                            const bool selected = binding.typeName == name;
+                            if (ImGui::Selectable(name.c_str(), selected)) {
+                                binding.typeName = name;
+                            }
+                            if (selected) {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                } else {
+                    std::array<char, 256> buffer{};
+                    const std::size_t characterCount = std::min(
+                        binding.typeName.size(),
+                        buffer.size() - 1
+                    );
+                    std::memcpy(buffer.data(), binding.typeName.data(), characterCount);
+                    if (ImGui::InputText("Type", buffer.data(), buffer.size())) {
+                        binding.typeName = buffer.data();
+                    }
+                }
+
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Remove")) {
+                    removeIndex = static_cast<int>(index);
+                }
+                ImGui::PopID();
+            }
+
+            if (removeIndex >= 0) {
+                component.scripts.erase(
+                    component.scripts.begin() + removeIndex
+                );
+            }
+
+            if (ImGui::Button("Add Script")) {
+                vshade::scene::ScriptBinding binding;
+                if (!typeNames.empty()) {
+                    binding.typeName = typeNames.front();
+                }
+                component.scripts.push_back(std::move(binding));
+            }
+        }
+    );
+}
+
 void InspectorPanel::drawAddComponentMenu(
     vshade::scene::Entity entity
 ) {
@@ -488,34 +766,106 @@ void InspectorPanel::drawAddComponentMenu(
 
     if (!entity.has<vshade::scene::CameraComponent>()
         && ImGui::MenuItem("Camera")) {
-        entity.add<vshade::scene::CameraComponent>();
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::CameraComponent>();
+        });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::SpriteRendererComponent>()
         && ImGui::MenuItem("Sprite Renderer")) {
-        entity.add<vshade::scene::SpriteRendererComponent>();
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::SpriteRendererComponent>();
+        });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::ModelRendererComponent>()
         && ImGui::MenuItem("Model Renderer")) {
-        entity.add<vshade::scene::ModelRendererComponent>();
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::ModelRendererComponent>();
+        });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::AudioSourceComponent>()
         && ImGui::MenuItem("Audio Source")) {
-        entity.add<vshade::scene::AudioSourceComponent>();
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::AudioSourceComponent>();
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (!entity.has<vshade::scene::AudioListenerComponent>()
+        && ImGui::MenuItem("Audio Listener")) {
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::AudioListenerComponent>();
+            activateExclusiveListener(entity);
+        });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::LightComponent>()
         && ImGui::MenuItem("Directional Light")) {
-        vshade::scene::LightComponent light;
-        light.light = vshade::renderer::DirectionalLight{};
-        entity.add<vshade::scene::LightComponent>(light);
+        commitAdd(m_editHooks, [&] {
+            vshade::scene::LightComponent light;
+            light.light = vshade::renderer::DirectionalLight{};
+            entity.add<vshade::scene::LightComponent>(light);
+        });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::LightComponent>()
         && ImGui::MenuItem("Point Light")) {
-        entity.add<vshade::scene::LightComponent>();
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::LightComponent>();
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (!entity.has<vshade::scene::RigidBody2DComponent>()
+        && ImGui::MenuItem("Rigid Body 2D")) {
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::RigidBody2DComponent>();
+            if (!entity.has<vshade::scene::Collider2DComponent>()) {
+                entity.add<vshade::scene::Collider2DComponent>();
+            }
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (entity.has<vshade::scene::RigidBody2DComponent>()
+        && !entity.has<vshade::scene::Collider2DComponent>()
+        && ImGui::MenuItem("Collider 2D")) {
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::Collider2DComponent>();
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (!entity.has<vshade::scene::RigidBody3DComponent>()
+        && ImGui::MenuItem("Rigid Body 3D")) {
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::RigidBody3DComponent>();
+            if (!entity.has<vshade::scene::Collider3DComponent>()) {
+                entity.add<vshade::scene::Collider3DComponent>();
+            }
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (entity.has<vshade::scene::RigidBody3DComponent>()
+        && !entity.has<vshade::scene::Collider3DComponent>()
+        && ImGui::MenuItem("Collider 3D")) {
+        commitAdd(m_editHooks, [&] {
+            entity.add<vshade::scene::Collider3DComponent>();
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    if (!entity.has<vshade::scene::ScriptComponent>()
+        && ImGui::MenuItem("Script")) {
+        commitAdd(m_editHooks, [&] {
+            vshade::scene::ScriptComponent scripts;
+            if (m_scripts) {
+                const auto typeNames = m_scripts->typeNames();
+                if (!typeNames.empty()) {
+                    scripts.scripts.push_back({
+                        .typeName = typeNames.front(),
+                    });
+                }
+            }
+            entity.add<vshade::scene::ScriptComponent>(std::move(scripts));
+        });
         ImGui::CloseCurrentPopup();
     }
 

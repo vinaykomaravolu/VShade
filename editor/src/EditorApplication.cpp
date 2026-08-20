@@ -60,6 +60,7 @@ void EditorApplication::onStart() {
     m_editorLayer = std::make_unique<EditorLayer>(
         assets(),
         runtime(),
+        scripts(),
         [this]() { close(); }
     );
     m_editorLayer->onAttach();
