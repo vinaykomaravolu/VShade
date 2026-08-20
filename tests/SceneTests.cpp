@@ -354,6 +354,48 @@ TEST_CASE("Linked prefab instances refresh from later prefab edits", "[scene][pr
     CHECK_FALSE(duplicate.has<vshade::scene::PrefabInstanceComponent>());
 }
 
+TEST_CASE("Linked prefab instances unpack and destroy their subtree", "[scene][prefab]") {
+    vshade::scene::Scene source("Level");
+    auto root = source.create("Turret");
+    auto barrel = source.create("Barrel");
+    source.setParent(barrel, root);
+
+    const auto prefab = vshade::scene::Prefab::fromEntity(source, root);
+    const std::filesystem::path path = sceneOutputPath("unpack_turret.vsprefab");
+    REQUIRE(prefab.save(path));
+
+    vshade::asset::AssetManager assets;
+    const auto loaded = assets.loadResource<vshade::scene::Prefab>(path);
+    vshade::scene::Scene level("Spawned");
+    auto instance = level.instantiate(*loaded, loaded.reference());
+    REQUIRE(instance.has<vshade::scene::PrefabInstanceComponent>());
+    REQUIRE(level.children(instance).size() == 1);
+    auto child = level.children(instance)[0];
+    const std::uint64_t childUuid = child.uuid();
+
+    level.unpackPrefab(instance);
+    CHECK_FALSE(instance.has<vshade::scene::PrefabInstanceComponent>());
+    REQUIRE(level.findEntity(childUuid));
+    CHECK(level.parent(level.findEntity(childUuid)) == instance);
+
+    auto linked = level.instantiate(*loaded, loaded.reference());
+    REQUIRE(level.children(linked).size() == 1);
+    const std::uint64_t linkedChildUuid = level.children(linked)[0].uuid();
+    auto extra = level.create("Extra");
+    const std::uint64_t extraUuid = extra.uuid();
+    level.setParent(extra, linked);
+    auto survivor = level.create("Survivor");
+    const std::uint64_t survivorUuid = survivor.uuid();
+    const std::uint64_t linkedRootUuid = linked.uuid();
+
+    level.destroyEntity(linked);
+    CHECK_FALSE(level.findEntity(linkedRootUuid));
+    CHECK_FALSE(level.findEntity(linkedChildUuid));
+    CHECK_FALSE(level.findEntity(extraUuid));
+    REQUIRE(level.findEntity(survivorUuid));
+    REQUIRE(level.findEntity(childUuid));
+}
+
 TEST_CASE("Scene duplicates built-in components with a new UUID", "[scene]") {
     REQUIRE(std::filesystem::is_regular_file(
         std::filesystem::path(VSHADE_TEST_ASSET_DIR) / "player.png"

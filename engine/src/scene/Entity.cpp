@@ -36,6 +36,20 @@ Entity::Entity(
       m_scene(&scene),
       m_sceneGeneration(sceneGeneration) {}
 
+Scene& Entity::scene() {
+    if (!valid()) {
+        throw std::logic_error("Entity handle is not valid");
+    }
+    return *m_scene;
+}
+
+const Scene& Entity::scene() const {
+    if (!valid()) {
+        throw std::logic_error("Entity handle is not valid");
+    }
+    return *m_scene;
+}
+
 bool Entity::valid() const noexcept {
     return m_scene != nullptr && m_scene->valid(*this);
 }

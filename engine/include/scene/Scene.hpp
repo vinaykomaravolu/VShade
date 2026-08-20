@@ -77,7 +77,16 @@ public:
     /** @brief Reloads every linked prefab instance that can still be resolved. */
     void applyPrefabInstances(asset::AssetManager& assets);
 
-    /** @brief Destroys an entity owned by this scene. */
+    /**
+     * @brief Removes the prefab link from @p instanceRoot and keeps its subtree.
+     * @throws std::invalid_argument If @p instanceRoot is not a prefab instance.
+     */
+    void unpackPrefab(Entity instanceRoot);
+
+    /**
+     * @brief Destroys an entity owned by this scene.
+     * @note Prefab instance roots also destroy their linked subtree.
+     */
     void destroyEntity(Entity entity);
 
     /** @brief Parents one entity while rejecting foreign entities and cycles. */
@@ -139,6 +148,8 @@ private:
         entt::entity sourceHandle,
         bool keepTransform
     );
+    void collectDescendants(Entity entity, std::vector<Entity>& descendants);
+    void destroyEntityInternal(Entity entity);
 
     entt::registry m_registry;
     std::unordered_map<std::uint64_t, entt::entity> m_entitiesByUuid;

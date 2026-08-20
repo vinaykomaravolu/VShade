@@ -1,17 +1,23 @@
 #include "panels/InspectorPanel.hpp"
 #include "widgets/AssetSelector.hpp"
 
+#include <asset/AssetManager.hpp>
+#include <core/Log.hpp>
 #include <audio/AudioClip.hpp>
 #include <math/Quaternion.hpp>
 #include <renderer/Lighting.hpp>
+#include <scene/Prefab.hpp>
+#include <scene/Scene.hpp>
 #include <scene/components/AudioComponents.hpp>
 #include <scene/components/CoreComponents.hpp>
 #include <scene/components/LightComponent.hpp>
+#include <scene/components/PrefabInstanceComponent.hpp>
 #include <scene/components/RenderComponents.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -85,6 +91,12 @@ void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
     m_editHooks = std::move(hooks);
 }
 
+void InspectorPanel::setRevealAssetHandler(
+    std::function<void(std::filesystem::path)> handler
+) {
+    m_revealAsset = std::move(handler);
+}
+
 void InspectorPanel::onImGuiRender(
     vshade::scene::Entity selectedEntity
 ) {
@@ -93,6 +105,7 @@ void InspectorPanel::onImGuiRender(
     if (selectedEntity) {
         drawTag(selectedEntity);
         ImGui::Separator();
+        drawPrefab(selectedEntity);
         drawTransform(selectedEntity);
         drawCamera(selectedEntity);
         drawSpriteRenderer(selectedEntity);
@@ -121,6 +134,76 @@ void InspectorPanel::drawTag(vshade::scene::Entity entity) {
 
     if (ImGui::InputText("Name", buffer.data(), buffer.size())) {
         entity.setName(buffer.data());
+    }
+}
+
+void InspectorPanel::drawPrefab(vshade::scene::Entity entity) {
+    if (!entity.has<vshade::scene::PrefabInstanceComponent>()) {
+        return;
+    }
+
+    auto& instance = entity.get<vshade::scene::PrefabInstanceComponent>();
+    if (!ImGui::CollapsingHeader("Prefab", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    const std::string path = instance.prefab.sourcePath().generic_string();
+    std::array<char, 512> buffer{};
+    const std::size_t characterCount = std::min(path.size(), buffer.size() - 1);
+    std::memcpy(buffer.data(), path.data(), characterCount);
+    ImGui::InputText(
+        "Asset",
+        buffer.data(),
+        buffer.size(),
+        ImGuiInputTextFlags_ReadOnly
+    );
+
+    const bool canOpen = static_cast<bool>(m_revealAsset) && !path.empty();
+    const bool canApply = m_assets != nullptr && instance.prefab.valid();
+
+    ImGui::BeginDisabled(!canOpen);
+    if (ImGui::Button("Open")) {
+        m_revealAsset(instance.prefab.sourcePath());
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!canApply);
+    if (ImGui::Button("Apply")) {
+        try {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
+            if (m_assets->isLoaded(instance.prefab.handle())) {
+                m_assets->unload(instance.prefab.handle());
+            }
+            const auto prefab = m_assets->loadResource<vshade::scene::Prefab>(
+                instance.prefab
+            );
+            entity.scene().applyPrefab(entity, *prefab);
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
+        } catch (const std::exception& error) {
+            if (m_editHooks.revert) {
+                m_editHooks.revert();
+            }
+            ENGINE_ERROR(
+                "Failed to apply prefab '{}': {}",
+                path,
+                error.what()
+            );
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Unpack")) {
+        if (m_editHooks.begin) {
+            m_editHooks.begin();
+        }
+        entity.scene().unpackPrefab(entity);
+        if (m_editHooks.commit) {
+            m_editHooks.commit();
+        }
     }
 }
 

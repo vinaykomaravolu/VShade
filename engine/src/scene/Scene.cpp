@@ -466,7 +466,21 @@ void Scene::copyPrefabComponents(
     }
 }
 
-void Scene::destroyEntity(const Entity entity) {
+void Scene::unpackPrefab(Entity instanceRoot) {
+    if (!valid(instanceRoot) || !instanceRoot.has<PrefabInstanceComponent>()) {
+        throw std::invalid_argument("unpackPrefab requires a linked prefab instance root");
+    }
+    instanceRoot.remove<PrefabInstanceComponent>();
+}
+
+void Scene::collectDescendants(const Entity entity, std::vector<Entity>& descendants) {
+    for (const Entity child : children(entity)) {
+        collectDescendants(child, descendants);
+        descendants.push_back(child);
+    }
+}
+
+void Scene::destroyEntityInternal(const Entity entity) {
     if (!valid(entity)) {
         throw std::invalid_argument("Cannot destroy an invalid or foreign entity");
     }
@@ -481,6 +495,31 @@ void Scene::destroyEntity(const Entity entity) {
     }
     m_entitiesByUuid.erase(destroyedUuid);
     m_registry.destroy(entity.m_handle);
+}
+
+void Scene::destroyEntity(const Entity entity) {
+    if (!valid(entity)) {
+        throw std::invalid_argument("Cannot destroy an invalid or foreign entity");
+    }
+
+    if (entity.has<PrefabInstanceComponent>()) {
+        const PrefabInstanceComponent instance =
+            entity.get<PrefabInstanceComponent>();
+        std::vector<Entity> descendants;
+        collectDescendants(entity, descendants);
+        for (const Entity descendant : descendants) {
+            if (valid(descendant)) {
+                destroyEntityInternal(descendant);
+            }
+        }
+        for (const PrefabEntityLink& link : instance.entities) {
+            const Entity mapped = findEntity(link.instanceUuid);
+            if (mapped && mapped != entity && valid(mapped)) {
+                destroyEntityInternal(mapped);
+            }
+        }
+    }
+    destroyEntityInternal(entity);
 }
 
 void Scene::setParent(const Entity child, const Entity newParent) {

@@ -142,6 +142,12 @@ EditorLayer::EditorLayer(
       m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
+    m_inspectorPanel.setRevealAssetHandler(
+        [this](std::filesystem::path path) {
+            m_showContentBrowser = true;
+            m_contentBrowser.reveal(path);
+        }
+    );
     AssetSelector::setCatalogChangedCallback([this] {
         saveProjectCatalog();
     });

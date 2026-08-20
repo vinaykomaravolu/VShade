@@ -144,10 +144,50 @@ void ContentBrowserPanel::setRoot(
     m_selectedPath.clear();
 }
 
+void ContentBrowserPanel::reveal(const std::filesystem::path& path) {
+    if (m_rootDirectory.empty() || path.empty()) {
+        return;
+    }
+
+    std::error_code error;
+    std::filesystem::path resolved = path.lexically_normal();
+    if (resolved.is_relative()) {
+        const std::filesystem::path underRoot =
+            (m_rootDirectory / resolved).lexically_normal();
+        if (std::filesystem::exists(underRoot, error)) {
+            resolved = underRoot;
+        } else {
+            resolved = (m_rootDirectory.parent_path() / path).lexically_normal();
+        }
+    }
+    if (!std::filesystem::exists(resolved, error)) {
+        return;
+    }
+
+    const std::filesystem::path relative =
+        std::filesystem::relative(resolved, m_rootDirectory, error);
+    if (error || relative.empty() || relative.generic_string().starts_with("..")) {
+        return;
+    }
+
+    if (std::filesystem::is_directory(resolved, error)) {
+        m_currentDirectory = resolved;
+        m_selectedPath.clear();
+    } else {
+        m_currentDirectory = resolved.parent_path();
+        m_selectedPath = resolved;
+    }
+    m_focusRequested = true;
+}
+
 std::optional<std::filesystem::path>
 ContentBrowserPanel::onImGuiRender() {
     std::optional<std::filesystem::path> sceneToOpen;
     const bool visible = ImGui::Begin("Content Browser");
+    if (m_focusRequested) {
+        ImGui::SetWindowFocus();
+        m_focusRequested = false;
+    }
     if (!visible) {
         ImGui::End();
         return sceneToOpen;

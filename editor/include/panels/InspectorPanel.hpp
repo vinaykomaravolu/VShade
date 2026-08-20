@@ -4,6 +4,9 @@
 
 #include <scene/Entity.hpp>
 
+#include <filesystem>
+#include <functional>
+
 namespace vshade::asset {
 class AssetManager;
 }
@@ -14,10 +17,12 @@ class InspectorPanel final {
 public:
     void setAssetManager(vshade::asset::AssetManager& assets) noexcept;
     void setEditHooks(SceneEditHooks hooks);
+    void setRevealAssetHandler(std::function<void(std::filesystem::path)> handler);
     void onImGuiRender(vshade::scene::Entity selectedEntity);
 
 private:
     void drawTag(vshade::scene::Entity entity);
+    void drawPrefab(vshade::scene::Entity entity);
     void drawTransform(vshade::scene::Entity entity);
     void drawCamera(vshade::scene::Entity entity);
     void drawSpriteRenderer(vshade::scene::Entity entity);
@@ -28,6 +33,7 @@ private:
 
     vshade::asset::AssetManager* m_assets = nullptr;
     SceneEditHooks m_editHooks;
+    std::function<void(std::filesystem::path)> m_revealAsset;
 };
 
 } // namespace editor

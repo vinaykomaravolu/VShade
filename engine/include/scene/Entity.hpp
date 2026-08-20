@@ -150,6 +150,12 @@ public:
     /** @brief Changes the human-readable entity name. */
     void setName(std::string name);
 
+    /** @brief Returns the scene that owns this entity. */
+    [[nodiscard]] Scene& scene();
+
+    /** @brief Returns the scene that owns this entity. */
+    [[nodiscard]] const Scene& scene() const;
+
     /** @brief Reports whether this handle still identifies a live entity. */
     [[nodiscard]] bool valid() const noexcept;
 
