@@ -29,6 +29,16 @@ target_include_directories(VShadeImGui SYSTEM PUBLIC
 target_link_libraries(VShadeImGui PUBLIC glfw OpenGL::GL)
 target_compile_features(VShadeImGui PUBLIC cxx_std_20)
 
+add_library(VShadeEditorCore STATIC
+    src/AssetImportService.cpp
+    src/EditorDocument.cpp
+    src/UndoHistory.cpp
+)
+add_library(VShade::EditorCore ALIAS VShadeEditorCore)
+target_include_directories(VShadeEditorCore PUBLIC include)
+target_link_libraries(VShadeEditorCore PUBLIC VShade::Engine)
+target_compile_features(VShadeEditorCore PUBLIC cxx_std_20)
+
 add_executable(VShadeEditor
     ImGui/ImGuiTheme.cpp
     src/main.cpp
@@ -36,7 +46,6 @@ add_executable(VShadeEditor
     src/EditorCamera.cpp
     src/EditorIcons.cpp
     src/EditorLayer.cpp
-    src/UndoHistory.cpp
     src/panels/Console.cpp
     src/panels/ContentBrowserPanel.cpp
     src/panels/InspectorPanel.cpp
@@ -48,7 +57,11 @@ target_include_directories(VShadeEditor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     include
 )
-target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)
+target_link_libraries(VShadeEditor PRIVATE
+    VShade::EditorCore
+    VShade::Engine
+    VShadeImGui
+)
 target_compile_definitions(VShadeEditor PRIVATE
     VSHADE_EDITOR_ICON_DIR="$<TARGET_FILE_DIR:VShadeEditor>/icons"
 )

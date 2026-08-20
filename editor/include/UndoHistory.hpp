@@ -50,11 +50,13 @@ public:
     [[nodiscard]] bool canUndo() const noexcept;
     [[nodiscard]] bool canRedo() const noexcept;
     [[nodiscard]] bool isRecording() const noexcept;
+    [[nodiscard]] std::uint64_t currentRevision() const noexcept;
 
 private:
     struct Snapshot {
         std::string sceneJson;
         std::uint64_t selectedUuid = 0;
+        std::uint64_t revision = 0;
     };
 
     struct Edit {
@@ -75,6 +77,8 @@ private:
     std::optional<Snapshot> m_pending;
     std::vector<Edit> m_undo;
     std::vector<Edit> m_redo;
+    std::uint64_t m_currentRevision = 0;
+    std::uint64_t m_nextRevision = 1;
 };
 
 } // namespace editor

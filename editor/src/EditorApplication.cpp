@@ -62,12 +62,20 @@ void EditorApplication::onStart() {
         [this]() { close(); }
     );
     m_editorLayer->onAttach();
+    window().setCloseCallback([this] {
+        if (m_editorLayer) {
+            m_editorLayer->requestClose();
+            return false;
+        }
+        return true;
+    });
 }
 
 void EditorApplication::onUpdate(const float deltaTime) {
     if (m_editorLayer) {
         m_editorLayer->onUpdate(deltaTime);
         window().setCursorCaptured(m_editorLayer->wantsCursorCapture());
+        window().setTitle(m_editorLayer->windowTitle());
     }
 }
 
@@ -89,6 +97,7 @@ void EditorApplication::onRender() {
 
 void EditorApplication::onShutdown() noexcept {
     window().setCursorCaptured(false);
+    window().setCloseCallback({});
     m_editorLayer.reset();
     EditorIcons::shutdown();
 

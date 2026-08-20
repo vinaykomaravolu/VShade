@@ -5,6 +5,7 @@ add_executable(VShadeTests
     CameraControllerTests.cpp
     DebugDrawTests.cpp
     DebugDrawVisualTests.cpp
+    EditorTests.cpp
     FilesystemTests.cpp
     LightingTests.cpp
     LogTests.cpp
@@ -34,6 +35,7 @@ add_executable(VShadeTests
 target_link_libraries(VShadeTests
     PRIVATE
         VShade::Engine
+        VShade::EditorCore
         Catch2::Catch2WithMain
 )
 
@@ -47,6 +49,7 @@ target_compile_definitions(VShadeTests PRIVATE
     VSHADE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
     VSHADE_TEST_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
     VSHADE_FILESYSTEM_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/filesystem"
+    VSHADE_EDITOR_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/editor"
     VSHADE_MATERIAL_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/material"
     VSHADE_PHYSICS2D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/physics2d"
     VSHADE_PHYSICS3D_OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output/physics3d"

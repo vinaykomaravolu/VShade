@@ -1,9 +1,11 @@
 #include "EditorIcons.hpp"
 
+#include <core/Log.hpp>
 #include <renderer/Texture.hpp>
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
-#include <stdexcept>
 #include <string>
 
 namespace editor {
@@ -39,9 +41,24 @@ std::shared_ptr<vshade::renderer::Texture2D> g_prefab;
             )
         );
     } catch (const std::exception& error) {
-        throw std::runtime_error(
-            "Failed to load editor icon '" + path.generic_string() + "': " +
+        ENGINE_ERROR(
+            "Failed to load editor icon '{}': {}; using fallback",
+            path.generic_string(),
             error.what()
+        );
+        constexpr std::array<std::uint8_t, 16> fallbackPixels{
+            255, 0, 255, 255,
+            32, 32, 32, 255,
+            32, 32, 32, 255,
+            255, 0, 255, 255,
+        };
+        return std::make_shared<vshade::renderer::Texture2D>(
+            2,
+            2,
+            vshade::renderer::TextureFormat::RGBA8,
+            fallbackPixels.data(),
+            vshade::renderer::TextureFilter::Nearest,
+            vshade::renderer::TextureWrap::ClampToEdge
         );
     }
 }

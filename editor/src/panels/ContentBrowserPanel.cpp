@@ -142,6 +142,7 @@ void ContentBrowserPanel::setRoot(
     m_rootDirectory = std::move(rootDirectory).lexically_normal();
     m_currentDirectory = m_rootDirectory;
     m_selectedPath.clear();
+    refresh();
 }
 
 void ContentBrowserPanel::reveal(const std::filesystem::path& path) {
@@ -178,6 +179,45 @@ void ContentBrowserPanel::reveal(const std::filesystem::path& path) {
         m_selectedPath = resolved;
     }
     m_focusRequested = true;
+    refresh();
+}
+
+void ContentBrowserPanel::refresh() noexcept {
+    m_refreshRequested = true;
+}
+
+void ContentBrowserPanel::refreshEntries() {
+    m_entries.clear();
+    m_directoryError.clear();
+    std::filesystem::directory_iterator iterator(
+        m_currentDirectory,
+        std::filesystem::directory_options::skip_permission_denied,
+        m_directoryError
+    );
+    const std::filesystem::directory_iterator end;
+    while (!m_directoryError && iterator != end) {
+        const std::string filename =
+            iterator->path().filename().generic_string();
+        if (!filename.empty() && filename.front() != '.') {
+            m_entries.push_back(*iterator);
+        }
+        iterator.increment(m_directoryError);
+    }
+    std::ranges::sort(
+        m_entries,
+        [](const auto& left, const auto& right) {
+            std::error_code leftError;
+            std::error_code rightError;
+            const bool leftDirectory = left.is_directory(leftError);
+            const bool rightDirectory = right.is_directory(rightError);
+            if (leftDirectory != rightDirectory) {
+                return leftDirectory;
+            }
+            return lowercase(left.path().filename().generic_string())
+                < lowercase(right.path().filename().generic_string());
+        }
+    );
+    m_refreshRequested = false;
 }
 
 std::optional<std::filesystem::path>
@@ -216,43 +256,22 @@ ContentBrowserPanel::onImGuiRender() {
                 ? m_rootDirectory
                 : parent;
             m_selectedPath.clear();
+            refresh();
         }
         ImGui::SameLine();
     }
+    if (ImGui::Button("Refresh")) {
+        refresh();
+    }
+    ImGui::SameLine();
     ImGui::TextUnformatted(
         currentLocationLabel(m_rootDirectory, m_currentDirectory).c_str()
     );
     ImGui::Separator();
 
-    std::vector<std::filesystem::directory_entry> entries;
-    std::filesystem::directory_iterator iterator(
-        m_currentDirectory,
-        std::filesystem::directory_options::skip_permission_denied,
-        error
-    );
-    const std::filesystem::directory_iterator end;
-    while (!error && iterator != end) {
-        const std::string filename =
-            iterator->path().filename().generic_string();
-        if (!filename.empty() && filename.front() != '.') {
-            entries.push_back(*iterator);
-        }
-        iterator.increment(error);
+    if (m_refreshRequested) {
+        refreshEntries();
     }
-    std::ranges::sort(
-        entries,
-        [](const auto& left, const auto& right) {
-            std::error_code leftError;
-            std::error_code rightError;
-            const bool leftDirectory = left.is_directory(leftError);
-            const bool rightDirectory = right.is_directory(rightError);
-            if (leftDirectory != rightDirectory) {
-                return leftDirectory;
-            }
-            return lowercase(left.path().filename().generic_string())
-                < lowercase(right.path().filename().generic_string());
-        }
-    );
 
     const float spacing = 10.0F;
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {spacing, spacing});
@@ -264,7 +283,7 @@ ContentBrowserPanel::onImGuiRender() {
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     int index = 0;
-    for (const auto& entry : entries) {
+    for (const auto& entry : m_entries) {
         const std::filesystem::path path = entry.path();
         const std::string filename = path.filename().generic_string();
         std::error_code entryError;
@@ -291,6 +310,7 @@ ContentBrowserPanel::onImGuiRender() {
             if (directory) {
                 m_currentDirectory = path.lexically_normal();
                 m_selectedPath.clear();
+                refresh();
             } else if (type == vshade::asset::AssetType::Scene) {
                 sceneToOpen = path;
             }
@@ -370,10 +390,10 @@ ContentBrowserPanel::onImGuiRender() {
     }
     ImGui::PopStyleVar();
 
-    if (entries.empty() && !error) {
+    if (m_entries.empty() && !m_directoryError) {
         ImGui::TextDisabled("This folder is empty.");
     }
-    if (error) {
+    if (m_directoryError) {
         ImGui::TextDisabled("Unable to read this directory.");
     }
 

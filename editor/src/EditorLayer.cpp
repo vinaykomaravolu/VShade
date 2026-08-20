@@ -1,4 +1,5 @@
 #include "EditorLayer.hpp"
+#include "AssetImportService.hpp"
 #include "SceneEditHooks.hpp"
 #include "widgets/AssetSelector.hpp"
 
@@ -25,6 +26,12 @@
 #include <system_error>
 #include <utility>
 
+#if defined(_WIN32)
+    #define WIN32_LEAN_AND_MEAN
+    #define NOMINMAX
+    #include <Windows.h>
+#endif
+
 #include <ImGuiFileDialog.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -38,22 +45,77 @@ constexpr const char* importAssetDialogKey = "ImportAssetDialog";
 constexpr const char* openProjectDialogKey = "OpenProjectDialog";
 constexpr const char* newProjectDialogKey = "NewProjectDialog";
 constexpr const char* savePrefabDialogKey = "SavePrefabDialog";
+constexpr const char* unsavedChangesPopup = "Unsaved Scene Changes";
 
-[[nodiscard]] std::filesystem::path importDestinationDirectory(
-    const vshade::project::Project& project,
-    const vshade::asset::AssetType type
+[[nodiscard]] bool replaceFileAtomically(
+    const std::filesystem::path& source,
+    const std::filesystem::path& destination,
+    std::string& errorMessage
 ) {
-    switch (type) {
-        case vshade::asset::AssetType::Model:
-            return project.assetDirectory() / "models";
-        case vshade::asset::AssetType::Texture:
-            return project.assetDirectory() / "textures";
-        case vshade::asset::AssetType::Audio:
-            return project.assetDirectory() / "audio";
-        case vshade::asset::AssetType::Prefab:
-            return project.prefabDirectory();
-        default:
-            throw std::invalid_argument("Unsupported asset file type");
+#if defined(_WIN32)
+    if (MoveFileExW(
+            source.c_str(),
+            destination.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+        ) != 0) {
+        return true;
+    }
+    const std::error_code error(
+        static_cast<int>(GetLastError()),
+        std::system_category()
+    );
+#else
+    std::error_code error;
+    std::filesystem::rename(source, destination, error);
+    if (!error) {
+        return true;
+    }
+#endif
+    errorMessage = error.message();
+    return false;
+}
+
+[[nodiscard]] bool serializeSceneAtomically(
+    const vshade::scene::Scene& scene,
+    const std::filesystem::path& path,
+    std::string& errorMessage
+) {
+    if (path.empty()) {
+        errorMessage = "A scene path is required";
+        return false;
+    }
+
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    std::error_code filesystemError;
+    std::filesystem::remove(temporary, filesystemError);
+
+    vshade::scene::SceneSerializer serializer(scene);
+    if (!serializer.serialize(
+            temporary,
+            vshade::scene::SceneJsonFormat::Compact
+        )) {
+        errorMessage = serializer.lastError();
+        return false;
+    }
+    if (replaceFileAtomically(temporary, path, errorMessage)) {
+        return true;
+    }
+    filesystemError.clear();
+    std::filesystem::remove(temporary, filesystemError);
+    return false;
+}
+
+void loadProjectCatalogInto(
+    vshade::asset::AssetManager& assets,
+    const vshade::project::Project& project
+) {
+    assets.setRootDirectory(project.projectDirectory());
+    assets.clearCatalog();
+    const std::filesystem::path catalogPath = project.assetRegistryPath();
+    std::error_code error;
+    if (std::filesystem::is_regular_file(catalogPath, error) && !error) {
+        assets.loadCatalog(catalogPath);
     }
 }
 
@@ -144,6 +206,7 @@ EditorLayer::EditorLayer(
       m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
     m_inspectorPanel.setAssetManager(assets);
+    m_inspectorPanel.setAssetSelector(m_assetSelector);
     m_inspectorPanel.setScriptRegistry(scripts);
     m_inspectorPanel.setRevealAssetHandler(
         [this](std::filesystem::path path) {
@@ -151,9 +214,14 @@ EditorLayer::EditorLayer(
             m_contentBrowser.reveal(path);
         }
     );
-    AssetSelector::setCatalogChangedCallback([this] {
+    m_assetSelector.setCatalogChangedCallback([this] {
         saveProjectCatalog();
     });
+    m_assetSelector.setImportCallback(
+        [this](const std::filesystem::path& source) {
+            return importAsset(source);
+        }
+    );
     m_sceneHierarchyPanel.setSavePrefabHandler([this](vshade::scene::Entity entity) {
         m_selectedEntity = entity;
         saveSelectedAsPrefab();
@@ -170,7 +238,8 @@ EditorLayer::EditorLayer(
 }
 
 EditorLayer::~EditorLayer() {
-    AssetSelector::setCatalogChangedCallback({});
+    m_assetSelector.setCatalogChangedCallback({});
+    m_assetSelector.setImportCallback({});
 }
 
 void EditorLayer::onAttach() {
@@ -191,17 +260,30 @@ void EditorLayer::onUpdate(const float deltaTime) {
 }
 
 void EditorLayer::onImGuiRender() {
-    DrawDockspace();
+    drawDockspace();
+}
+
+void EditorLayer::requestClose() {
+    requestExit();
 }
 
 bool EditorLayer::wantsCursorCapture() const noexcept {
     return m_viewport.wantsCursorCapture();
 }
 
-void EditorLayer::DrawDockspace()
+std::string EditorLayer::windowTitle() const {
+    std::string title = m_document.displayName();
+    if (m_document.isDirty()) {
+        title += " *";
+    }
+    title += " - VShade Editor";
+    return title;
+}
+
+void EditorLayer::drawDockspace()
 {
-    DrawMenuBar();
-    DrawToolbar();
+    drawMenuBar();
+    drawToolbar();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
@@ -246,7 +328,7 @@ void EditorLayer::DrawDockspace()
     }
 
     if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr) {
-        BuildDefaultDockLayout(dockspaceId);
+        buildDefaultDockLayout(dockspaceId);
     }
 
     ImGui::DockSpace(
@@ -267,22 +349,26 @@ void EditorLayer::DrawDockspace()
         m_viewport.onImGuiRender(m_selectedEntity);
     }
     if (m_showInspector) {
+        m_inspectorPanel.setReadOnly(m_sceneState != SceneState::Edit);
         m_inspectorPanel.onImGuiRender(m_selectedEntity);
     }
 
     if (m_showContentBrowser) {
         if (const auto scenePath = m_contentBrowser.onImGuiRender();
             scenePath && m_sceneState == SceneState::Edit) {
-            loadScene(*scenePath);
+            requestTransition([this, path = *scenePath] {
+                static_cast<void>(loadScene(path));
+            });
         }
     }
     if (m_showConsole) {
         m_console.onImGuiRender();
     }
-    DrawFileDialogs();
+    drawFileDialogs();
+    drawUnsavedChangesModal();
 }
 
-void EditorLayer::BuildDefaultDockLayout(const std::uint32_t dockspaceId) {
+void EditorLayer::buildDefaultDockLayout(const std::uint32_t dockspaceId) {
     ImGui::DockBuilderRemoveNode(dockspaceId);
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodePos(dockspaceId, ImGui::GetWindowPos());
@@ -319,7 +405,7 @@ void EditorLayer::BuildDefaultDockLayout(const std::uint32_t dockspaceId) {
     ImGui::DockBuilderFinish(dockspaceId);
 }
 
-void EditorLayer::DrawMenuBar() {
+void EditorLayer::drawMenuBar() {
     if (!ImGui::BeginMainMenuBar()) {
         return;
     }
@@ -327,10 +413,10 @@ void EditorLayer::DrawMenuBar() {
     if (ImGui::BeginMenu("File")) {
         ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
         if (ImGui::MenuItem("New Scene")) {
-            newScene();
+            requestTransition([this] { newScene(); });
         }
         if (ImGui::MenuItem("Open Scene...")) {
-            openScene();
+            requestTransition([this] { openScene(); });
         }
         if (ImGui::MenuItem("Save Scene")) {
             saveScene();
@@ -364,15 +450,15 @@ void EditorLayer::DrawMenuBar() {
         ImGui::Separator();
         ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
         if (ImGui::MenuItem("Open Project...")) {
-            openProject();
+            requestTransition([this] { openProject(); });
         }
         if (ImGui::MenuItem("New Project...")) {
-            newProject();
+            requestTransition([this] { newProject(); });
         }
         ImGui::EndDisabled();
         ImGui::Separator();
-        if (ImGui::MenuItem("Exit") && m_requestExit) {
-            m_requestExit();
+        if (ImGui::MenuItem("Exit")) {
+            requestExit();
         }
         ImGui::EndMenu();
     }
@@ -428,15 +514,19 @@ void EditorLayer::DrawMenuBar() {
         ImGui::EndMenu();
     }
 
-    const float titleWidth = ImGui::CalcTextSize("VShade").x;
+    std::string title = "VShade - " + m_document.displayName();
+    if (m_document.isDirty()) {
+        title += " *";
+    }
+    const float titleWidth = ImGui::CalcTextSize(title.c_str()).x;
     ImGui::SetCursorPosX(
         std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - titleWidth - 12.0F)
     );
-    ImGui::TextUnformatted("VShade");
+    ImGui::TextUnformatted(title.c_str());
     ImGui::EndMainMenuBar();
 }
 
-void EditorLayer::DrawToolbar() {
+void EditorLayer::drawToolbar() {
     constexpr float toolbarHeight = 38.0F;
     constexpr ImGuiWindowFlags toolbarFlags =
         ImGuiWindowFlags_NoScrollbar
@@ -510,7 +600,52 @@ void EditorLayer::DrawToolbar() {
     ImGui::End();
 }
 
-void EditorLayer::DrawFileDialogs() {
+void EditorLayer::drawUnsavedChangesModal() {
+    if (m_openUnsavedChangesRequested) {
+        ImGui::OpenPopup(unsavedChangesPopup);
+        m_openUnsavedChangesRequested = false;
+    }
+
+    if (!ImGui::BeginPopupModal(
+            unsavedChangesPopup,
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        return;
+    }
+
+    ImGui::Text(
+        "Save changes to %s before continuing?",
+        m_document.displayName().c_str()
+    );
+    ImGui::TextDisabled("Unsaved scene changes will be lost if discarded.");
+    ImGui::Separator();
+
+    if (ImGui::Button("Save", {100.0F, 0.0F})) {
+        if (m_document.path().empty()) {
+            m_continueAfterSave = true;
+            saveSceneAs();
+            ImGui::CloseCurrentPopup();
+        } else if (saveScene()) {
+            ImGui::CloseCurrentPopup();
+            completePendingTransition();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Discard", {100.0F, 0.0F})) {
+        ImGui::CloseCurrentPopup();
+        completePendingTransition();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", {100.0F, 0.0F})) {
+        ImGui::CloseCurrentPopup();
+        cancelPendingTransition();
+    }
+
+    ImGui::EndPopup();
+}
+
+void EditorLayer::drawFileDialogs() {
     if (ImGuiFileDialog::Instance()->Display(openSceneDialogKey)) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             const std::filesystem::path selectedPath =
@@ -521,20 +656,33 @@ void EditorLayer::DrawFileDialogs() {
     }
 
     if (ImGuiFileDialog::Instance()->Display(saveSceneDialogKey)) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            m_activeScenePath = ImGuiFileDialog::Instance()->GetFilePathName(
-                IGFD_ResultMode_OverwriteFileExt
+        bool saved = false;
+        const bool accepted = ImGuiFileDialog::Instance()->IsOk();
+        if (accepted) {
+            saved = saveSceneTo(
+                ImGuiFileDialog::Instance()->GetFilePathName(
+                    IGFD_ResultMode_OverwriteFileExt
+                )
             );
-            saveScene();
         }
         ImGuiFileDialog::Instance()->Close();
+        if (m_continueAfterSave) {
+            m_continueAfterSave = false;
+            if (saved) {
+                completePendingTransition();
+            } else if (accepted) {
+                m_openUnsavedChangesRequested = true;
+            } else {
+                cancelPendingTransition();
+            }
+        }
     }
 
     if (ImGuiFileDialog::Instance()->Display(importAssetDialogKey)) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
-            importAsset(selectedPath);
+            static_cast<void>(importAsset(selectedPath));
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -544,7 +692,9 @@ void EditorLayer::DrawFileDialogs() {
             const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
             try {
-                setProject(vshade::project::Project::load(selectedPath));
+                static_cast<void>(setProject(
+                    vshade::project::Project::load(selectedPath)
+                ));
             } catch (const std::exception& error) {
                 ENGINE_ERROR(
                     "Failed to open project '{}': {}",
@@ -561,8 +711,8 @@ void EditorLayer::DrawFileDialogs() {
             const std::filesystem::path selectedDirectory =
                 ImGuiFileDialog::Instance()->GetCurrentPath();
             try {
-                setProject(vshade::project::Project::create(
-                    selectedDirectory
+                static_cast<void>(setProject(
+                    vshade::project::Project::create(selectedDirectory)
                 ));
             } catch (const std::exception& error) {
                 ENGINE_ERROR(
@@ -586,13 +736,15 @@ void EditorLayer::DrawFileDialogs() {
 }
 
 void EditorLayer::setActiveScene(
-    std::shared_ptr<vshade::scene::Scene> scene
+    std::shared_ptr<vshade::scene::Scene> scene,
+    std::filesystem::path path
 ) {
     if (!scene) {
         return;
     }
     m_editorScene = std::move(scene);
     m_undoHistory.clear();
+    m_document.reset(std::move(path), m_undoHistory.currentRevision());
     bindActiveScene();
 }
 
@@ -600,7 +752,6 @@ void EditorLayer::newScene() {
     setActiveScene(
         std::make_shared<vshade::scene::Scene>("Untitled Scene")
     );
-    m_activeScenePath.clear();
 }
 
 void EditorLayer::openScene() {
@@ -618,9 +769,9 @@ void EditorLayer::openScene() {
     );
 }
 
-void EditorLayer::loadScene(const std::filesystem::path& path) {
+bool EditorLayer::loadScene(const std::filesystem::path& path) {
     if (m_sceneState != SceneState::Edit) {
-        return;
+        return false;
     }
 
     auto scene = std::make_shared<vshade::scene::Scene>(
@@ -633,36 +784,55 @@ void EditorLayer::loadScene(const std::filesystem::path& path) {
             path.generic_string(),
             serializer.lastError()
         );
-        return;
+        return false;
     }
 
-    setActiveScene(std::move(scene));
-    m_activeScenePath = path;
-    if (m_assets && m_editorScene) {
-        m_editorScene->applyPrefabInstances(*m_assets);
+    try {
+        if (m_assets) {
+            scene->applyPrefabInstances(*m_assets);
+        }
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to resolve scene assets '{}': {}",
+            path.generic_string(),
+            error.what()
+        );
+        return false;
     }
+    setActiveScene(std::move(scene), path);
+    return true;
 }
 
-void EditorLayer::saveScene() {
+bool EditorLayer::saveScene() {
     if (!m_editorScene) {
-        return;
+        return false;
     }
-    if (m_activeScenePath.empty()) {
+    if (m_document.path().empty()) {
         saveSceneAs();
-        return;
+        return false;
+    }
+    return saveSceneTo(m_document.path());
+}
+
+bool EditorLayer::saveSceneTo(const std::filesystem::path& path) {
+    if (!m_editorScene || path.empty()) {
+        return false;
     }
 
-    vshade::scene::SceneSerializer serializer(*m_editorScene);
-    if (!serializer.serialize(m_activeScenePath, vshade::scene::SceneJsonFormat::Compact)) {
+    std::string error;
+    if (!serializeSceneAtomically(*m_editorScene, path, error)) {
         ENGINE_ERROR(
             "Failed to save scene '{}': {}",
-            m_activeScenePath.generic_string(),
-            serializer.lastError()
+            path.generic_string(),
+            error
         );
-        return;
+        return false;
     }
-    ENGINE_INFO("Saved scene '{}'", m_activeScenePath.generic_string());
+    m_document.setPath(path);
+    m_document.markSaved();
+    ENGINE_INFO("Saved scene '{}'", path.generic_string());
     recordStartSceneIfUnset();
+    return true;
 }
 
 void EditorLayer::saveSceneAs() {
@@ -671,9 +841,9 @@ void EditorLayer::saveSceneAs() {
     }
 
     IGFD::FileDialogConfig config;
-    if (!m_activeScenePath.empty()) {
-        config.path = m_activeScenePath.parent_path().generic_string();
-        config.fileName = m_activeScenePath.filename().generic_string();
+    if (!m_document.path().empty()) {
+        config.path = m_document.path().parent_path().generic_string();
+        config.fileName = m_document.path().filename().generic_string();
     } else {
         config.path = m_project
             ? m_project->sceneDirectory().generic_string()
@@ -721,35 +891,83 @@ void EditorLayer::openProject() {
     );
 }
 
-void EditorLayer::setProject(
+bool EditorLayer::setProject(
     std::shared_ptr<vshade::project::Project> project
 ) {
-    if (!project) {
-        return;
+    if (!project || !m_assets || m_sceneState != SceneState::Edit) {
+        return false;
     }
+
+    std::shared_ptr<vshade::scene::Scene> nextScene;
+    const std::filesystem::path startScene = project->startScenePath();
+    try {
+        vshade::asset::AssetManager candidateAssets;
+        loadProjectCatalogInto(candidateAssets, *project);
+
+        if (startScene.empty()) {
+            nextScene = std::make_shared<vshade::scene::Scene>("Untitled Scene");
+        } else {
+            if (!std::filesystem::is_regular_file(startScene)) {
+                throw std::runtime_error(
+                    "Project start scene does not exist: "
+                    + startScene.generic_string()
+                );
+            }
+            nextScene = std::make_shared<vshade::scene::Scene>(
+                startScene.stem().string()
+            );
+            vshade::scene::SceneSerializer serializer(*nextScene);
+            if (!serializer.deserialize(startScene)) {
+                throw std::runtime_error(serializer.lastError());
+            }
+            nextScene->applyPrefabInstances(candidateAssets);
+        }
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to prepare project '{}': {}",
+            project->projectFile().generic_string(),
+            error.what()
+        );
+        return false;
+    }
+
+    const std::shared_ptr<vshade::project::Project> previousProject = m_project;
+    try {
+        loadProjectCatalogInto(*m_assets, *project);
+    } catch (const std::exception& error) {
+        ENGINE_ERROR(
+            "Failed to activate project '{}': {}",
+            project->projectFile().generic_string(),
+            error.what()
+        );
+        try {
+            if (previousProject) {
+                loadProjectCatalogInto(*m_assets, *previousProject);
+            } else {
+                m_assets->clearCatalog();
+                m_assets->setRootDirectory({});
+            }
+        } catch (const std::exception& rollbackError) {
+            ENGINE_CRITICAL(
+                "Failed to restore the previous asset catalog: {}",
+                rollbackError.what()
+            );
+        }
+        return false;
+    }
+
     m_project = std::move(project);
     m_contentBrowser.setRoot(m_project->assetDirectory());
-    AssetSelector::setSearchDirectory(m_project->assetDirectory());
-    loadProjectCatalog();
-    if (m_assets) {
-        AssetSelector::discover(*m_assets);
-    }
+    m_assetSelector.setSearchDirectory(m_project->assetDirectory());
+    m_assetSelector.discover(*m_assets);
+    setActiveScene(std::move(nextScene), startScene);
+    m_continueAfterSave = false;
+    cancelPendingTransition();
     ENGINE_INFO(
         "Opened project '{}'",
         m_project->projectFile().generic_string()
     );
-    const std::filesystem::path startScene =
-        m_project->startScenePath();
-    if (!startScene.empty()) {
-        if (std::filesystem::is_regular_file(startScene)) {
-            loadScene(startScene);
-        } else {
-            ENGINE_WARN(
-                "Project start scene does not exist: '{}'",
-                startScene.generic_string()
-            );
-        }
-    }
+    return true;
 }
 
 void EditorLayer::loadProjectCatalog() {
@@ -757,20 +975,12 @@ void EditorLayer::loadProjectCatalog() {
         return;
     }
 
-    m_assets->setRootDirectory(m_project->projectDirectory());
-    m_assets->clearCatalog();
-    const std::filesystem::path catalogPath = m_project->assetRegistryPath();
-    std::error_code error;
-    if (!std::filesystem::is_regular_file(catalogPath, error) || error) {
-        return;
-    }
-
     try {
-        m_assets->loadCatalog(catalogPath);
+        loadProjectCatalogInto(*m_assets, *m_project);
     } catch (const std::exception& catalogError) {
         ENGINE_ERROR(
             "Failed to load asset catalog '{}': {}",
-            catalogPath.generic_string(),
+            m_project->assetRegistryPath().generic_string(),
             catalogError.what()
         );
     }
@@ -792,38 +1002,28 @@ void EditorLayer::saveProjectCatalog() {
     }
 }
 
-void EditorLayer::importAsset(
+std::optional<std::filesystem::path> EditorLayer::importAsset(
     const std::filesystem::path& sourcePath
 ) {
     if (!m_project || !m_assets || sourcePath.empty()) {
-        return;
+        return std::nullopt;
     }
 
     try {
         const vshade::asset::AssetType type =
             vshade::asset::assetTypeFromExtension(sourcePath.extension());
-        const std::filesystem::path destinationDirectory =
-            importDestinationDirectory(*m_project, type);
-        std::filesystem::create_directories(destinationDirectory);
-        const std::filesystem::path destination =
-            destinationDirectory / sourcePath.filename();
-        std::error_code error;
-        const bool destinationExists =
-            std::filesystem::exists(destination, error);
-        if (error) {
-            throw std::runtime_error("Unable to inspect the asset destination");
-        }
-        if (destinationExists) {
-            error.clear();
-            if (!std::filesystem::equivalent(sourcePath, destination, error)
-                || error) {
-                throw std::runtime_error(
-                    "An asset with this filename already exists"
-                );
+        const AssetImportResult imported = AssetImportService::import(
+            *m_project,
+            sourcePath,
+            AssetCollisionPolicy::KeepBoth
+        );
+        if (!imported) {
+            if (imported.cancelled) {
+                return std::nullopt;
             }
-        } else {
-            std::filesystem::copy_file(sourcePath, destination);
+            throw std::runtime_error(imported.error);
         }
+        const std::filesystem::path& destination = imported.destination;
 
         switch (type) {
             case vshade::asset::AssetType::Model:
@@ -851,13 +1051,16 @@ void EditorLayer::importAsset(
         }
         ENGINE_INFO("Imported asset '{}'", destination.generic_string());
         saveProjectCatalog();
-        AssetSelector::discover(*m_assets);
+        m_assetSelector.discover(*m_assets);
+        m_contentBrowser.refresh();
+        return destination;
     } catch (const std::exception& error) {
         ENGINE_ERROR(
             "Failed to import asset '{}': {}",
             sourcePath.generic_string(),
             error.what()
         );
+        return std::nullopt;
     }
 }
 
@@ -926,7 +1129,7 @@ void EditorLayer::writePrefab(const std::filesystem::path& path) {
             }
             m_editorScene->applyPrefabInstances(*m_assets);
             saveProjectCatalog();
-            AssetSelector::discover(*m_assets);
+            m_assetSelector.discover(*m_assets);
         }
         ENGINE_INFO("Saved prefab '{}'", path.generic_string());
     } catch (const std::exception& error) {
@@ -972,7 +1175,9 @@ void EditorLayer::commitSceneEdit() {
     if (!m_editorScene) {
         return;
     }
-    m_undoHistory.commit(*m_editorScene, m_selectedEntity);
+    if (m_undoHistory.commit(*m_editorScene, m_selectedEntity)) {
+        m_document.setCurrentRevision(m_undoHistory.currentRevision());
+    }
 }
 
 void EditorLayer::revertSceneEdit() {
@@ -980,7 +1185,9 @@ void EditorLayer::revertSceneEdit() {
         m_undoHistory.cancel();
         return;
     }
-    m_undoHistory.revert(*m_editorScene, m_selectedEntity);
+    if (m_undoHistory.revert(*m_editorScene, m_selectedEntity)) {
+        m_document.setCurrentRevision(m_undoHistory.currentRevision());
+    }
 }
 
 void EditorLayer::cancelSceneEdit() {
@@ -991,14 +1198,54 @@ void EditorLayer::undoSceneEdit() {
     if (m_sceneState != SceneState::Edit || !m_editorScene) {
         return;
     }
-    m_undoHistory.undo(*m_editorScene, m_selectedEntity);
+    if (m_undoHistory.undo(*m_editorScene, m_selectedEntity)) {
+        m_document.setCurrentRevision(m_undoHistory.currentRevision());
+    }
 }
 
 void EditorLayer::redoSceneEdit() {
     if (m_sceneState != SceneState::Edit || !m_editorScene) {
         return;
     }
-    m_undoHistory.redo(*m_editorScene, m_selectedEntity);
+    if (m_undoHistory.redo(*m_editorScene, m_selectedEntity)) {
+        m_document.setCurrentRevision(m_undoHistory.currentRevision());
+    }
+}
+
+void EditorLayer::requestTransition(std::function<void()> action) {
+    if (!action || m_pendingTransition) {
+        return;
+    }
+    if (!m_document.isDirty()) {
+        action();
+        return;
+    }
+    m_pendingTransition = std::move(action);
+    m_openUnsavedChangesRequested = true;
+}
+
+void EditorLayer::completePendingTransition() {
+    std::function<void()> action = std::move(m_pendingTransition);
+    m_pendingTransition = {};
+    m_openUnsavedChangesRequested = false;
+    m_continueAfterSave = false;
+    if (action) {
+        action();
+    }
+}
+
+void EditorLayer::cancelPendingTransition() {
+    m_pendingTransition = {};
+    m_openUnsavedChangesRequested = false;
+    m_continueAfterSave = false;
+}
+
+void EditorLayer::requestExit() {
+    requestTransition([this] {
+        if (m_requestExit) {
+            m_requestExit();
+        }
+    });
 }
 
 void EditorLayer::handleEditHotkeys() {
@@ -1032,24 +1279,24 @@ void EditorLayer::handleEditHotkeys() {
 
 void EditorLayer::recordStartSceneIfUnset() {
     if (!m_project
-        || m_activeScenePath.empty()
+        || m_document.path().empty()
         || !m_project->config().startScene.empty()) {
         return;
     }
 
     try {
-        m_project->setStartScene(m_activeScenePath);
+        m_project->setStartScene(m_document.path());
         if (const auto result = m_project->save(); !result) {
             ENGINE_WARN(
                 "Failed to record start scene '{}': {}",
-                m_activeScenePath.generic_string(),
+                m_document.path().generic_string(),
                 result.error().message
             );
         }
     } catch (const std::exception& error) {
         ENGINE_WARN(
             "Failed to record start scene '{}': {}",
-            m_activeScenePath.generic_string(),
+            m_document.path().generic_string(),
             error.what()
         );
     }
@@ -1064,7 +1311,9 @@ void EditorLayer::playScene() {
 
     try {
         if (m_assets) {
+            beginSceneEdit();
             m_editorScene->applyPrefabInstances(*m_assets);
+            commitSceneEdit();
         }
         m_runtimeScene = std::shared_ptr<vshade::scene::Scene>(
             m_editorScene->instantiate()
@@ -1074,6 +1323,9 @@ void EditorLayer::playScene() {
         m_stepRequested = false;
         bindActiveScene();
     } catch (const std::exception& error) {
+        if (m_undoHistory.isRecording()) {
+            revertSceneEdit();
+        }
         m_runtime->stop();
         m_runtimeScene.reset();
         m_sceneState = SceneState::Edit;

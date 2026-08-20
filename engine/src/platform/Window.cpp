@@ -123,6 +123,7 @@ std::optional<MouseButton> toMouseButton(const int button) {
 struct Window::Impl {
     GLFWwindow* handle = nullptr;
     ResizeCallback resize_callback;
+    CloseCallback close_callback;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool fullscreen = false;
@@ -203,6 +204,12 @@ Window::Window(const WindowConfig& config)
         impl->height = new_height > 0 ? static_cast<std::uint32_t>(new_height) : 0;
         if (impl->resize_callback) {
             impl->resize_callback(impl->width, impl->height);
+        }
+    });
+    glfwSetWindowCloseCallback(m_impl->handle, [](GLFWwindow* handle) {
+        auto* impl = static_cast<Impl*>(glfwGetWindowUserPointer(handle));
+        if (impl && impl->close_callback && !impl->close_callback()) {
+            glfwSetWindowShouldClose(handle, GLFW_FALSE);
         }
     });
 
@@ -330,6 +337,14 @@ void Window::requestClose() {
 
 void Window::setResizeCallback(ResizeCallback callback) {
     m_impl->resize_callback = std::move(callback);
+}
+
+void Window::setCloseCallback(CloseCallback callback) {
+    m_impl->close_callback = std::move(callback);
+}
+
+void Window::setTitle(const std::string& title) {
+    glfwSetWindowTitle(m_impl->handle, title.c_str());
 }
 
 void Window::setFullscreen(const bool fullscreen) {

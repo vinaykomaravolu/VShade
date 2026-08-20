@@ -4,6 +4,7 @@
 #include <scene/Scene.hpp>
 #include <scene/SceneSerializer.hpp>
 
+#include <chrono>
 #include <utility>
 
 namespace editor {
@@ -12,6 +13,7 @@ std::optional<UndoHistory::Snapshot> UndoHistory::capture(
     const vshade::scene::Scene& scene,
     const vshade::scene::Entity selected
 ) {
+    const auto started = std::chrono::steady_clock::now();
     vshade::scene::SceneSerializer serializer(scene);
     std::string json = serializer.serializeToString(
         vshade::scene::SceneJsonFormat::Compact
@@ -27,6 +29,17 @@ std::optional<UndoHistory::Snapshot> UndoHistory::capture(
     Snapshot snapshot;
     snapshot.sceneJson = std::move(json);
     snapshot.selectedUuid = scene.valid(selected) ? selected.uuid() : 0;
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started
+    );
+    constexpr auto slowSnapshot = std::chrono::milliseconds(8);
+    if (elapsed >= slowSnapshot) {
+        ENGINE_DEBUG(
+            "Editor undo snapshot captured {} bytes in {} ms",
+            snapshot.sceneJson.size(),
+            elapsed.count()
+        );
+    }
     return snapshot;
 }
 
@@ -58,6 +71,9 @@ void UndoHistory::begin(
         return;
     }
     m_pending = capture(scene, selected);
+    if (m_pending) {
+        m_pending->revision = m_currentRevision;
+    }
 }
 
 bool UndoHistory::commit(
@@ -78,10 +94,13 @@ bool UndoHistory::commit(
         return false;
     }
 
+    auto committed = *after;
+    committed.revision = m_nextRevision++;
     m_undo.push_back(Edit{
         .before = std::move(*m_pending),
-        .after = *after,
+        .after = std::move(committed),
     });
+    m_currentRevision = m_undo.back().after.revision;
     m_pending.reset();
     m_redo.clear();
     while (m_undo.size() > maxDepth) {
@@ -103,7 +122,11 @@ bool UndoHistory::revert(
     }
     const Snapshot snapshot = std::move(*m_pending);
     m_pending.reset();
-    return restore(scene, snapshot, selected);
+    if (!restore(scene, snapshot, selected)) {
+        return false;
+    }
+    m_currentRevision = snapshot.revision;
+    return true;
 }
 
 bool UndoHistory::undo(
@@ -123,6 +146,7 @@ bool UndoHistory::undo(
     }
     m_redo.push_back(std::move(edit));
     m_undo.pop_back();
+    m_currentRevision = m_redo.back().before.revision;
     return true;
 }
 
@@ -140,6 +164,7 @@ bool UndoHistory::redo(
     }
     m_undo.push_back(std::move(edit));
     m_redo.pop_back();
+    m_currentRevision = m_undo.back().after.revision;
     return true;
 }
 
@@ -147,6 +172,8 @@ void UndoHistory::clear() noexcept {
     m_pending.reset();
     m_undo.clear();
     m_redo.clear();
+    m_currentRevision = 0;
+    m_nextRevision = 1;
 }
 
 bool UndoHistory::canUndo() const noexcept {
@@ -159,6 +186,10 @@ bool UndoHistory::canRedo() const noexcept {
 
 bool UndoHistory::isRecording() const noexcept {
     return m_pending.has_value();
+}
+
+std::uint64_t UndoHistory::currentRevision() const noexcept {
+    return m_currentRevision;
 }
 
 } // namespace editor

@@ -4,6 +4,8 @@
 
 #include <scene/Entity.hpp>
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 
@@ -17,11 +19,15 @@ class NativeScriptRegistry;
 
 namespace editor {
 
+class AssetSelector;
+
 class InspectorPanel final {
 public:
     void setAssetManager(vshade::asset::AssetManager& assets) noexcept;
+    void setAssetSelector(AssetSelector& selector) noexcept;
     void setScriptRegistry(vshade::script::NativeScriptRegistry& scripts) noexcept;
     void setEditHooks(SceneEditHooks hooks);
+    void setReadOnly(bool readOnly) noexcept;
     void setRevealAssetHandler(std::function<void(std::filesystem::path)> handler);
     void onImGuiRender(vshade::scene::Entity selectedEntity);
 
@@ -43,9 +49,15 @@ private:
     void drawAddComponentMenu(vshade::scene::Entity entity);
 
     vshade::asset::AssetManager* m_assets = nullptr;
+    AssetSelector* m_assetSelector = nullptr;
     vshade::script::NativeScriptRegistry* m_scripts = nullptr;
     SceneEditHooks m_editHooks;
     std::function<void(std::filesystem::path)> m_revealAsset;
+    std::array<char, 256> m_nameBuffer{};
+    std::uint64_t m_nameEntityUuid = 0;
+    bool m_nameValidationError = false;
+    bool m_interactionRecording = false;
+    bool m_readOnly = false;
 };
 
 } // namespace editor

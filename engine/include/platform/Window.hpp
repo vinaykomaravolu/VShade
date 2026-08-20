@@ -30,6 +30,8 @@ class Window final {
 public:
     /** @brief Function invoked with the new framebuffer width and height. */
     using ResizeCallback = std::function<void(std::uint32_t, std::uint32_t)>;
+    /** Return true to allow a native close request, or false to defer it. */
+    using CloseCallback = std::function<bool()>;
 
     /**
      * @brief Creates a window and OpenGL context.
@@ -77,6 +79,12 @@ public:
      * @param callback Function that receives the new framebuffer dimensions.
      */
     void setResizeCallback(ResizeCallback callback);
+
+    /** Replaces the callback used to approve native window close requests. */
+    void setCloseCallback(CloseCallback callback);
+
+    /** Changes the native window title. */
+    void setTitle(const std::string& title);
 
     /**
      * @brief Switches between primary-monitor fullscreen and windowed mode.

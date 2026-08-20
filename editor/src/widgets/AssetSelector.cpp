@@ -27,10 +27,17 @@
 #include <imgui.h>
 
 namespace editor {
-namespace {
 
-std::filesystem::path g_searchDirectory;
-std::function<void()> g_catalogChanged;
+struct AssetSelector::State {
+    std::filesystem::path searchDirectory;
+    std::function<void()> catalogChanged;
+    std::function<std::optional<std::filesystem::path>(
+        const std::filesystem::path&
+    )> importAsset;
+    std::unordered_map<std::string, std::array<char, 128>> searches;
+};
+
+namespace {
 
 [[nodiscard]] std::string lowercase(std::string value) {
     std::ranges::transform(
@@ -45,7 +52,8 @@ std::function<void()> g_catalogChanged;
 
 void discoverAssetsInDirectory(
     vshade::asset::AssetManager& assets,
-    const std::filesystem::path& directory
+    const std::filesystem::path& directory,
+    const std::function<void()>& catalogChanged
 ) {
     std::error_code error;
     if (directory.empty()
@@ -102,8 +110,8 @@ void discoverAssetsInDirectory(
         }
     }
 
-    if (g_catalogChanged) {
-        g_catalogChanged();
+    if (catalogChanged) {
+        catalogChanged();
     }
 }
 
@@ -166,12 +174,12 @@ bool drawTypedAssetSelector(
     const char* filters,
     const std::initializer_list<std::string_view> extensions,
     vshade::asset::AssetReference<Resource>& reference,
-    vshade::asset::AssetManager& assets
+    vshade::asset::AssetManager& assets,
+    AssetSelector::State& state
 ) {
     const std::string stateKey = std::string(typeId) + ":" + label;
     const std::string dialogKey = "ImportAsset:" + stateKey;
-    static std::unordered_map<std::string, std::array<char, 128>> searches;
-    auto& search = searches[stateKey];
+    auto& search = state.searches[stateKey];
 
     ImGui::PushID(stateKey.c_str());
     ImGui::BeginGroup();
@@ -182,7 +190,11 @@ bool drawTypedAssetSelector(
         : "None";
     const std::string fieldLabel = currentName + "  \xE2\x96\xBC";
     if (ImGui::Button(fieldLabel.c_str())) {
-        discoverAssetsInDirectory(assets, g_searchDirectory);
+        discoverAssetsInDirectory(
+            assets,
+            state.searchDirectory,
+            state.catalogChanged
+        );
         ImGui::OpenPopup("AssetSelectorPopup");
     }
     ImGui::EndGroup();
@@ -243,9 +255,9 @@ bool drawTypedAssetSelector(
 
     if (importRequested) {
         IGFD::FileDialogConfig config;
-        config.path = g_searchDirectory.empty()
+        config.path = state.searchDirectory.empty()
             ? "."
-            : g_searchDirectory.generic_string();
+            : state.searchDirectory.generic_string();
         config.countSelectionMax = 1;
         config.flags = ImGuiFileDialogFlags_Modal;
         ImGuiFileDialog::Instance()->OpenDialog(
@@ -258,14 +270,27 @@ bool drawTypedAssetSelector(
 
     if (ImGuiFileDialog::Instance()->Display(dialogKey)) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            const std::string selectedPath =
+            const std::filesystem::path selectedPath =
                 ImGuiFileDialog::Instance()->GetFilePathName();
             try {
-                static_cast<void>(assets.load<Resource>(selectedPath));
-                reference = assets.reference<Resource>(selectedPath);
+                const std::optional<std::filesystem::path> importedPath =
+                    state.importAsset
+                        ? state.importAsset(selectedPath)
+                        : std::optional<std::filesystem::path>{selectedPath};
+                if (!importedPath) {
+                    ImGuiFileDialog::Instance()->Close();
+                    ImGui::PopID();
+                    return changed;
+                }
+                static_cast<void>(assets.load<Resource>(*importedPath));
+                reference = assets.reference<Resource>(*importedPath);
                 changed = true;
             } catch (const std::exception& error) {
-                ENGINE_ERROR("Failed to import asset '{}': {}", selectedPath, error.what());
+                ENGINE_ERROR(
+                    "Failed to import asset '{}': {}",
+                    selectedPath.generic_string(),
+                    error.what()
+                );
             }
         }
         ImGuiFileDialog::Instance()->Close();
@@ -277,16 +302,33 @@ bool drawTypedAssetSelector(
 
 } // namespace
 
+AssetSelector::AssetSelector()
+    : m_state(std::make_unique<State>()) {}
+
+AssetSelector::~AssetSelector() = default;
+
 void AssetSelector::setSearchDirectory(std::filesystem::path directory) {
-    g_searchDirectory = std::move(directory).lexically_normal();
+    m_state->searchDirectory = std::move(directory).lexically_normal();
 }
 
 void AssetSelector::setCatalogChangedCallback(std::function<void()> callback) {
-    g_catalogChanged = std::move(callback);
+    m_state->catalogChanged = std::move(callback);
+}
+
+void AssetSelector::setImportCallback(
+    std::function<std::optional<std::filesystem::path>(
+        const std::filesystem::path&
+    )> callback
+) {
+    m_state->importAsset = std::move(callback);
 }
 
 void AssetSelector::discover(vshade::asset::AssetManager& assets) {
-    discoverAssetsInDirectory(assets, g_searchDirectory);
+    discoverAssetsInDirectory(
+        assets,
+        m_state->searchDirectory,
+        m_state->catalogChanged
+    );
 }
 
 std::optional<std::filesystem::path> AssetSelector::acceptDroppedPath() {
@@ -348,7 +390,8 @@ bool AssetSelector::draw(
         ".png,.jpg,.jpeg,.bmp,.tga",
         {".png", ".jpg", ".jpeg", ".bmp", ".tga"},
         reference,
-        assets
+        assets,
+        *m_state
     );
 }
 
@@ -364,7 +407,8 @@ bool AssetSelector::draw(
         ".glb,.gltf",
         {".glb", ".gltf"},
         reference,
-        assets
+        assets,
+        *m_state
     );
 }
 
@@ -380,7 +424,8 @@ bool AssetSelector::draw(
         ".wav,.mp3,.flac,.ogg",
         {".wav", ".mp3", ".flac", ".ogg"},
         reference,
-        assets
+        assets,
+        *m_state
     );
 }
 

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "EditorDocument.hpp"
 #include "UndoHistory.hpp"
+#include "widgets/AssetSelector.hpp"
 #include "panels/Console.hpp"
 #include "panels/ContentBrowserPanel.hpp"
 #include "panels/InspectorPanel.hpp"
@@ -11,6 +13,8 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace vshade::scene {
 class Scene;
@@ -50,27 +54,36 @@ public:
     void onAttach();
     void onUpdate(float deltaTime);
     void onImGuiRender();
+    void requestClose();
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
+    [[nodiscard]] std::string windowTitle() const;
 
 private:
-    void DrawDockspace();
-    void DrawMenuBar();
-    void DrawToolbar();
-    void DrawFileDialogs();
-    void BuildDefaultDockLayout(std::uint32_t dockspaceId);
-    void setActiveScene(std::shared_ptr<vshade::scene::Scene> scene);
+    void drawDockspace();
+    void drawMenuBar();
+    void drawToolbar();
+    void drawFileDialogs();
+    void drawUnsavedChangesModal();
+    void buildDefaultDockLayout(std::uint32_t dockspaceId);
+    void setActiveScene(
+        std::shared_ptr<vshade::scene::Scene> scene,
+        std::filesystem::path path = {}
+    );
     void newScene();
     void openScene();
-    void loadScene(const std::filesystem::path& path);
-    void saveScene();
+    bool loadScene(const std::filesystem::path& path);
+    bool saveScene();
+    bool saveSceneTo(const std::filesystem::path& path);
     void saveSceneAs();
     void newProject();
     void openProject();
-    void setProject(std::shared_ptr<vshade::project::Project> project);
+    bool setProject(std::shared_ptr<vshade::project::Project> project);
     void loadProjectCatalog();
     void saveProjectCatalog();
     void recordStartSceneIfUnset();
-    void importAsset(const std::filesystem::path& sourcePath);
+    [[nodiscard]] std::optional<std::filesystem::path> importAsset(
+        const std::filesystem::path& sourcePath
+    );
     void saveSelectedAsPrefab();
     void writePrefab(const std::filesystem::path& path);
     void duplicateSelectedEntity();
@@ -81,6 +94,10 @@ private:
     void cancelSceneEdit();
     void undoSceneEdit();
     void redoSceneEdit();
+    void requestTransition(std::function<void()> action);
+    void completePendingTransition();
+    void cancelPendingTransition();
+    void requestExit();
     void handleEditHotkeys();
     void playScene();
     void pauseScene();
@@ -97,15 +114,19 @@ private:
     SceneHierarchyPanel m_sceneHierarchyPanel;
     Viewport m_viewport;
     InspectorPanel m_inspectorPanel;
+    AssetSelector m_assetSelector;
     UndoHistory m_undoHistory;
+    EditorDocument m_document;
     vshade::scene::Entity m_selectedEntity;
     std::shared_ptr<vshade::scene::Scene> m_editorScene;
     std::shared_ptr<vshade::scene::Scene> m_runtimeScene;
     std::shared_ptr<vshade::project::Project> m_project;
-    std::filesystem::path m_activeScenePath;
+    std::function<void()> m_pendingTransition;
     SceneState m_sceneState = SceneState::Edit;
     bool m_stepRequested = false;
     bool m_resetDockLayoutRequested = false;
+    bool m_openUnsavedChangesRequested = false;
+    bool m_continueAfterSave = false;
     bool m_showHierarchy = true;
     bool m_showInspector = true;
     bool m_showViewport = true;

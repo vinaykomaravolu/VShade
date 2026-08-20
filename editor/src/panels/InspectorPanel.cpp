@@ -40,10 +40,22 @@ namespace {
 constexpr ImGuiWindowFlags panelFlags =
     ImGuiWindowFlags_NoCollapse;
 
+template<typename Action>
+void commitMutation(const SceneEditHooks& hooks, Action&& action) {
+    if (hooks.begin) {
+        hooks.begin();
+    }
+    std::forward<Action>(action)();
+    if (hooks.commit) {
+        hooks.commit();
+    }
+}
+
 template<typename Component, typename UiFunction, typename DropFunction>
 void drawComponent(
     const char* name,
     vshade::scene::Entity entity,
+    const SceneEditHooks& hooks,
     UiFunction&& uiFunction,
     DropFunction&& dropFunction
 ) {
@@ -51,12 +63,30 @@ void drawComponent(
         return;
     }
 
-    auto& component = entity.get<Component>();
     ImGui::PushID(name);
     const bool open = ImGui::CollapsingHeader(
         name,
         ImGuiTreeNodeFlags_DefaultOpen
     );
+    bool reset = false;
+    bool remove = false;
+    if (ImGui::BeginPopupContextItem("ComponentActions")) {
+        reset = ImGui::MenuItem("Reset");
+        remove = ImGui::MenuItem("Remove Component");
+        ImGui::EndPopup();
+    }
+    if (reset) {
+        commitMutation(hooks, [&] { entity.set<Component>(Component{}); });
+        ImGui::PopID();
+        return;
+    }
+    if (remove) {
+        commitMutation(hooks, [&] { entity.remove<Component>(); });
+        ImGui::PopID();
+        return;
+    }
+
+    auto& component = entity.get<Component>();
     std::forward<DropFunction>(dropFunction)(component);
     if (open) {
         std::forward<UiFunction>(uiFunction)(component);
@@ -68,11 +98,13 @@ template<typename Component, typename UiFunction>
 void drawComponent(
     const char* name,
     vshade::scene::Entity entity,
+    const SceneEditHooks& hooks,
     UiFunction&& uiFunction
 ) {
     drawComponent<Component>(
         name,
         entity,
+        hooks,
         std::forward<UiFunction>(uiFunction),
         [](Component&) {}
     );
@@ -106,17 +138,6 @@ void drawBodyType(vshade::physics::BodyType& type) {
     }
 }
 
-template<typename Action>
-void commitAdd(const SceneEditHooks& hooks, Action&& action) {
-    if (hooks.begin) {
-        hooks.begin();
-    }
-    std::forward<Action>(action)();
-    if (hooks.commit) {
-        hooks.commit();
-    }
-}
-
 } // namespace
 
 void InspectorPanel::setAssetManager(
@@ -135,6 +156,17 @@ void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
     m_editHooks = std::move(hooks);
 }
 
+void InspectorPanel::setAssetSelector(AssetSelector& selector) noexcept {
+    m_assetSelector = &selector;
+}
+
+void InspectorPanel::setReadOnly(const bool readOnly) noexcept {
+    m_readOnly = readOnly;
+    if (readOnly) {
+        m_interactionRecording = false;
+    }
+}
+
 void InspectorPanel::setRevealAssetHandler(
     std::function<void(std::filesystem::path)> handler
 ) {
@@ -146,7 +178,72 @@ void InspectorPanel::onImGuiRender(
 ) {
     ImGui::Begin("Inspector", nullptr, panelFlags);
 
+    const bool popupOpen = ImGui::IsPopupOpen(
+        nullptr,
+        ImGuiPopupFlags_AnyPopupId
+    );
+    const bool inspectorHovered = ImGui::IsWindowHovered(
+        ImGuiHoveredFlags_RootAndChildWindows
+    );
+    const bool inspectorFocused = ImGui::IsWindowFocused(
+        ImGuiFocusedFlags_RootAndChildWindows
+    );
+    const bool editKeyPressed =
+        ImGui::IsKeyPressed(ImGuiKey_Enter)
+        || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)
+        || ImGui::IsKeyPressed(ImGuiKey_Space)
+        || ImGui::IsKeyPressed(ImGuiKey_Backspace)
+        || ImGui::IsKeyPressed(ImGuiKey_Delete)
+        || ImGui::IsKeyPressed(ImGuiKey_LeftArrow)
+        || ImGui::IsKeyPressed(ImGuiKey_RightArrow)
+        || ImGui::IsKeyPressed(ImGuiKey_UpArrow)
+        || ImGui::IsKeyPressed(ImGuiKey_DownArrow)
+        || ImGui::IsKeyPressed(ImGuiKey_Home)
+        || ImGui::IsKeyPressed(ImGuiKey_End);
+    if (!m_readOnly
+        && selectedEntity
+        && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+        && (inspectorHovered || popupOpen)) {
+        if (m_editHooks.begin) {
+            m_editHooks.begin();
+        }
+        m_interactionRecording = true;
+    }
+    if (!m_readOnly
+        && selectedEntity
+        && (inspectorFocused || popupOpen)
+        && editKeyPressed
+        && !m_interactionRecording) {
+        if (m_editHooks.begin) {
+            m_editHooks.begin();
+        }
+        m_interactionRecording = true;
+    }
+    if (!m_readOnly
+        && selectedEntity
+        && inspectorHovered
+        && ImGui::GetDragDropPayload() != nullptr
+        && !m_interactionRecording) {
+        if (m_editHooks.begin) {
+            m_editHooks.begin();
+        }
+        m_interactionRecording = true;
+    }
+
+    ImGui::BeginDisabled(m_readOnly);
+
     if (selectedEntity) {
+        if (m_nameEntityUuid != selectedEntity.uuid()) {
+            m_nameBuffer.fill('\0');
+            const std::string_view name = selectedEntity.name();
+            const std::size_t count = std::min(
+                name.size(),
+                m_nameBuffer.size() - 1
+            );
+            std::memcpy(m_nameBuffer.data(), name.data(), count);
+            m_nameEntityUuid = selectedEntity.uuid();
+            m_nameValidationError = false;
+        }
         drawTag(selectedEntity);
         ImGui::Separator();
         drawPrefab(selectedEntity);
@@ -165,7 +262,24 @@ void InspectorPanel::onImGuiRender(
         ImGui::Separator();
         drawAddComponentMenu(selectedEntity);
     } else {
+        m_nameEntityUuid = 0;
+        m_nameValidationError = false;
         ImGui::TextDisabled("No entity selected");
+    }
+
+    ImGui::EndDisabled();
+    if (m_readOnly) {
+        ImGui::TextDisabled("Runtime scene is read-only.");
+    }
+
+    if (m_interactionRecording
+        && !ImGui::IsMouseDown(ImGuiMouseButton_Left)
+        && !ImGui::IsAnyItemActive()
+        && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
+        if (m_editHooks.commit) {
+            m_editHooks.commit();
+        }
+        m_interactionRecording = false;
     }
 
     ImGui::End();
@@ -176,14 +290,44 @@ void InspectorPanel::drawTag(vshade::scene::Entity entity) {
         return;
     }
 
-    std::array<char, 256> buffer{};
-    const std::string_view name = entity.name();
-    const std::size_t characterCount =
-        std::min(name.size(), buffer.size() - 1);
-    std::memcpy(buffer.data(), name.data(), characterCount);
-
-    if (ImGui::InputText("Name", buffer.data(), buffer.size())) {
-        entity.setName(buffer.data());
+    const bool submitted = ImGui::InputText(
+        "Name",
+        m_nameBuffer.data(),
+        m_nameBuffer.size(),
+        ImGuiInputTextFlags_EnterReturnsTrue
+    );
+    if (ImGui::IsItemActivated() && m_editHooks.begin) {
+        m_editHooks.begin();
+    }
+    if (submitted || ImGui::IsItemDeactivatedAfterEdit()) {
+        const std::string name = m_nameBuffer.data();
+        if (name.empty()) {
+            m_nameValidationError = true;
+            m_nameBuffer.fill('\0');
+            const std::string_view validName = entity.name();
+            const std::size_t count = std::min(
+                validName.size(),
+                m_nameBuffer.size() - 1
+            );
+            std::memcpy(m_nameBuffer.data(), validName.data(), count);
+            if (m_editHooks.cancel) {
+                m_editHooks.cancel();
+            }
+        } else {
+            m_nameValidationError = false;
+            if (name != entity.name()) {
+                entity.setName(name);
+            }
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
+        }
+    }
+    if (m_nameValidationError) {
+        ImGui::TextColored(
+            ImVec4{1.0F, 0.45F, 0.35F, 1.0F},
+            "Name cannot be empty."
+        );
     }
 }
 
@@ -300,6 +444,7 @@ void InspectorPanel::drawCamera(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::CameraComponent>(
         "Camera",
         entity,
+        m_editHooks,
         [](vshade::scene::CameraComponent& camera) {
             ImGui::Checkbox("Active", &camera.active);
 
@@ -371,9 +516,11 @@ void InspectorPanel::drawSpriteRenderer(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::SpriteRendererComponent>(
         "Sprite Renderer",
         entity,
+        m_editHooks,
         [this](vshade::scene::SpriteRendererComponent& sprite) {
             if (m_assets
-                && AssetSelector::draw(
+                && m_assetSelector
+                && m_assetSelector->draw(
                     "Texture",
                     sprite.texture,
                     *m_assets
@@ -404,9 +551,10 @@ void InspectorPanel::drawModelRenderer(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::ModelRendererComponent>(
         "Model Renderer",
         entity,
+        m_editHooks,
         [this](vshade::scene::ModelRendererComponent& modelRenderer) {
-            if (m_assets) {
-                AssetSelector::draw(
+            if (m_assets && m_assetSelector) {
+                m_assetSelector->draw(
                     "Model",
                     modelRenderer.model,
                     *m_assets
@@ -429,9 +577,11 @@ void InspectorPanel::drawAudioSource(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::AudioSourceComponent>(
         "Audio Source",
         entity,
+        m_editHooks,
         [this](vshade::scene::AudioSourceComponent& source) {
             if (m_assets
-                && AssetSelector::draw(
+                && m_assetSelector
+                && m_assetSelector->draw(
                     "Clip",
                     source.clipAsset,
                     *m_assets
@@ -466,6 +616,7 @@ void InspectorPanel::drawLight(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::LightComponent>(
         "Light",
         entity,
+        m_editHooks,
         [](vshade::scene::LightComponent& component) {
             ImGui::Checkbox("Enabled", &component.enabled);
 
@@ -529,6 +680,7 @@ void InspectorPanel::drawAudioListener(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::AudioListenerComponent>(
         "Audio Listener",
         entity,
+        m_editHooks,
         [entity](vshade::scene::AudioListenerComponent& listener) {
             if (ImGui::Checkbox("Active", &listener.active) && listener.active) {
                 activateExclusiveListener(entity);
@@ -541,6 +693,7 @@ void InspectorPanel::drawRigidBody2D(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::RigidBody2DComponent>(
         "Rigid Body 2D",
         entity,
+        m_editHooks,
         [](vshade::scene::RigidBody2DComponent& body) {
             auto& settings = body.settings;
             drawBodyType(settings.type);
@@ -560,6 +713,7 @@ void InspectorPanel::drawCollider2D(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::Collider2DComponent>(
         "Collider 2D",
         entity,
+        m_editHooks,
         [](vshade::scene::Collider2DComponent& collider) {
             int shape = static_cast<int>(collider.shape.index());
             constexpr const char* shapeNames[] = {"Box", "Circle", "Capsule"};
@@ -615,6 +769,7 @@ void InspectorPanel::drawRigidBody3D(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::RigidBody3DComponent>(
         "Rigid Body 3D",
         entity,
+        m_editHooks,
         [](vshade::scene::RigidBody3DComponent& body) {
             auto& settings = body.settings;
             drawBodyType(settings.type);
@@ -635,6 +790,7 @@ void InspectorPanel::drawCollider3D(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::Collider3DComponent>(
         "Collider 3D",
         entity,
+        m_editHooks,
         [](vshade::scene::Collider3DComponent& collider) {
             int shape = static_cast<int>(collider.shape.index());
             constexpr const char* shapeNames[] = {"Box", "Sphere", "Capsule"};
@@ -689,6 +845,7 @@ void InspectorPanel::drawScripts(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::ScriptComponent>(
         "Scripts",
         entity,
+        m_editHooks,
         [this](vshade::scene::ScriptComponent& component) {
             const std::vector<std::string> typeNames = m_scripts
                 ? m_scripts->typeNames()
@@ -766,35 +923,35 @@ void InspectorPanel::drawAddComponentMenu(
 
     if (!entity.has<vshade::scene::CameraComponent>()
         && ImGui::MenuItem("Camera")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::CameraComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::SpriteRendererComponent>()
         && ImGui::MenuItem("Sprite Renderer")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::SpriteRendererComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::ModelRendererComponent>()
         && ImGui::MenuItem("Model Renderer")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::ModelRendererComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::AudioSourceComponent>()
         && ImGui::MenuItem("Audio Source")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::AudioSourceComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::AudioListenerComponent>()
         && ImGui::MenuItem("Audio Listener")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::AudioListenerComponent>();
             activateExclusiveListener(entity);
         });
@@ -802,7 +959,7 @@ void InspectorPanel::drawAddComponentMenu(
     }
     if (!entity.has<vshade::scene::LightComponent>()
         && ImGui::MenuItem("Directional Light")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             vshade::scene::LightComponent light;
             light.light = vshade::renderer::DirectionalLight{};
             entity.add<vshade::scene::LightComponent>(light);
@@ -811,14 +968,14 @@ void InspectorPanel::drawAddComponentMenu(
     }
     if (!entity.has<vshade::scene::LightComponent>()
         && ImGui::MenuItem("Point Light")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::LightComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::RigidBody2DComponent>()
         && ImGui::MenuItem("Rigid Body 2D")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::RigidBody2DComponent>();
             if (!entity.has<vshade::scene::Collider2DComponent>()) {
                 entity.add<vshade::scene::Collider2DComponent>();
@@ -829,14 +986,14 @@ void InspectorPanel::drawAddComponentMenu(
     if (entity.has<vshade::scene::RigidBody2DComponent>()
         && !entity.has<vshade::scene::Collider2DComponent>()
         && ImGui::MenuItem("Collider 2D")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::Collider2DComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::RigidBody3DComponent>()
         && ImGui::MenuItem("Rigid Body 3D")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::RigidBody3DComponent>();
             if (!entity.has<vshade::scene::Collider3DComponent>()) {
                 entity.add<vshade::scene::Collider3DComponent>();
@@ -847,14 +1004,14 @@ void InspectorPanel::drawAddComponentMenu(
     if (entity.has<vshade::scene::RigidBody3DComponent>()
         && !entity.has<vshade::scene::Collider3DComponent>()
         && ImGui::MenuItem("Collider 3D")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::Collider3DComponent>();
         });
         ImGui::CloseCurrentPopup();
     }
     if (!entity.has<vshade::scene::ScriptComponent>()
         && ImGui::MenuItem("Script")) {
-        commitAdd(m_editHooks, [&] {
+        commitMutation(m_editHooks, [&] {
             vshade::scene::ScriptComponent scripts;
             if (m_scripts) {
                 const auto typeNames = m_scripts->typeNames();
