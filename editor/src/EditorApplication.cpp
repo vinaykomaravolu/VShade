@@ -1,6 +1,7 @@
 #include "EditorApplication.hpp"
 #include "EditorIcons.hpp"
 #include "EditorLayer.hpp"
+#include "ImGui/ImGuiTheme.hpp"
 
 #include <renderer/Renderer.hpp>
 
@@ -39,10 +40,7 @@ void EditorApplication::onStart() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename = "VShadeEditor.ini";
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 0.0F;
-    style.WindowBorderSize = 1.0F;
+    setImGuiTheme();
 
     if (!ImGui_ImplGlfw_InitForOpenGL(glfwWindow, true)) {
         throw std::runtime_error("Dear ImGui GLFW backend initialization failed");

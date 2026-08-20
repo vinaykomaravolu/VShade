@@ -30,6 +30,7 @@ target_link_libraries(VShadeImGui PUBLIC glfw OpenGL::GL)
 target_compile_features(VShadeImGui PUBLIC cxx_std_20)
 
 add_executable(VShadeEditor
+    ImGui/ImGuiTheme.cpp
     src/main.cpp
     src/EditorApplication.cpp
     src/EditorCamera.cpp
@@ -43,7 +44,10 @@ add_executable(VShadeEditor
     src/panels/Viewport.cpp
     src/widgets/AssetSelector.cpp
 )
-target_include_directories(VShadeEditor PRIVATE include)
+target_include_directories(VShadeEditor PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    include
+)
 target_link_libraries(VShadeEditor PRIVATE VShade::Engine VShadeImGui)
 target_compile_definitions(VShadeEditor PRIVATE
     VSHADE_EDITOR_ICON_DIR="$<TARGET_FILE_DIR:VShadeEditor>/icons"
