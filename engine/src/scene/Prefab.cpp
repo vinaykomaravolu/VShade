@@ -102,6 +102,8 @@ Prefab Prefab::fromEntity(const Scene& scene, const Entity root) {
         copy.template operator()<MeshCollider3DComponent>();
         copy.template operator()<ConvexCollider3DComponent>();
         copy.template operator()<ScriptComponent>();
+        copy.template operator()<HierarchyOrderComponent>();
+        copy.template operator()<HierarchyStateComponent>();
 
         if (sourceUuid != rootUuid) {
             if (const auto* relationship =

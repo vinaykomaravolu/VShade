@@ -1058,6 +1058,37 @@ TEST_CASE("Scene format one Euler rotations migrate to quaternions", "[scene]") 
 
 }
 
+TEST_CASE("Hierarchy editor metadata copies and round trips", "[scene][hierarchy]") {
+    const std::filesystem::path path =
+        sceneOutputPath("hierarchy-editor-metadata.json");
+    vshade::scene::Scene source("Hierarchy metadata");
+    vshade::scene::Entity entity = source.createEntity("Ordered entity");
+    const std::uint64_t uuid = entity.uuid();
+    entity.add<vshade::scene::HierarchyOrderComponent>(4096);
+    entity.add<vshade::scene::HierarchyStateComponent>(false, true);
+
+    const vshade::scene::Entity duplicate = source.duplicateEntity(entity);
+    REQUIRE(duplicate.has<vshade::scene::HierarchyOrderComponent>());
+    REQUIRE(duplicate.has<vshade::scene::HierarchyStateComponent>());
+    CHECK(duplicate.get<vshade::scene::HierarchyOrderComponent>().siblingOrder == 4096);
+    CHECK_FALSE(duplicate.get<vshade::scene::HierarchyStateComponent>().visible);
+    CHECK(duplicate.get<vshade::scene::HierarchyStateComponent>().locked);
+
+    vshade::scene::SceneSerializer writer(source);
+    REQUIRE(writer.serialize(path));
+
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserialize(path));
+    const vshade::scene::Entity restored = loaded.findEntity(uuid);
+    REQUIRE(restored.valid());
+    REQUIRE(restored.has<vshade::scene::HierarchyOrderComponent>());
+    REQUIRE(restored.has<vshade::scene::HierarchyStateComponent>());
+    CHECK(restored.get<vshade::scene::HierarchyOrderComponent>().siblingOrder == 4096);
+    CHECK_FALSE(restored.get<vshade::scene::HierarchyStateComponent>().visible);
+    CHECK(restored.get<vshade::scene::HierarchyStateComponent>().locked);
+}
+
 TEST_CASE("Scene serialization matches its golden JSON file", "[scene]") {
     const std::filesystem::path goldenPath =
         std::filesystem::path(VSHADE_GOLDEN_DIR) / "scene" / "scene_example.json";

@@ -696,6 +696,11 @@ bool Viewport::drawSceneIcons(
         if (!entity) {
             continue;
         }
+        const auto* hierarchyState =
+            entity.tryGet<vshade::scene::HierarchyStateComponent>();
+        if (hierarchyState && !hierarchyState->visible) {
+            continue;
+        }
         const auto* camera = entity.tryGet<vshade::scene::CameraComponent>();
         const auto* light = entity.tryGet<vshade::scene::LightComponent>();
         const auto* audio = entity.tryGet<vshade::scene::AudioSourceComponent>();
@@ -881,6 +886,11 @@ void Viewport::drawGizmo(
         || m_gizmoOperation == GizmoOperation::None
         || !m_scene
         || !m_scene->valid(selectedEntity)
+        || (selectedEntity.has<vshade::scene::HierarchyStateComponent>()
+            && (selectedEntity.get<
+                    vshade::scene::HierarchyStateComponent>().locked
+                || !selectedEntity.get<
+                    vshade::scene::HierarchyStateComponent>().visible))
         || !selectedEntity.has<vshade::scene::TransformComponent>()) {
         finishGizmoRecording();
         m_gizmoUsing = false;
@@ -991,6 +1001,11 @@ void Viewport::queueSelectedCameraFrustum(
         || !selectedEntity.has<vshade::scene::CameraComponent>()) {
         return;
     }
+    const auto* hierarchyState =
+        selectedEntity.tryGet<vshade::scene::HierarchyStateComponent>();
+    if (hierarchyState && !hierarchyState->visible) {
+        return;
+    }
 
     const auto& camera =
         selectedEntity.get<vshade::scene::CameraComponent>();
@@ -1061,6 +1076,11 @@ void Viewport::queueSelectedColliderGizmo(
     const vshade::scene::Entity selectedEntity
 ) const {
     if (!m_scene || !selectedEntity.valid()) {
+        return;
+    }
+    const auto* hierarchyState =
+        selectedEntity.tryGet<vshade::scene::HierarchyStateComponent>();
+    if (hierarchyState && !hierarchyState->visible) {
         return;
     }
 
@@ -1299,6 +1319,11 @@ void Viewport::selectEntityUnderMouse(
     selectedEntity = entityId == -1
         ? vshade::scene::Entity{}
         : m_scene->findEntityById(static_cast<std::uint32_t>(entityId));
+    if (selectedEntity.has<vshade::scene::HierarchyStateComponent>()
+        && selectedEntity.get<
+            vshade::scene::HierarchyStateComponent>().locked) {
+        selectedEntity = {};
+    }
 }
 
 vshade::math::Vec3 Viewport::spawnPositionAtCursor(

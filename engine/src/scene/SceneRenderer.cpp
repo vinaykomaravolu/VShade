@@ -48,9 +48,17 @@ bool SceneRenderer::render(
 
     const TransformComponent* cameraTransform = nullptr;
     const CameraComponent* cameraSettings = nullptr;
-    const auto cameras = scene.view<const TransformComponent, const CameraComponent>();
-    for (const auto [handle, transform, camera] : cameras.each()) {
+    const auto cameras = scene.view<
+        const UUIDComponent,
+        const TransformComponent,
+        const CameraComponent>();
+    for (const auto [handle, uuid, transform, camera] : cameras.each()) {
         (void)handle;
+        const Entity entity = scene.findEntity(uuid.uuid);
+        const auto* state = entity.tryGet<HierarchyStateComponent>();
+        if (state && !state->visible) {
+            continue;
+        }
         if (camera.active &&
             (cameraSettings == nullptr || camera.priority > cameraSettings->priority)) {
             cameraTransform = &transform;
@@ -115,9 +123,16 @@ bool SceneRenderer::render(
 
     renderer::Renderer3D::setLighting(SceneLightingSystem::collect(scene));
     renderer::Renderer3D::beginScene(camera);
-    const auto models = scene.view<const TransformComponent, const ModelRendererComponent>();
-    for (const auto [handle, modelTransform, modelRenderer] : models.each()) {
-        (void)handle;
+    const auto models = scene.view<
+        const UUIDComponent,
+        const TransformComponent,
+        const ModelRendererComponent>();
+    for (const auto [handle, uuid, modelTransform, modelRenderer] : models.each()) {
+        const Entity entity = scene.findEntity(uuid.uuid);
+        const auto* state = entity.tryGet<HierarchyStateComponent>();
+        if (state && !state->visible) {
+            continue;
+        }
         if (!modelRenderer.visible || !modelRenderer.model.valid()) {
             continue;
         }
@@ -135,8 +150,16 @@ bool SceneRenderer::render(
     renderer::Renderer3D::endScene();
 
     renderer::Renderer2D::beginScene(camera);
-    const auto sprites = scene.view<const TransformComponent, const SpriteRendererComponent>();
-    for (const auto [handle, spriteTransform, sprite] : sprites.each()) {
+    const auto sprites = scene.view<
+        const UUIDComponent,
+        const TransformComponent,
+        const SpriteRendererComponent>();
+    for (const auto [handle, uuid, spriteTransform, sprite] : sprites.each()) {
+        const Entity entity = scene.findEntity(uuid.uuid);
+        const auto* state = entity.tryGet<HierarchyStateComponent>();
+        if (state && !state->visible) {
+            continue;
+        }
         const auto entityId = static_cast<std::int32_t>(
             entt::to_integral(handle)
         );

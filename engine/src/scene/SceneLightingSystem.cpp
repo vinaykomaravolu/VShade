@@ -16,13 +16,17 @@ renderer::Lighting SceneLightingSystem::collect(const Scene& scene) {
         .intensity = scene.environment().ambientIntensity,
     });
 
-    const auto lights = scene.view<const TransformComponent, const LightComponent>();
-    lights.each([&lighting](
-        const TransformComponent& transform,
-        const LightComponent& component
-    ) {
+    const auto hierarchyStates = scene.view<const HierarchyStateComponent>();
+    const auto lights = scene.view<
+        const TransformComponent,
+        const LightComponent>();
+    for (const auto [handle, transform, component] : lights.each()) {
+        if (hierarchyStates.contains(handle)
+            && !hierarchyStates.get<const HierarchyStateComponent>(handle).visible) {
+            continue;
+        }
         if (!component.enabled) {
-            return;
+            continue;
         }
         std::visit(
             [&lighting, &transform](const auto& localLight) {
@@ -42,7 +46,7 @@ renderer::Lighting SceneLightingSystem::collect(const Scene& scene) {
             },
             component.light
         );
-    });
+    }
     return lighting;
 }
 

@@ -135,6 +135,16 @@ Entity Scene::duplicateEntity(const Entity source) {
                 source.component<ParentComponent>()
             );
         }
+        if (source.has<HierarchyOrderComponent>()) {
+            duplicate.add<HierarchyOrderComponent>(
+                source.get<HierarchyOrderComponent>()
+            );
+        }
+        if (source.has<HierarchyStateComponent>()) {
+            duplicate.add<HierarchyStateComponent>(
+                source.get<HierarchyStateComponent>()
+            );
+        }
         for (const auto& handler : SceneComponentRegistry::handlers()) {
             handler.clone(m_registry, source.m_handle, m_registry, duplicate.m_handle);
         }
@@ -183,6 +193,8 @@ std::unique_ptr<Scene> Scene::instantiate() const {
         copyComponent.template operator()<ConvexCollider3DComponent>();
         copyComponent.template operator()<ScriptComponent>();
         copyComponent.template operator()<ParentComponent>();
+        copyComponent.template operator()<HierarchyOrderComponent>();
+        copyComponent.template operator()<HierarchyStateComponent>();
         copyComponent.template operator()<PrefabInstanceComponent>();
 
         for (const auto& handler : SceneComponentRegistry::handlers()) {
@@ -477,6 +489,8 @@ void Scene::copyPrefabComponents(
     copy.template operator()<MeshCollider3DComponent>();
     copy.template operator()<ConvexCollider3DComponent>();
     copy.template operator()<ScriptComponent>();
+    copy.template operator()<HierarchyOrderComponent>();
+    copy.template operator()<HierarchyStateComponent>();
 
     for (const auto& handler : SceneComponentRegistry::handlers()) {
         handler.remove(m_registry, destination.m_handle);

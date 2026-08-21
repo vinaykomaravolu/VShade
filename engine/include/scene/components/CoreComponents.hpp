@@ -27,4 +27,15 @@ struct ParentComponent {
     std::uint64_t parentUuid = 0;
 };
 
+/** @brief Optional persistent ordering key used among hierarchy siblings. */
+struct HierarchyOrderComponent {
+    std::int64_t siblingOrder = 0;
+};
+
+/** @brief Persistent hierarchy visibility and editor-lock state. */
+struct HierarchyStateComponent {
+    bool visible = true;
+    bool locked = false;
+};
+
 } // namespace vshade::scene

@@ -918,6 +918,17 @@ std::string SceneSerializer::serializeToString(const SceneJsonFormat format) con
                     registry.get<ParentComponent>(handle).parentUuid
                 );
             }
+            if (registry.all_of<HierarchyOrderComponent>(handle)) {
+                entity["HierarchyOrder"] = registry.get<
+                    HierarchyOrderComponent>(handle).siblingOrder;
+            }
+            if (registry.all_of<HierarchyStateComponent>(handle)) {
+                const auto& state = registry.get<HierarchyStateComponent>(handle);
+                entity["HierarchyState"] = {
+                    {"Visible", state.visible},
+                    {"Locked", state.locked},
+                };
+            }
             if (registry.all_of<PrefabInstanceComponent>(handle)) {
                 const auto& instance = registry.get<PrefabInstanceComponent>(handle);
                 Json links = Json::array();
@@ -1256,6 +1267,21 @@ bool SceneSerializer::deserializeFromString(const std::string& json) {
                     throw std::invalid_argument("Entity Parent must reference another entity");
                 }
                 loadedRegistry.emplace<ParentComponent>(handle, parentUuid);
+            }
+            if (const auto order = serializedEntity.find("HierarchyOrder");
+                order != serializedEntity.end()) {
+                loadedRegistry.emplace<HierarchyOrderComponent>(
+                    handle,
+                    order->get<std::int64_t>()
+                );
+            }
+            if (const auto state = serializedEntity.find("HierarchyState");
+                state != serializedEntity.end()) {
+                loadedRegistry.emplace<HierarchyStateComponent>(
+                    handle,
+                    state->at("Visible").get<bool>(),
+                    state->at("Locked").get<bool>()
+                );
             }
             if (const auto prefabInstance = serializedEntity.find("PrefabInstance");
                 prefabInstance != serializedEntity.end()) {

@@ -52,7 +52,11 @@ struct SceneAudioSystem::Impl {
     void synchronizeSources() {
         for (auto iterator = voices.begin(); iterator != voices.end();) {
             const Entity entity = scene->findEntity(iterator->first);
-            if (!entity || !entity.hasComponents<AudioSourceComponent>()) {
+            const auto* hierarchyState = entity
+                ? entity.tryGet<HierarchyStateComponent>()
+                : nullptr;
+            if (!entity || !entity.hasComponents<AudioSourceComponent>()
+                || (hierarchyState && !hierarchyState->visible)) {
                 iterator->second.voice.stop();
                 iterator = voices.erase(iterator);
                 continue;
@@ -79,7 +83,11 @@ struct SceneAudioSystem::Impl {
             const AudioSourceComponent
         >();
         for (const auto [handle, uuid, transform, source] : sources.each()) {
-            (void)handle;
+            const Entity entity = scene->findEntity(uuid.uuid);
+            const auto* state = entity.tryGet<HierarchyStateComponent>();
+            if (state && !state->visible) {
+                continue;
+            }
             if (!source.playOnStart || voices.contains(uuid.uuid)) {
                 continue;
             }

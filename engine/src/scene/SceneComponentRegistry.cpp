@@ -26,7 +26,8 @@ void SceneComponentRegistry::add(Handler handler) {
         handler.name == "SphereCollider3D" || handler.name == "CapsuleCollider3D" ||
         handler.name == "CylinderCollider3D" || handler.name == "MeshCollider3D" ||
         handler.name == "ConvexCollider3D" || handler.name == "Scripts" ||
-        handler.name == "Parent" ||
+        handler.name == "Parent" || handler.name == "HierarchyOrder" ||
+        handler.name == "HierarchyState" ||
         handler.type == entt::type_hash<CameraComponent>::value() ||
         handler.type == entt::type_hash<ModelRendererComponent>::value() ||
         handler.type == entt::type_hash<RigidBody2DComponent>::value() ||
@@ -40,7 +41,9 @@ void SceneComponentRegistry::add(Handler handler) {
         handler.type == entt::type_hash<MeshCollider3DComponent>::value() ||
         handler.type == entt::type_hash<ConvexCollider3DComponent>::value() ||
         handler.type == entt::type_hash<ScriptComponent>::value() ||
-        handler.type == entt::type_hash<ParentComponent>::value()) {
+        handler.type == entt::type_hash<ParentComponent>::value() ||
+        handler.type == entt::type_hash<HierarchyOrderComponent>::value() ||
+        handler.type == entt::type_hash<HierarchyStateComponent>::value()) {
         throw std::invalid_argument(
             "A custom component cannot reuse a built-in component type or name"
         );
