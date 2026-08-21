@@ -2,6 +2,7 @@
 /build-clangd/
 /build-coverage/
 /build-docs/
+/build-editor/
 /build-examples/
 /out/
 /coverage.xml

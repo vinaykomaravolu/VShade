@@ -33,6 +33,16 @@ public:
         Scale,
     };
 
+    enum class GizmoOrientation {
+        Local,
+        World,
+    };
+
+    enum class PivotMode {
+        Object,
+        Selection,
+    };
+
     explicit Viewport(vshade::asset::AssetManager& assets);
     ~Viewport();
 
@@ -49,6 +59,10 @@ public:
     [[nodiscard]] bool wantsCursorCapture() const noexcept;
 
 private:
+    [[nodiscard]] bool drawOverlayToolbar(
+        vshade::math::Vec2 position,
+        vshade::math::Vec2 size
+    );
     void renderScene();
     void resizeFramebuffer(float width, float height);
     void drawGizmo(
@@ -88,7 +102,14 @@ private:
     EditorCamera m_editorCamera;
     SceneEditHooks m_editHooks;
     GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
+    GizmoOrientation m_gizmoOrientation = GizmoOrientation::Local;
+    PivotMode m_pivotMode = PivotMode::Object;
+    bool m_snapEnabled = false;
+    float m_translationSnap = 0.5F;
+    float m_rotationSnap = 15.0F;
+    float m_scaleSnap = 0.1F;
     bool m_hovered = false;
+    bool m_overlayHovered = false;
     bool m_gizmoUsing = false;
     bool m_gizmoRecording = false;
     bool m_visible = true;

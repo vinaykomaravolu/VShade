@@ -1,4 +1,5 @@
 #include "panels/InspectorPanel.hpp"
+#include "ImGui/ImGuiTheme.hpp"
 #include "widgets/AssetSelector.hpp"
 
 #include <asset/AssetManager.hpp>
@@ -325,7 +326,7 @@ void InspectorPanel::drawTag(vshade::scene::Entity entity) {
     }
     if (m_nameValidationError) {
         ImGui::TextColored(
-            ImVec4{1.0F, 0.45F, 0.35F, 1.0F},
+            ui::color(ui::ColorRole::Error),
             "Name cannot be empty."
         );
     }

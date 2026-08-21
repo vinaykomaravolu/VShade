@@ -31,6 +31,19 @@
             }
         },
         {
+            "name": "editor",
+            "displayName": "Editor (Visual Studio Debug)",
+            "description": "Configures the VShade editor without examples, sandbox, or tests.",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build-editor",
+            "cacheVariables": {
+                "VSHADE_BUILD_EDITOR": true,
+                "VSHADE_BUILD_EXAMPLES": false,
+                "VSHADE_BUILD_SANDBOX": false,
+                "BUILD_TESTING": false
+            }
+        },
+        {
             "name": "examples",
             "displayName": "Examples (Visual Studio Debug)",
             "description": "Configures all standalone examples as selectable CMake targets.",
@@ -38,6 +51,7 @@
             "binaryDir": "${sourceDir}/build-examples",
             "cacheVariables": {
                 "VSHADE_BUILD_EXAMPLES": true,
+                "VSHADE_BUILD_EDITOR": false,
                 "VSHADE_BUILD_SANDBOX": false,
                 "BUILD_TESTING": false
             }
@@ -49,6 +63,15 @@
             "configurePreset": "clangd",
             "description": "",
             "displayName": ""
+        },
+        {
+            "name": "editor-debug",
+            "configurePreset": "editor",
+            "configuration": "Debug",
+            "targets": [
+                "VShadeEditor"
+            ],
+            "displayName": "Build VShade Editor (Debug)"
         },
         {
             "name": "examples-debug",

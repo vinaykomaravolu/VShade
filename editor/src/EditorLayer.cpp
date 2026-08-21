@@ -11,6 +11,7 @@
 #include <input/KeyCode.hpp>
 #include <project/Project.hpp>
 #include <renderer/Model.hpp>
+#include <renderer/Renderer.hpp>
 #include <renderer/Texture.hpp>
 #include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
@@ -19,6 +20,7 @@
 
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -35,6 +37,7 @@
 #include <ImGuiFileDialog.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include "ImGui/ImGuiTheme.hpp"
 
 namespace editor {
 namespace {
@@ -117,78 +120,6 @@ void loadProjectCatalogInto(
     if (std::filesystem::is_regular_file(catalogPath, error) && !error) {
         assets.loadCatalog(catalogPath);
     }
-}
-
-enum class ToolbarIcon {
-    Play,
-    Pause,
-    Step,
-    Stop,
-};
-
-bool toolbarIconButton(
-    const char* id,
-    const ToolbarIcon icon,
-    const ImVec2 size,
-    const char* tooltip
-) {
-    const bool clicked = ImGui::Button(id, size);
-    const ImVec2 minimum = ImGui::GetItemRectMin();
-    const ImVec2 maximum = ImGui::GetItemRectMax();
-    const ImVec2 center{
-        (minimum.x + maximum.x) * 0.5F,
-        (minimum.y + maximum.y) * 0.5F,
-    };
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    switch (icon) {
-        case ToolbarIcon::Play:
-            drawList->AddTriangleFilled(
-                {center.x - 5.0F, center.y - 7.0F},
-                {center.x - 5.0F, center.y + 7.0F},
-                {center.x + 7.0F, center.y},
-                color
-            );
-            break;
-        case ToolbarIcon::Pause:
-            drawList->AddRectFilled(
-                {center.x - 6.0F, center.y - 7.0F},
-                {center.x - 2.0F, center.y + 7.0F},
-                color
-            );
-            drawList->AddRectFilled(
-                {center.x + 2.0F, center.y - 7.0F},
-                {center.x + 6.0F, center.y + 7.0F},
-                color
-            );
-            break;
-        case ToolbarIcon::Step:
-            drawList->AddTriangleFilled(
-                {center.x - 7.0F, center.y - 7.0F},
-                {center.x - 7.0F, center.y + 7.0F},
-                {center.x + 4.0F, center.y},
-                color
-            );
-            drawList->AddRectFilled(
-                {center.x + 5.0F, center.y - 7.0F},
-                {center.x + 8.0F, center.y + 7.0F},
-                color
-            );
-            break;
-        case ToolbarIcon::Stop:
-            drawList->AddRectFilled(
-                {center.x - 6.0F, center.y - 6.0F},
-                {center.x + 6.0F, center.y + 6.0F},
-                color
-            );
-            break;
-    }
-
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s", tooltip);
-    }
-    return clicked;
 }
 
 } // namespace
@@ -282,8 +213,12 @@ std::string EditorLayer::windowTitle() const {
 
 void EditorLayer::drawDockspace()
 {
+    m_viewport.setVisible(m_showViewport);
+    m_viewport.setEditing(m_sceneState == SceneState::Edit);
+    m_viewport.setRuntime(m_runtime);
     drawMenuBar();
     drawToolbar();
+    drawStatusBar();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
@@ -342,9 +277,6 @@ void EditorLayer::drawDockspace()
         m_sceneHierarchyPanel.setReadOnly(m_sceneState != SceneState::Edit);
         m_sceneHierarchyPanel.onImGuiRender(m_selectedEntity);
     }
-    m_viewport.setVisible(m_showViewport);
-    m_viewport.setEditing(m_sceneState == SceneState::Edit);
-    m_viewport.setRuntime(m_runtime);
     if (m_showViewport) {
         m_viewport.onImGuiRender(m_selectedEntity);
     }
@@ -412,16 +344,16 @@ void EditorLayer::drawMenuBar() {
 
     if (ImGui::BeginMenu("File")) {
         ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
-        if (ImGui::MenuItem("New Scene")) {
+        if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
             requestTransition([this] { newScene(); });
         }
-        if (ImGui::MenuItem("Open Scene...")) {
+        if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
             requestTransition([this] { openScene(); });
         }
-        if (ImGui::MenuItem("Save Scene")) {
+        if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
             saveScene();
         }
-        if (ImGui::MenuItem("Save Scene As...")) {
+        if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
             saveSceneAs();
         }
         ImGui::BeginDisabled(
@@ -490,9 +422,11 @@ void EditorLayer::drawMenuBar() {
         if (ImGui::MenuItem("Save as Prefab...")) {
             saveSelectedAsPrefab();
         }
+        ui::pushDestructiveTextStyle();
         if (ImGui::MenuItem("Delete Entity", "Delete")) {
             deleteSelectedEntity();
         }
+        ui::popDestructiveTextStyle();
         ImGui::EndDisabled();
         ImGui::EndMenu();
     }
@@ -514,20 +448,38 @@ void EditorLayer::drawMenuBar() {
         ImGui::EndMenu();
     }
 
-    std::string title = "VShade - " + m_document.displayName();
+    const std::string projectName = m_project
+        ? m_project->config().name
+        : "No Project";
+    std::string chrome = projectName + "  /  " + m_document.displayName();
     if (m_document.isDirty()) {
-        title += " *";
+        chrome += "  [Modified]";
     }
-    const float titleWidth = ImGui::CalcTextSize(title.c_str()).x;
+    const char* state = "EDIT";
+    ui::ColorRole stateColor = ui::ColorRole::Muted;
+    if (m_sceneState == SceneState::Play) {
+        state = "PLAY";
+        stateColor = ui::ColorRole::Success;
+    } else if (m_sceneState == SceneState::Pause) {
+        state = "PAUSED";
+        stateColor = ui::ColorRole::Warning;
+    }
+    const float chromeWidth = ImGui::CalcTextSize(chrome.c_str()).x
+        + ImGui::CalcTextSize(state).x
+        + ui::scaled(ui::Metrics::chromePadding * 2.0F);
     ImGui::SetCursorPosX(
-        std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - titleWidth - 12.0F)
+        std::max(
+            ImGui::GetCursorPosX(),
+            ImGui::GetWindowWidth() - chromeWidth
+        )
     );
-    ImGui::TextUnformatted(title.c_str());
+    ImGui::TextUnformatted(chrome.c_str());
+    ImGui::SameLine(0.0F, ui::scaled(ui::Metrics::chromePadding));
+    ImGui::TextColored(ui::color(stateColor), "%s", state);
     ImGui::EndMainMenuBar();
 }
 
 void EditorLayer::drawToolbar() {
-    constexpr float toolbarHeight = 38.0F;
     constexpr ImGuiWindowFlags toolbarFlags =
         ImGuiWindowFlags_NoScrollbar
         | ImGuiWindowFlags_NoSavedSettings;
@@ -535,25 +487,28 @@ void EditorLayer::drawToolbar() {
             "##VShadeToolbar",
             ImGui::GetMainViewport(),
             ImGuiDir_Up,
-            toolbarHeight,
+            ui::scaled(ui::Metrics::toolbarHeight),
             toolbarFlags
         )) {
         return;
     }
 
-    constexpr float buttonWidth = 42.0F;
-    constexpr float spacing = 8.0F;
-    constexpr float totalWidth = buttonWidth * 4.0F + spacing * 3.0F;
+    const float buttonWidth = ui::scaled(ui::Metrics::toolbarButtonWidth);
+    const float spacing = ui::scaled(ui::Metrics::spacing);
+    const float controlHeight = ui::scaled(ui::Metrics::controlHeight);
+    const float totalWidth = buttonWidth * 4.0F + spacing * 3.0F;
+    const float contentY = ui::scaled(5.0F);
+
     ImGui::SetCursorPosX(
         std::max(0.0F, (ImGui::GetWindowWidth() - totalWidth) * 0.5F)
     );
-    ImGui::SetCursorPosY(5.0F);
+    ImGui::SetCursorPosY(contentY);
 
     ImGui::BeginDisabled(m_sceneState != SceneState::Edit);
-    if (toolbarIconButton(
+    if (ui::iconButton(
             "##Play",
-            ToolbarIcon::Play,
-            {buttonWidth, 28.0F},
+            ui::Icon::Play,
+            {buttonWidth, controlHeight},
             "Play"
         )) {
         playScene();
@@ -563,10 +518,10 @@ void EditorLayer::drawToolbar() {
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
     const bool paused = m_sceneState == SceneState::Pause;
-    if (toolbarIconButton(
+    if (ui::iconButton(
             "##Pause",
-            paused ? ToolbarIcon::Play : ToolbarIcon::Pause,
-            {buttonWidth, 28.0F},
+            paused ? ui::Icon::Play : ui::Icon::Pause,
+            {buttonWidth, controlHeight},
             paused ? "Resume" : "Pause"
         )) {
         pauseScene();
@@ -575,10 +530,10 @@ void EditorLayer::drawToolbar() {
 
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState != SceneState::Pause);
-    if (toolbarIconButton(
+    if (ui::iconButton(
             "##Step",
-            ToolbarIcon::Step,
-            {buttonWidth, 28.0F},
+            ui::Icon::Step,
+            {buttonWidth, controlHeight},
             "Step one frame"
         )) {
         stepScene();
@@ -587,16 +542,87 @@ void EditorLayer::drawToolbar() {
 
     ImGui::SameLine(0.0F, spacing);
     ImGui::BeginDisabled(m_sceneState == SceneState::Edit);
-    if (toolbarIconButton(
+    if (ui::iconButton(
             "##Stop",
-            ToolbarIcon::Stop,
-            {buttonWidth, 28.0F},
+            ui::Icon::Stop,
+            {buttonWidth, controlHeight},
             "Stop"
         )) {
         stopScene();
     }
     ImGui::EndDisabled();
 
+    ImGui::End();
+}
+
+void EditorLayer::drawStatusBar() {
+    constexpr ImGuiWindowFlags statusFlags =
+        ImGuiWindowFlags_NoScrollbar
+        | ImGuiWindowFlags_NoSavedSettings
+        | ImGuiWindowFlags_NoNav;
+    if (!ImGui::BeginViewportSideBar(
+            "##VShadeStatusBar",
+            ImGui::GetMainViewport(),
+            ImGuiDir_Down,
+            ui::scaled(ui::Metrics::statusBarHeight),
+            statusFlags
+        )) {
+        return;
+    }
+
+    const auto separator = [] {
+        ImGui::SameLine(0.0F, ui::scaled(ui::Metrics::spacing));
+        ImGui::TextDisabled("|");
+        ImGui::SameLine(0.0F, ui::scaled(ui::Metrics::spacing));
+    };
+
+    const std::shared_ptr<vshade::scene::Scene>& activeScene =
+        m_sceneState == SceneState::Edit ? m_editorScene : m_runtimeScene;
+    const bool hasSelection = activeScene && activeScene->valid(m_selectedEntity);
+    const std::string selection = hasSelection
+        ? std::string(m_selectedEntity.name())
+        : "None";
+    ImGui::Text("Selection: %s", selection.c_str());
+    separator();
+    ImGui::Text("Import: %s", m_importActivity.c_str());
+    separator();
+    ImGui::Text("Build: %s", m_buildActivity.c_str());
+    separator();
+
+    ui::ColorRole resultColor = ui::ColorRole::Muted;
+    switch (m_lastOperationTone) {
+        case OperationTone::Success: resultColor = ui::ColorRole::Success; break;
+        case OperationTone::Warning: resultColor = ui::ColorRole::Warning; break;
+        case OperationTone::Error: resultColor = ui::ColorRole::Error; break;
+        case OperationTone::Neutral: break;
+    }
+    ImGui::TextColored(
+        ui::color(resultColor),
+        "Last: %s",
+        m_lastOperation.c_str()
+    );
+
+    const ImGuiIO& io = ImGui::GetIO();
+    const float fps = io.Framerate;
+    const float milliseconds = fps > 0.0F ? 1000.0F / fps : 0.0F;
+    const vshade::renderer::RenderStats& stats =
+        vshade::renderer::Renderer::stats();
+    const std::string frameStats = std::format(
+        "{:.0f} FPS  {:.2f} ms  Draws: {}  Tris: {}",
+        fps,
+        milliseconds,
+        stats.drawCalls,
+        stats.triangleCount
+    );
+    const float statsWidth = ImGui::CalcTextSize(frameStats.c_str()).x;
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(std::max(
+        ImGui::GetCursorPosX(),
+        ImGui::GetWindowWidth()
+            - statsWidth
+            - ui::scaled(ui::Metrics::chromePadding)
+    ));
+    ImGui::TextUnformatted(frameStats.c_str());
     ImGui::End();
 }
 
@@ -621,7 +647,8 @@ void EditorLayer::drawUnsavedChangesModal() {
     ImGui::TextDisabled("Unsaved scene changes will be lost if discarded.");
     ImGui::Separator();
 
-    if (ImGui::Button("Save", {100.0F, 0.0F})) {
+    const ImVec2 modalButtonSize = ui::scaled(100.0F, 0.0F);
+    if (ImGui::Button("Save", modalButtonSize)) {
         if (m_document.path().empty()) {
             m_continueAfterSave = true;
             saveSceneAs();
@@ -632,12 +659,14 @@ void EditorLayer::drawUnsavedChangesModal() {
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Discard", {100.0F, 0.0F})) {
+    ui::pushDestructiveButtonStyle();
+    if (ImGui::Button("Discard", modalButtonSize)) {
         ImGui::CloseCurrentPopup();
         completePendingTransition();
     }
+    ui::popDestructiveButtonStyle();
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", {100.0F, 0.0F})) {
+    if (ImGui::Button("Cancel", modalButtonSize)) {
         ImGui::CloseCurrentPopup();
         cancelPendingTransition();
     }
@@ -696,6 +725,7 @@ void EditorLayer::drawFileDialogs() {
                     vshade::project::Project::load(selectedPath)
                 ));
             } catch (const std::exception& error) {
+                setOperationResult("Project open failed", OperationTone::Error);
                 ENGINE_ERROR(
                     "Failed to open project '{}': {}",
                     selectedPath.generic_string(),
@@ -715,6 +745,7 @@ void EditorLayer::drawFileDialogs() {
                     vshade::project::Project::create(selectedDirectory)
                 ));
             } catch (const std::exception& error) {
+                setOperationResult("Project creation failed", OperationTone::Error);
                 ENGINE_ERROR(
                     "Failed to create project '{}': {}",
                     selectedDirectory.generic_string(),
@@ -752,6 +783,7 @@ void EditorLayer::newScene() {
     setActiveScene(
         std::make_shared<vshade::scene::Scene>("Untitled Scene")
     );
+    setOperationResult("Created a new scene", OperationTone::Success);
 }
 
 void EditorLayer::openScene() {
@@ -779,6 +811,7 @@ bool EditorLayer::loadScene(const std::filesystem::path& path) {
     );
     vshade::scene::SceneSerializer serializer(*scene);
     if (!serializer.deserialize(path)) {
+        setOperationResult("Scene open failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to open scene '{}': {}",
             path.generic_string(),
@@ -792,6 +825,7 @@ bool EditorLayer::loadScene(const std::filesystem::path& path) {
             scene->applyPrefabInstances(*m_assets);
         }
     } catch (const std::exception& error) {
+        setOperationResult("Scene asset resolution failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to resolve scene assets '{}': {}",
             path.generic_string(),
@@ -800,6 +834,10 @@ bool EditorLayer::loadScene(const std::filesystem::path& path) {
         return false;
     }
     setActiveScene(std::move(scene), path);
+    setOperationResult(
+        "Opened " + path.filename().generic_string(),
+        OperationTone::Success
+    );
     return true;
 }
 
@@ -821,6 +859,7 @@ bool EditorLayer::saveSceneTo(const std::filesystem::path& path) {
 
     std::string error;
     if (!serializeSceneAtomically(*m_editorScene, path, error)) {
+        setOperationResult("Scene save failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to save scene '{}': {}",
             path.generic_string(),
@@ -831,6 +870,10 @@ bool EditorLayer::saveSceneTo(const std::filesystem::path& path) {
     m_document.setPath(path);
     m_document.markSaved();
     ENGINE_INFO("Saved scene '{}'", path.generic_string());
+    setOperationResult(
+        "Saved " + path.filename().generic_string(),
+        OperationTone::Success
+    );
     recordStartSceneIfUnset();
     return true;
 }
@@ -923,6 +966,7 @@ bool EditorLayer::setProject(
             nextScene->applyPrefabInstances(candidateAssets);
         }
     } catch (const std::exception& error) {
+        setOperationResult("Project preparation failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to prepare project '{}': {}",
             project->projectFile().generic_string(),
@@ -935,6 +979,7 @@ bool EditorLayer::setProject(
     try {
         loadProjectCatalogInto(*m_assets, *project);
     } catch (const std::exception& error) {
+        setOperationResult("Project activation failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to activate project '{}': {}",
             project->projectFile().generic_string(),
@@ -966,6 +1011,10 @@ bool EditorLayer::setProject(
     ENGINE_INFO(
         "Opened project '{}'",
         m_project->projectFile().generic_string()
+    );
+    setOperationResult(
+        "Opened project " + m_project->config().name,
+        OperationTone::Success
     );
     return true;
 }
@@ -1009,6 +1058,7 @@ std::optional<std::filesystem::path> EditorLayer::importAsset(
         return std::nullopt;
     }
 
+    m_importActivity = "Importing " + sourcePath.filename().generic_string();
     try {
         const vshade::asset::AssetType type =
             vshade::asset::assetTypeFromExtension(sourcePath.extension());
@@ -1019,6 +1069,8 @@ std::optional<std::filesystem::path> EditorLayer::importAsset(
         );
         if (!imported) {
             if (imported.cancelled) {
+                m_importActivity = "Idle";
+                setOperationResult("Import cancelled", OperationTone::Warning);
                 return std::nullopt;
             }
             throw std::runtime_error(imported.error);
@@ -1053,8 +1105,15 @@ std::optional<std::filesystem::path> EditorLayer::importAsset(
         saveProjectCatalog();
         m_assetSelector.discover(*m_assets);
         m_contentBrowser.refresh();
+        m_importActivity = "Idle";
+        setOperationResult(
+            "Imported " + destination.filename().generic_string(),
+            OperationTone::Success
+        );
         return destination;
     } catch (const std::exception& error) {
+        m_importActivity = "Idle";
+        setOperationResult("Asset import failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to import asset '{}': {}",
             sourcePath.generic_string(),
@@ -1132,7 +1191,12 @@ void EditorLayer::writePrefab(const std::filesystem::path& path) {
             m_assetSelector.discover(*m_assets);
         }
         ENGINE_INFO("Saved prefab '{}'", path.generic_string());
+        setOperationResult(
+            "Saved prefab " + path.filename().generic_string(),
+            OperationTone::Success
+        );
     } catch (const std::exception& error) {
+        setOperationResult("Prefab save failed", OperationTone::Error);
         ENGINE_ERROR(
             "Failed to save prefab '{}': {}",
             path.generic_string(),
@@ -1262,7 +1326,17 @@ void EditorLayer::handleEditHotkeys() {
     const bool shiftDown =
         Input::isKeyDown(KeyCode::LeftShift)
         || Input::isKeyDown(KeyCode::RightShift);
-    if (controlDown && Input::isKeyPressed(KeyCode::Z)) {
+    if (controlDown && Input::isKeyPressed(KeyCode::N)) {
+        requestTransition([this] { newScene(); });
+    } else if (controlDown && Input::isKeyPressed(KeyCode::O)) {
+        requestTransition([this] { openScene(); });
+    } else if (controlDown && Input::isKeyPressed(KeyCode::S)) {
+        if (shiftDown) {
+            saveSceneAs();
+        } else {
+            static_cast<void>(saveScene());
+        }
+    } else if (controlDown && Input::isKeyPressed(KeyCode::Z)) {
         if (shiftDown) {
             redoSceneEdit();
         } else {
@@ -1322,6 +1396,7 @@ void EditorLayer::playScene() {
         m_sceneState = SceneState::Play;
         m_stepRequested = false;
         bindActiveScene();
+        setOperationResult("Entered Play mode", OperationTone::Success);
     } catch (const std::exception& error) {
         if (m_undoHistory.isRecording()) {
             revertSceneEdit();
@@ -1330,6 +1405,7 @@ void EditorLayer::playScene() {
         m_runtimeScene.reset();
         m_sceneState = SceneState::Edit;
         bindActiveScene();
+        setOperationResult("Failed to enter Play mode", OperationTone::Error);
         ENGINE_ERROR("Failed to enter play mode: {}", error.what());
     }
 }
@@ -1341,10 +1417,12 @@ void EditorLayer::pauseScene() {
     if (m_sceneState == SceneState::Play) {
         m_sceneState = SceneState::Pause;
         m_runtime->setPaused(true);
+        setOperationResult("Paused scene", OperationTone::Warning);
     } else if (m_sceneState == SceneState::Pause) {
         m_sceneState = SceneState::Play;
         m_stepRequested = false;
         m_runtime->setPaused(false);
+        setOperationResult("Resumed scene", OperationTone::Success);
     }
 }
 
@@ -1365,6 +1443,7 @@ void EditorLayer::stopScene() {
     m_stepRequested = false;
     bindActiveScene();
     m_runtimeScene.reset();
+    setOperationResult("Returned to Edit mode", OperationTone::Neutral);
 }
 
 void EditorLayer::bindActiveScene() {
@@ -1375,6 +1454,14 @@ void EditorLayer::bindActiveScene() {
     m_selectedEntity = {};
     m_sceneHierarchyPanel.setScene(activeScene);
     m_viewport.setScene(activeScene);
+}
+
+void EditorLayer::setOperationResult(
+    std::string message,
+    const OperationTone tone
+) {
+    m_lastOperation = std::move(message);
+    m_lastOperationTone = tone;
 }
 
 } // namespace editor

@@ -1,4 +1,5 @@
 #include "panels/Viewport.hpp"
+#include "ImGui/ImGuiTheme.hpp"
 #include "widgets/AssetSelector.hpp"
 
 #include <asset/Asset.hpp>
@@ -131,6 +132,162 @@ Viewport::Viewport(vshade::asset::AssetManager& assets)
 
 Viewport::~Viewport() = default;
 
+bool Viewport::drawOverlayToolbar(
+    const vshade::math::Vec2 position,
+    const vshade::math::Vec2 size
+) {
+    using ui::Metrics;
+    const ImVec2 toolSize = ui::scaled(30.0F, Metrics::controlHeight);
+    const float padding = ui::scaled(10.0F);
+    const float cardPadding = ui::scaled(6.0F);
+    const float spacing = ui::scaled(Metrics::smallSpacing);
+    ImVec4 overlayColor = ui::color(ui::ColorRole::Chrome);
+    overlayColor.w = 0.88F;
+    constexpr ImGuiWindowFlags overlayFlags =
+        ImGuiWindowFlags_NoDecoration
+        | ImGuiWindowFlags_NoDocking
+        | ImGuiWindowFlags_NoMove
+        | ImGuiWindowFlags_NoSavedSettings
+        | ImGuiWindowFlags_NoFocusOnAppearing
+        | ImGuiWindowFlags_NoScrollbar
+        | ImGuiWindowFlags_NoScrollWithMouse
+        | ImGuiWindowFlags_NoNav;
+    bool overlayHovered = false;
+    const ImGuiID viewportId = ImGui::GetWindowViewport()->ID;
+
+    const auto toolButton = [toolSize](
+        const char* id,
+        const ui::Icon icon,
+        const char* tooltip,
+        const bool active
+    ) {
+        return ui::iconButton(id, icon, toolSize, tooltip, active);
+    };
+
+    const ImVec2 toolsCardSize{
+        toolSize.x + cardPadding * 2.0F,
+        toolSize.y * 3.0F + spacing * 2.0F + cardPadding * 2.0F,
+    };
+    ImGui::SetNextWindowPos({position.x + padding, position.y + padding});
+    ImGui::SetNextWindowSize(toolsCardSize);
+    ImGui::SetNextWindowViewport(viewportId);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, overlayColor);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui::scaled(8.0F));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
+    ImGui::PushStyleVar(
+        ImGuiStyleVar_WindowPadding,
+        ImVec2{cardPadding, cardPadding}
+    );
+    ImGui::Begin("##ViewportTransformTools", nullptr, overlayFlags);
+    if (toolButton("##Translate", ui::Icon::Translate, "Translate (W)", m_gizmoOperation == GizmoOperation::Translate)) {
+        m_gizmoOperation = GizmoOperation::Translate;
+    }
+    if (toolButton("##Rotate", ui::Icon::Rotate, "Rotate (E)", m_gizmoOperation == GizmoOperation::Rotate)) {
+        m_gizmoOperation = GizmoOperation::Rotate;
+    }
+    if (toolButton("##Scale", ui::Icon::Scale, "Scale (R)", m_gizmoOperation == GizmoOperation::Scale)) {
+        m_gizmoOperation = GizmoOperation::Scale;
+    }
+    overlayHovered |= ImGui::IsWindowHovered();
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor();
+
+    const ImVec2 optionsPadding = ui::scaled(8.0F, 5.0F);
+    const ImVec2 optionFramePadding = ui::scaled(10.0F, 3.0F);
+    const float optionsWidth = ui::scaled(m_snapEnabled ? 400.0F : 315.0F);
+    const float optionsHeight = ImGui::GetFontSize()
+        + optionFramePadding.y * 2.0F
+        + optionsPadding.y * 2.0F;
+    if (size.x < optionsWidth + toolsCardSize.x + padding * 3.0F) {
+        return overlayHovered;
+    }
+
+    ImGui::SetNextWindowPos({
+        position.x + size.x - optionsWidth - padding,
+        position.y + padding,
+    });
+    ImGui::SetNextWindowSize({optionsWidth, optionsHeight});
+    ImGui::SetNextWindowViewport(viewportId);
+    ImVec4 overlayBorder = ImGui::GetStyleColorVec4(ImGuiCol_Border);
+    overlayBorder.w = 0.65F;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, overlayColor);
+    ImGui::PushStyleColor(ImGuiCol_Border, overlayBorder);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui::scaled(8.0F));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, optionsPadding);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, optionFramePadding);
+    ImGui::PushStyleVar(
+        ImGuiStyleVar_ItemSpacing,
+        ImVec2{spacing, ui::scaled(2.0F)}
+    );
+    ImGui::Begin("##ViewportTransformOptions", nullptr, overlayFlags);
+    ImGui::SetNextItemWidth(ui::scaled(92.0F));
+    const char* orientation = m_gizmoOrientation == GizmoOrientation::Local
+        ? "Local"
+        : "World";
+    if (ImGui::BeginCombo("##GizmoOrientation", orientation)) {
+        if (ImGui::Selectable("Local", m_gizmoOrientation == GizmoOrientation::Local)) {
+            m_gizmoOrientation = GizmoOrientation::Local;
+        }
+        if (ImGui::Selectable("World", m_gizmoOrientation == GizmoOrientation::World)) {
+            m_gizmoOrientation = GizmoOrientation::World;
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Gizmo orientation");
+    }
+
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::SetNextItemWidth(ui::scaled(112.0F));
+    const char* pivot = m_pivotMode == PivotMode::Object
+        ? "Pivot: Object"
+        : "Pivot: Selection";
+    if (ImGui::BeginCombo("##PivotMode", pivot)) {
+        if (ImGui::Selectable("Object", m_pivotMode == PivotMode::Object)) {
+            m_pivotMode = PivotMode::Object;
+        }
+        if (ImGui::Selectable("Selection", m_pivotMode == PivotMode::Selection)) {
+            m_pivotMode = PivotMode::Selection;
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Transform pivot mode (selection center is used for multi-selection)");
+    }
+
+    ImGui::SameLine(0.0F, ui::scaled(Metrics::spacing));
+    ImGui::Checkbox("Snap", &m_snapEnabled);
+    if (m_snapEnabled) {
+        ImGui::SameLine(0.0F, spacing);
+        ImGui::SetNextItemWidth(ui::scaled(72.0F));
+        float* snapValue = &m_translationSnap;
+        const char* snapFormat = "%.2f";
+        float minimum = 0.01F;
+        if (m_gizmoOperation == GizmoOperation::Rotate) {
+            snapValue = &m_rotationSnap;
+            snapFormat = "%.0f deg";
+            minimum = 1.0F;
+        } else if (m_gizmoOperation == GizmoOperation::Scale) {
+            snapValue = &m_scaleSnap;
+        }
+        ImGui::DragFloat(
+            "##SnapValue",
+            snapValue,
+            minimum,
+            minimum,
+            100.0F,
+            snapFormat
+        );
+    }
+    overlayHovered |= ImGui::IsWindowHovered();
+    ImGui::End();
+    ImGui::PopStyleVar(5);
+    ImGui::PopStyleColor(2);
+    return overlayHovered;
+}
+
 void Viewport::onUpdate(const float deltaTime) {
     using vshade::input::Input;
     using vshade::input::KeyCode;
@@ -149,7 +306,11 @@ void Viewport::onUpdate(const float deltaTime) {
     }
 
     m_editorCamera.setInputEnabled(
-        m_editing && m_visible && m_hovered && !m_gizmoUsing
+        m_editing
+        && m_visible
+        && m_hovered
+        && !m_overlayHovered
+        && !m_gizmoUsing
     );
     m_editorCamera.onUpdate(deltaTime);
 }
@@ -168,6 +329,7 @@ void Viewport::setEditing(const bool editing) noexcept {
     m_editing = editing;
     if (!editing) {
         m_gizmoUsing = false;
+        m_overlayHovered = false;
         m_editorCamera.setInputEnabled(false);
     }
 }
@@ -176,6 +338,7 @@ void Viewport::setVisible(const bool visible) noexcept {
     m_visible = visible;
     if (!visible) {
         m_hovered = false;
+        m_overlayHovered = false;
         m_gizmoUsing = false;
     }
 }
@@ -223,6 +386,10 @@ void Viewport::onImGuiRender(
                 availableSize.x,
                 availableSize.y
             );
+            m_overlayHovered = drawOverlayToolbar(
+                {viewportPosition.x, viewportPosition.y},
+                {availableSize.x, availableSize.y}
+            );
             drawGizmo(
                 selectedEntity,
                 viewportPosition.x,
@@ -231,6 +398,7 @@ void Viewport::onImGuiRender(
                 availableSize.y
             );
             if (!spawnedAsset
+                && !m_overlayHovered
                 && imageHovered
                 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
                 && !ImGuizmo::IsOver()
@@ -244,15 +412,21 @@ void Viewport::onImGuiRender(
                 );
             }
         } else {
+            m_overlayHovered = false;
             finishGizmoRecording();
             m_gizmoUsing = false;
             if (!m_runtimeCameraActive) {
                 const ImVec2 textSize = ImGui::CalcTextSize("No Camera");
-                ImGui::SetCursorScreenPos({
-                    viewportPosition.x + (availableSize.x - textSize.x) * 0.5F,
-                    viewportPosition.y + (availableSize.y - textSize.y) * 0.5F,
-                });
-                ImGui::TextUnformatted("No Camera");
+                ImGui::GetWindowDrawList()->AddText(
+                    {
+                        viewportPosition.x
+                            + (availableSize.x - textSize.x) * 0.5F,
+                        viewportPosition.y
+                            + (availableSize.y - textSize.y) * 0.5F,
+                    },
+                    ImGui::GetColorU32(ImGuiCol_TextDisabled),
+                    "No Camera"
+                );
             }
         }
     } else {
@@ -291,12 +465,24 @@ void Viewport::drawGizmo(
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(x, y, width, height);
+    const ImGuizmo::MODE gizmoMode =
+        m_gizmoOrientation == GizmoOrientation::Local
+            ? ImGuizmo::LOCAL
+            : ImGuizmo::WORLD;
+    const float snap = m_gizmoOperation == GizmoOperation::Rotate
+        ? m_rotationSnap
+        : (m_gizmoOperation == GizmoOperation::Scale
+            ? m_scaleSnap
+            : m_translationSnap);
+    const float snapValues[3]{snap, snap, snap};
     const bool manipulated = ImGuizmo::Manipulate(
         glm::value_ptr(m_editorCamera.viewMatrix()),
         glm::value_ptr(m_editorCamera.projectionMatrix()),
         toImGuizmoOperation(m_gizmoOperation),
-        ImGuizmo::LOCAL,
-        glm::value_ptr(modelMatrix)
+        gizmoMode,
+        glm::value_ptr(modelMatrix),
+        nullptr,
+        m_snapEnabled ? snapValues : nullptr
     );
 
     if (manipulated) {

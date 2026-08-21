@@ -42,6 +42,13 @@ public:
         Pause,
     };
 
+    enum class OperationTone {
+        Neutral,
+        Success,
+        Warning,
+        Error,
+    };
+
     EditorLayer(
         vshade::asset::AssetManager& assets,
         vshade::scene::SceneRuntime& runtime,
@@ -62,6 +69,7 @@ private:
     void drawDockspace();
     void drawMenuBar();
     void drawToolbar();
+    void drawStatusBar();
     void drawFileDialogs();
     void drawUnsavedChangesModal();
     void buildDefaultDockLayout(std::uint32_t dockspaceId);
@@ -104,6 +112,7 @@ private:
     void stepScene();
     void stopScene();
     void bindActiveScene();
+    void setOperationResult(std::string message, OperationTone tone);
 
     vshade::asset::AssetManager* m_assets = nullptr;
     vshade::scene::SceneRuntime* m_runtime = nullptr;
@@ -132,6 +141,10 @@ private:
     bool m_showViewport = true;
     bool m_showConsole = true;
     bool m_showContentBrowser = true;
+    std::string m_importActivity = "Idle";
+    std::string m_buildActivity = "Idle";
+    std::string m_lastOperation = "Ready";
+    OperationTone m_lastOperationTone = OperationTone::Neutral;
 };
 
 } // namespace editor

@@ -1,4 +1,5 @@
 #include "panels/Console.hpp"
+#include "ImGui/ImGuiTheme.hpp"
 
 #include <core/Log.hpp>
 
@@ -40,13 +41,13 @@ struct ConsoleEntry {
 
 [[nodiscard]] ImVec4 levelColor(const spdlog::level::level_enum level) {
     switch (level) {
-        case spdlog::level::trace: return {0.58F, 0.62F, 0.70F, 1.0F};
-        case spdlog::level::debug: return {0.48F, 0.70F, 0.95F, 1.0F};
-        case spdlog::level::info: return {0.82F, 0.86F, 0.92F, 1.0F};
-        case spdlog::level::warn: return {0.98F, 0.78F, 0.32F, 1.0F};
-        case spdlog::level::err: return {1.0F, 0.38F, 0.32F, 1.0F};
-        case spdlog::level::critical: return {1.0F, 0.20F, 0.60F, 1.0F};
-        default: return {1.0F, 1.0F, 1.0F, 1.0F};
+        case spdlog::level::trace: return ui::color(ui::ColorRole::Muted);
+        case spdlog::level::debug: return ui::color(ui::ColorRole::Accent);
+        case spdlog::level::warn: return ui::color(ui::ColorRole::Warning);
+        case spdlog::level::err:
+        case spdlog::level::critical: return ui::color(ui::ColorRole::Error);
+        case spdlog::level::info:
+        default: return ImGui::GetStyleColorVec4(ImGuiCol_Text);
     }
 }
 
