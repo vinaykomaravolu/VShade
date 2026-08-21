@@ -119,8 +119,16 @@ void EditorCamera::focusOn(
     m_controller.syncFromCamera();
 }
 
+void EditorCamera::setMovementSpeed(const float speed) {
+    m_controller.setMovementSpeed(speed);
+}
+
 bool EditorCamera::isLooking() const noexcept {
     return m_looking;
+}
+
+float EditorCamera::movementSpeed() const noexcept {
+    return m_controller.movementSpeed();
 }
 
 const vshade::renderer::Camera& EditorCamera::camera() const noexcept {

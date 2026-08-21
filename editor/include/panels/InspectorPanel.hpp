@@ -55,6 +55,7 @@ private:
     SceneEditHooks m_editHooks;
     std::function<void(std::filesystem::path)> m_revealAsset;
     std::array<char, 256> m_nameBuffer{};
+    std::array<char, 128> m_componentSearch{};
     std::uint64_t m_nameEntityUuid = 0;
     bool m_nameValidationError = false;
     bool m_interactionRecording = false;

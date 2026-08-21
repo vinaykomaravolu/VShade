@@ -25,10 +25,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -72,12 +74,41 @@ void drawComponent(
         name,
         ImGuiTreeNodeFlags_DefaultOpen
     );
+    const ImVec2 headerMinimum = ImGui::GetItemRectMin();
+    const ImVec2 headerMaximum = ImGui::GetItemRectMax();
+    const ImVec2 nextCursor = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos({
+        headerMaximum.x - ui::scaled(28.0F),
+        headerMinimum.y + ui::scaled(2.0F),
+    });
+    if (ImGui::SmallButton("...")) {
+        ImGui::OpenPopup("ComponentActions");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Component actions");
+    }
+    ImGui::SetCursorScreenPos(nextCursor);
+
+    static std::optional<Component> copiedValues;
     bool reset = false;
     bool remove = false;
-    if (ImGui::BeginPopupContextItem("ComponentActions")) {
+    bool paste = false;
+    if (ImGui::BeginPopup("ComponentActions")) {
+        if (ImGui::MenuItem("Copy Values")) {
+            copiedValues = entity.get<Component>();
+        }
+        ImGui::BeginDisabled(!copiedValues.has_value());
+        paste = ImGui::MenuItem("Paste Values");
+        ImGui::EndDisabled();
+        ImGui::Separator();
         reset = ImGui::MenuItem("Reset");
         remove = ImGui::MenuItem("Remove Component");
         ImGui::EndPopup();
+    }
+    if (paste) {
+        commitMutation(hooks, [&] { entity.set<Component>(*copiedValues); });
+        ImGui::PopID();
+        return;
     }
     if (reset) {
         commitMutation(hooks, [&] { entity.set<Component>(Component{}); });
@@ -158,6 +189,35 @@ void InspectorPanel::setScriptRegistry(
 
 void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
     m_editHooks = std::move(hooks);
+}
+
+template<typename Resource>
+void drawBrokenAssetWarning(
+    const char* label,
+    const vshade::asset::AssetReference<Resource>& reference,
+    const vshade::asset::AssetManager* assets
+) {
+    if (!reference.valid() || assets == nullptr) {
+        return;
+    }
+    std::filesystem::path path = reference.sourcePath();
+    if (path.is_relative()) {
+        path = assets->rootDirectory() / path;
+    }
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error) || error) {
+        ImGui::TextColored(
+            ui::color(ui::ColorRole::Warning),
+            "Missing %s asset: %s",
+            label,
+            reference.sourcePath().generic_string().c_str()
+        );
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(
+                "The reference is preserved, but its source file cannot be found."
+            );
+        }
+    }
 }
 
 [[nodiscard]] bool hasTypedCollider3D(const vshade::scene::Entity entity) {
@@ -284,6 +344,19 @@ void InspectorPanel::onImGuiRender(
 ) {
     ImGui::Begin("Inspector", nullptr, panelFlags);
 
+    const ImVec4 stateColor = m_readOnly
+        ? ui::color(ui::ColorRole::Warning)
+        : ui::color(ui::ColorRole::Success);
+    ImGui::TextColored(
+        stateColor,
+        m_readOnly ? "RUNTIME  |  READ ONLY" : "EDIT MODE"
+    );
+    if (m_readOnly) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("Stop Play mode to edit scene values.");
+    }
+    ImGui::Separator();
+
     const bool popupOpen = ImGui::IsPopupOpen(
         nullptr,
         ImGuiPopupFlags_AnyPopupId
@@ -337,6 +410,7 @@ void InspectorPanel::onImGuiRender(
     }
 
     ImGui::BeginDisabled(m_readOnly);
+    ImGui::PushItemWidth(-ui::scaled(145.0F));
 
     if (selectedEntity) {
         if (m_nameEntityUuid != selectedEntity.uuid()) {
@@ -374,10 +448,8 @@ void InspectorPanel::onImGuiRender(
         ImGui::TextDisabled("No entity selected");
     }
 
+    ImGui::PopItemWidth();
     ImGui::EndDisabled();
-    if (m_readOnly) {
-        ImGui::TextDisabled("Runtime scene is read-only.");
-    }
 
     if (m_interactionRecording
         && !ImGui::IsMouseDown(ImGuiMouseButton_Left)
@@ -461,6 +533,7 @@ void InspectorPanel::drawPrefab(vshade::scene::Entity entity) {
 
     const bool canOpen = static_cast<bool>(m_revealAsset) && !path.empty();
     const bool canApply = m_assets != nullptr && instance.prefab.valid();
+    drawBrokenAssetWarning("prefab", instance.prefab, m_assets);
 
     ImGui::BeginDisabled(!canOpen);
     if (ImGui::Button("Open")) {
@@ -522,29 +595,73 @@ void InspectorPanel::drawTransform(vshade::scene::Entity entity) {
     }
 
     vshade::math::Vec3 position = transform.position();
-    if (ImGui::DragFloat3("Position", &position.x, 0.1F)) {
+    if (ImGui::DragFloat3(
+            "Position",
+            &position.x,
+            0.1F,
+            0.0F,
+            0.0F,
+            "%.3f units"
+        )) {
         transform.setPosition(position);
     }
+    const bool positionHovered = ImGui::IsItemHovered();
     trackTransformItem(m_editHooks);
+    if (ImGui::BeginPopupContextItem("PositionActions")) {
+        if (ImGui::MenuItem("Reset to (0, 0, 0)")) {
+            transform.setPosition({0.0F, 0.0F, 0.0F});
+        }
+        ImGui::EndPopup();
+    }
+    if (positionHovered) {
+        ImGui::SetTooltip("Local position in scene units. Right-click to reset.");
+    }
 
     vshade::math::Vec3 rotationDegrees =
         glm::degrees(vshade::math::toEuler(transform.rotation()));
-    if (ImGui::DragFloat3("Rotation", &rotationDegrees.x, 0.5F)) {
+    if (ImGui::DragFloat3(
+            "Rotation",
+            &rotationDegrees.x,
+            0.5F,
+            0.0F,
+            0.0F,
+            "%.1f deg"
+        )) {
         transform.setRotation(
             vshade::math::fromEuler(glm::radians(rotationDegrees))
         );
     }
+    const bool rotationHovered = ImGui::IsItemHovered();
     trackTransformItem(m_editHooks);
+    if (ImGui::BeginPopupContextItem("RotationActions")) {
+        if (ImGui::MenuItem("Reset to (0, 0, 0)")) {
+            transform.setRotation(vshade::math::fromEuler({0.0F, 0.0F, 0.0F}));
+        }
+        ImGui::EndPopup();
+    }
+    if (rotationHovered) {
+        ImGui::SetTooltip("Local Euler rotation in degrees. Right-click to reset.");
+    }
 
     vshade::math::Vec3 scale = transform.scale();
-    if (ImGui::DragFloat3("Scale", &scale.x, 0.1F)) {
+    if (ImGui::DragFloat3("Scale", &scale.x, 0.1F, 0.0F, 0.0F, "%.3f")) {
         constexpr float minimumScale = 0.001F;
         scale.x = std::max(scale.x, minimumScale);
         scale.y = std::max(scale.y, minimumScale);
         scale.z = std::max(scale.z, minimumScale);
         transform.setScale(scale);
     }
+    const bool scaleHovered = ImGui::IsItemHovered();
     trackTransformItem(m_editHooks);
+    if (ImGui::BeginPopupContextItem("ScaleActions")) {
+        if (ImGui::MenuItem("Reset to (1, 1, 1)")) {
+            transform.setScale({1.0F, 1.0F, 1.0F});
+        }
+        ImGui::EndPopup();
+    }
+    if (scaleHovered) {
+        ImGui::SetTooltip("Local scale multiplier. Right-click to reset.");
+    }
 }
 
 void InspectorPanel::drawCamera(vshade::scene::Entity entity) {
@@ -581,7 +698,8 @@ void InspectorPanel::drawCamera(vshade::scene::Entity entity) {
                         &fieldOfViewDegrees,
                         0.25F,
                         1.0F,
-                        179.0F
+                        179.0F,
+                        "%.1f deg"
                     )) {
                     camera.verticalFieldOfViewRadians = glm::radians(
                         std::clamp(fieldOfViewDegrees, 1.0F, 179.0F)
@@ -592,19 +710,43 @@ void InspectorPanel::drawCamera(vshade::scene::Entity entity) {
                     "Orthographic Height",
                     &camera.orthographicHeight,
                     0.1F,
-                    0.001F
+                    0.001F,
+                    100000.0F,
+                    "%.2f units"
                 );
                 camera.orthographicHeight =
                     std::max(camera.orthographicHeight, 0.001F);
             }
 
-            ImGui::DragFloat("Near Clip", &camera.nearPlane, 0.01F);
+            ImGui::DragFloat(
+                "Near Clip",
+                &camera.nearPlane,
+                0.01F,
+                0.001F,
+                100000.0F,
+                "%.3f units"
+            );
             camera.nearPlane = std::max(camera.nearPlane, 0.001F);
-            ImGui::DragFloat("Far Clip", &camera.farPlane, 1.0F);
+            ImGui::DragFloat(
+                "Far Clip",
+                &camera.farPlane,
+                1.0F,
+                0.002F,
+                1000000.0F,
+                "%.1f units"
+            );
+            const bool invalidClipRange =
+                camera.farPlane <= camera.nearPlane + 0.001F;
             camera.farPlane = std::max(
                 camera.farPlane,
                 camera.nearPlane + 0.001F
             );
+            if (invalidClipRange) {
+                ImGui::TextColored(
+                    ui::color(ui::ColorRole::Warning),
+                    "Far Clip must be greater than Near Clip."
+                );
+            }
             ImGui::Checkbox("Clear Color", &camera.clearColorEnabled);
             ImGui::Checkbox("Clear Depth", &camera.clearDepthEnabled);
             if (camera.clearColorEnabled) {
@@ -636,6 +778,7 @@ void InspectorPanel::drawSpriteRenderer(vshade::scene::Entity entity) {
                     ? sprite.texture.sourcePath()
                     : std::filesystem::path{};
             }
+            drawBrokenAssetWarning("texture", sprite.texture, m_assets);
             ImGui::ColorEdit4("Color", &sprite.color.x);
             ImGui::DragFloat2("Tiling", &sprite.tiling.x, 0.1F);
             ImGui::DragInt("Sorting Layer", &sprite.sortingLayer, 1.0F);
@@ -667,6 +810,7 @@ void InspectorPanel::drawModelRenderer(vshade::scene::Entity entity) {
                     *m_assets
                 );
             }
+            drawBrokenAssetWarning("model", modelRenderer.model, m_assets);
             ImGui::Checkbox("Visible", &modelRenderer.visible);
         },
         [this](vshade::scene::ModelRendererComponent& modelRenderer) {
@@ -697,6 +841,7 @@ void InspectorPanel::drawAudioSource(vshade::scene::Entity entity) {
                     ? source.clipAsset.handle()
                     : vshade::audio::AudioClipHandle{};
             }
+            drawBrokenAssetWarning("audio", source.clipAsset, m_assets);
             ImGui::DragFloat("Volume", &source.volume, 0.01F, 0.0F);
             source.volume = std::max(source.volume, 0.0F);
             ImGui::DragFloat("Pitch", &source.pitch, 0.01F, 0.01F);
@@ -1101,6 +1246,23 @@ void InspectorPanel::drawScripts(vshade::scene::Entity entity) {
                 if (ImGui::SmallButton("Remove")) {
                     removeIndex = static_cast<int>(index);
                 }
+                const bool missingScript = binding.typeName.empty()
+                    || m_scripts == nullptr
+                    || !m_scripts->contains(binding.typeName);
+                if (missingScript) {
+                    ImGui::TextColored(
+                        ui::color(ui::ColorRole::Warning),
+                        "Missing script: %s",
+                        binding.typeName.empty()
+                            ? "no type selected"
+                            : binding.typeName.c_str()
+                    );
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip(
+                            "This script type is not registered and will not run."
+                        );
+                    }
+                }
                 ImGui::PopID();
             }
 
@@ -1124,90 +1286,127 @@ void InspectorPanel::drawScripts(vshade::scene::Entity entity) {
 void InspectorPanel::drawAddComponentMenu(
     vshade::scene::Entity entity
 ) {
-    if (ImGui::Button("+ Add Component")) {
+    if (ImGui::Button("+ Add Component", {-1.0F, 0.0F})) {
         ImGui::OpenPopup("AddComponent");
+        m_componentSearch.fill('\0');
     }
 
     if (!ImGui::BeginPopup("AddComponent")) {
         return;
     }
 
+    ImGui::SetNextItemWidth(ui::scaled(280.0F));
+    ImGui::InputTextWithHint(
+        "##ComponentSearch",
+        "Search components...",
+        m_componentSearch.data(),
+        m_componentSearch.size()
+    );
+    ImGui::Separator();
+
+    std::string query = m_componentSearch.data();
+    std::ranges::transform(query, query.begin(), [](const unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    const auto matches = [&query](std::string_view name) {
+        std::string candidate(name);
+        std::ranges::transform(
+            candidate,
+            candidate.begin(),
+            [](const unsigned char value) {
+                return static_cast<char>(std::tolower(value));
+            }
+        );
+        return query.empty() || candidate.find(query) != std::string::npos;
+    };
+    const auto group = [](const char* name) {
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s", name);
+    };
+    const auto close = [] { ImGui::CloseCurrentPopup(); };
+
+    group("Rendering");
+
     if (!entity.has<vshade::scene::CameraComponent>()
-        && ImGui::MenuItem("Camera")) {
+        && matches("Camera") && ImGui::MenuItem("Camera")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::CameraComponent>();
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!entity.has<vshade::scene::SpriteRendererComponent>()
-        && ImGui::MenuItem("Sprite Renderer")) {
+        && matches("Sprite Renderer") && ImGui::MenuItem("Sprite Renderer")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::SpriteRendererComponent>();
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!entity.has<vshade::scene::ModelRendererComponent>()
-        && ImGui::MenuItem("Model Renderer")) {
+        && matches("Model Renderer") && ImGui::MenuItem("Model Renderer")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::ModelRendererComponent>();
         });
-        ImGui::CloseCurrentPopup();
-    }
-    if (!entity.has<vshade::scene::AudioSourceComponent>()
-        && ImGui::MenuItem("Audio Source")) {
-        commitMutation(m_editHooks, [&] {
-            entity.add<vshade::scene::AudioSourceComponent>();
-        });
-        ImGui::CloseCurrentPopup();
-    }
-    if (!entity.has<vshade::scene::AudioListenerComponent>()
-        && ImGui::MenuItem("Audio Listener")) {
-        commitMutation(m_editHooks, [&] {
-            entity.add<vshade::scene::AudioListenerComponent>();
-            activateExclusiveListener(entity);
-        });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!entity.has<vshade::scene::LightComponent>()
-        && ImGui::MenuItem("Directional Light")) {
+        && matches("Directional Light") && ImGui::MenuItem("Directional Light")) {
         commitMutation(m_editHooks, [&] {
             vshade::scene::LightComponent light;
             light.light = vshade::renderer::DirectionalLight{};
             entity.add<vshade::scene::LightComponent>(light);
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!entity.has<vshade::scene::LightComponent>()
-        && ImGui::MenuItem("Point Light")) {
+        && matches("Point Light") && ImGui::MenuItem("Point Light")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::LightComponent>();
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
+
+    group("Audio");
+    if (!entity.has<vshade::scene::AudioSourceComponent>()
+        && matches("Audio Source") && ImGui::MenuItem("Audio Source")) {
+        commitMutation(m_editHooks, [&] {
+            entity.add<vshade::scene::AudioSourceComponent>();
+        });
+        close();
+    }
+    if (!entity.has<vshade::scene::AudioListenerComponent>()
+        && matches("Audio Listener") && ImGui::MenuItem("Audio Listener")) {
+        commitMutation(m_editHooks, [&] {
+            entity.add<vshade::scene::AudioListenerComponent>();
+            activateExclusiveListener(entity);
+        });
+        close();
+    }
+
+    group("Physics");
     if (!entity.has<vshade::scene::RigidBody2DComponent>()
-        && ImGui::MenuItem("Rigid Body 2D")) {
+        && matches("Rigid Body 2D") && ImGui::MenuItem("Rigid Body 2D")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::RigidBody2DComponent>();
             if (!entity.has<vshade::scene::Collider2DComponent>()) {
                 entity.add<vshade::scene::Collider2DComponent>();
             }
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (entity.has<vshade::scene::RigidBody2DComponent>()
         && !entity.has<vshade::scene::Collider2DComponent>()
-        && ImGui::MenuItem("Collider 2D")) {
+        && matches("Collider 2D") && ImGui::MenuItem("Collider 2D")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::Collider2DComponent>();
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!entity.has<vshade::scene::RigidBody3DComponent>()
-        && ImGui::MenuItem("Rigid Body 3D")) {
+        && matches("Rigid Body 3D") && ImGui::MenuItem("Rigid Body 3D")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::RigidBody3DComponent>();
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
     if (!hasAnyCollider3D(entity)) {
         const auto addCollider = [&]<typename Component>() {
@@ -1218,35 +1417,37 @@ void InspectorPanel::drawAddComponentMenu(
                 auto& collider = entity.add<Component>();
                 (void)fitColliderToModel(entity, m_assets, collider);
             });
-            ImGui::CloseCurrentPopup();
+            close();
         };
-        if (ImGui::MenuItem("Box Collider 3D")) {
+        if (matches("Box Collider 3D") && ImGui::MenuItem("Box Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::BoxCollider3DComponent>();
         }
-        if (ImGui::MenuItem("Sphere Collider 3D")) {
+        if (matches("Sphere Collider 3D") && ImGui::MenuItem("Sphere Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::SphereCollider3DComponent>();
         }
-        if (ImGui::MenuItem("Capsule Collider 3D")) {
+        if (matches("Capsule Collider 3D") && ImGui::MenuItem("Capsule Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::CapsuleCollider3DComponent>();
         }
-        if (ImGui::MenuItem("Cylinder Collider 3D")) {
+        if (matches("Cylinder Collider 3D") && ImGui::MenuItem("Cylinder Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::CylinderCollider3DComponent>();
         }
-        if (ImGui::MenuItem("Mesh Collider 3D")) {
+        if (matches("Mesh Collider 3D") && ImGui::MenuItem("Mesh Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::MeshCollider3DComponent>();
         }
-        if (ImGui::MenuItem("Convex Collider 3D")) {
+        if (matches("Convex Collider 3D") && ImGui::MenuItem("Convex Collider 3D")) {
             addCollider.template operator()<
                 vshade::scene::ConvexCollider3DComponent>();
         }
     }
+
+    group("Scripting");
     if (!entity.has<vshade::scene::ScriptComponent>()
-        && ImGui::MenuItem("Script")) {
+        && matches("Script") && ImGui::MenuItem("Script")) {
         commitMutation(m_editHooks, [&] {
             vshade::scene::ScriptComponent scripts;
             if (m_scripts) {
@@ -1259,8 +1460,11 @@ void InspectorPanel::drawAddComponentMenu(
             }
             entity.add<vshade::scene::ScriptComponent>(std::move(scripts));
         });
-        ImGui::CloseCurrentPopup();
+        close();
     }
+
+    group("Core");
+    ImGui::TextDisabled("Transform and identity are required components.");
 
     ImGui::EndPopup();
 }

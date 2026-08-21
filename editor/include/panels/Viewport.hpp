@@ -72,6 +72,16 @@ private:
         vshade::scene::Entity selectedEntity
     ) const;
     void queuePhysicsGizmos() const;
+    void queueEditorGrid() const;
+    void queueSelectionOutline(vshade::scene::Entity selectedEntity) const;
+    void drawOrientationWidget(float x, float y, float width, float height) const;
+    void drawViewportFeedback(
+        vshade::scene::Entity& selectedEntity,
+        float x,
+        float y,
+        float width,
+        float height
+    );
     void resizeFramebuffer(float width, float height);
     void drawGizmo(
         vshade::scene::Entity selectedEntity,
@@ -137,6 +147,10 @@ private:
     bool m_showColliderGizmos = true;
     bool m_showAudioGizmos = true;
     bool m_showPhysicsGizmos = false;
+    bool m_showGrid = true;
+    bool m_showSelectionOutline = true;
+    bool m_showRendererStats = false;
+    bool m_showHelp = false;
 };
 
 } // namespace editor

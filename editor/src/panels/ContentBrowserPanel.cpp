@@ -1,12 +1,22 @@
 #include "panels/ContentBrowserPanel.hpp"
 #include "EditorIcons.hpp"
+#include "ImGui/ImGuiTheme.hpp"
 #include "widgets/AssetSelector.hpp"
 
 #include <asset/Asset.hpp>
+#include <asset/AssetManager.hpp>
+#include <audio/AudioClip.hpp>
+#include <renderer/Model.hpp>
 #include <renderer/Texture.hpp>
+#include <scene/Prefab.hpp>
+#include <scene/Scene.hpp>
+#include <scene/SceneSerializer.hpp>
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <exception>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -14,15 +24,20 @@
 
 #include <imgui.h>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#include <shellapi.h>
+#pragma comment(lib, "Shell32.lib")
+#endif
+
 namespace editor {
 namespace {
 
-constexpr float thumbnailSize = 88.0F;
 constexpr float cardPadding = 8.0F;
 constexpr float labelHeight = 22.0F;
 constexpr float cardRounding = 8.0F;
-constexpr float cardWidth = thumbnailSize + cardPadding * 2.0F;
-constexpr float cardHeight = thumbnailSize + cardPadding * 2.0F + labelHeight;
 
 [[nodiscard]] std::string lowercase(std::string value) {
     std::ranges::transform(
@@ -142,7 +157,80 @@ void ContentBrowserPanel::setRoot(
     m_rootDirectory = std::move(rootDirectory).lexically_normal();
     m_currentDirectory = m_rootDirectory;
     m_selectedPath.clear();
+    m_backHistory.clear();
+    m_forwardHistory.clear();
+    m_favorites.clear();
+    m_textureThumbnails.clear();
+    m_importFailures.clear();
     refresh();
+}
+
+void ContentBrowserPanel::setAssetManager(
+    vshade::asset::AssetManager& assets
+) noexcept {
+    m_assets = &assets;
+}
+
+void ContentBrowserPanel::setOperationHandler(
+    std::function<void(std::string message, bool success)> handler
+) {
+    m_operationHandler = std::move(handler);
+}
+
+void ContentBrowserPanel::navigateTo(
+    std::filesystem::path directory,
+    const bool recordHistory
+) {
+    directory = std::move(directory).lexically_normal();
+    std::error_code error;
+    const auto relative = std::filesystem::relative(
+        directory,
+        m_rootDirectory,
+        error
+    );
+    if (error || relative.generic_string().starts_with("..")
+        || !std::filesystem::is_directory(directory, error)) {
+        return;
+    }
+    if (recordHistory && directory != m_currentDirectory) {
+        m_backHistory.push_back(m_currentDirectory);
+        m_forwardHistory.clear();
+    }
+    m_currentDirectory = std::move(directory);
+    m_selectedPath.clear();
+    refresh();
+}
+
+void ContentBrowserPanel::drawBreadcrumbs() {
+    std::vector<std::filesystem::path> crumbs{m_rootDirectory};
+    std::error_code error;
+    const auto relative = std::filesystem::relative(
+        m_currentDirectory,
+        m_rootDirectory,
+        error
+    );
+    if (!error && relative != ".") {
+        auto cursor = m_rootDirectory;
+        for (const auto& part : relative) {
+            cursor /= part;
+            crumbs.push_back(cursor);
+        }
+    }
+    for (std::size_t index = 0; index < crumbs.size(); ++index) {
+        if (index != 0) {
+            ImGui::SameLine(0.0F, ui::scaled(4.0F));
+            ImGui::TextDisabled(">");
+            ImGui::SameLine(0.0F, ui::scaled(4.0F));
+        }
+        const std::string label = index == 0
+            ? "Assets"
+            : crumbs[index].filename().generic_string();
+        ImGui::PushID(static_cast<int>(index));
+        if (ImGui::SmallButton(label.c_str())) {
+            navigateTo(crumbs[index]);
+        }
+        ImGui::PopID();
+    }
 }
 
 void ContentBrowserPanel::reveal(const std::filesystem::path& path) {
@@ -172,14 +260,12 @@ void ContentBrowserPanel::reveal(const std::filesystem::path& path) {
     }
 
     if (std::filesystem::is_directory(resolved, error)) {
-        m_currentDirectory = resolved;
-        m_selectedPath.clear();
+        navigateTo(resolved);
     } else {
-        m_currentDirectory = resolved.parent_path();
+        navigateTo(resolved.parent_path());
         m_selectedPath = resolved;
     }
     m_focusRequested = true;
-    refresh();
 }
 
 void ContentBrowserPanel::refresh() noexcept {
@@ -217,6 +303,12 @@ void ContentBrowserPanel::refreshEntries() {
                 < lowercase(right.path().filename().generic_string());
         }
     );
+    m_directoryWriteTime = std::filesystem::last_write_time(
+        m_currentDirectory,
+        m_directoryError
+    );
+    m_nextFilesystemPoll =
+        std::chrono::steady_clock::now() + std::chrono::seconds(1);
     m_refreshRequested = false;
 }
 
@@ -248,35 +340,147 @@ ContentBrowserPanel::onImGuiRender() {
         return sceneToOpen;
     }
 
-    if (m_currentDirectory != m_rootDirectory) {
-        if (ImGui::Button("<-")) {
-            const std::filesystem::path parent =
-                m_currentDirectory.parent_path();
-            m_currentDirectory = parent.empty()
-                ? m_rootDirectory
-                : parent;
-            m_selectedPath.clear();
+    if (std::chrono::steady_clock::now() >= m_nextFilesystemPoll) {
+        std::error_code watchError;
+        const auto writeTime = std::filesystem::last_write_time(
+            m_currentDirectory,
+            watchError
+        );
+        if (!watchError && writeTime != m_directoryWriteTime) {
+            m_textureThumbnails.clear();
             refresh();
         }
-        ImGui::SameLine();
+        m_nextFilesystemPoll =
+            std::chrono::steady_clock::now() + std::chrono::seconds(1);
     }
+
+    ImGui::BeginDisabled(m_backHistory.empty());
+    if (ImGui::Button("<")) {
+        m_forwardHistory.push_back(m_currentDirectory);
+        const auto destination = m_backHistory.back();
+        m_backHistory.pop_back();
+        navigateTo(destination, false);
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(m_forwardHistory.empty());
+    if (ImGui::Button(">")) {
+        m_backHistory.push_back(m_currentDirectory);
+        const auto destination = m_forwardHistory.back();
+        m_forwardHistory.pop_back();
+        navigateTo(destination, false);
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
     if (ImGui::Button("Refresh")) {
         refresh();
     }
     ImGui::SameLine();
-    ImGui::TextUnformatted(
-        currentLocationLabel(m_rootDirectory, m_currentDirectory).c_str()
+    if (ImGui::Button("+ Create")) {
+        ImGui::OpenPopup("CreateAsset");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Favorite")) {
+        if (std::ranges::find(m_favorites, m_currentDirectory)
+            == m_favorites.end()) {
+            m_favorites.push_back(m_currentDirectory);
+        }
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ui::scaled(120.0F));
+    if (ImGui::BeginCombo("##Favorites", "Favorites")) {
+        for (const auto& favorite : m_favorites) {
+            const std::string label = currentLocationLabel(
+                m_rootDirectory,
+                favorite
+            );
+            if (ImGui::Selectable(label.c_str())) {
+                navigateTo(favorite);
+            }
+        }
+        if (m_favorites.empty()) {
+            ImGui::TextDisabled("No favorites yet");
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::BeginPopup("CreateAsset")) {
+        if (ImGui::MenuItem("Folder")) {
+            std::error_code createError;
+            std::filesystem::path path = m_currentDirectory / "New Folder";
+            for (int suffix = 2; std::filesystem::exists(path, createError); ++suffix) {
+                path = m_currentDirectory
+                    / ("New Folder " + std::to_string(suffix));
+            }
+            std::filesystem::create_directory(path, createError);
+            if (m_operationHandler) {
+                m_operationHandler(
+                    createError ? "Folder creation failed" : "Created " + path.filename().generic_string(),
+                    !createError
+                );
+            }
+            refresh();
+        }
+        if (ImGui::MenuItem("Scene")) {
+            std::error_code createError;
+            std::filesystem::path path = m_currentDirectory / "New Scene.vscene";
+            for (int suffix = 2; std::filesystem::exists(path, createError); ++suffix) {
+                path = m_currentDirectory
+                    / ("New Scene " + std::to_string(suffix) + ".vscene");
+            }
+            vshade::scene::Scene scene(path.stem().generic_string());
+            vshade::scene::SceneSerializer serializer(scene);
+            const bool created = serializer.serialize(path);
+            if (m_operationHandler) {
+                m_operationHandler(
+                    created ? "Created " + path.filename().generic_string()
+                            : "Scene creation failed",
+                    created
+                );
+            }
+            refresh();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ui::scaled(190.0F));
+    ImGui::InputTextWithHint(
+        "##ContentSearch",
+        "Search assets...",
+        m_search.data(),
+        m_search.size()
     );
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ui::scaled(95.0F));
+    ImGui::SliderFloat(
+        "##ThumbnailSize",
+        &m_thumbnailSize,
+        48.0F,
+        144.0F,
+        "Size %.0f"
+    );
+    ImGui::SameLine();
+    if (ImGui::Button(m_listView ? "Grid" : "List")) {
+        m_listView = !m_listView;
+    }
+    drawBreadcrumbs();
     ImGui::Separator();
 
     if (m_refreshRequested) {
         refreshEntries();
     }
 
+    const std::string search = lowercase(m_search.data());
+    const float thumbnailSize = m_listView ? ui::scaled(28.0F) : m_thumbnailSize;
+    const float cardWidth = m_listView
+        ? std::max(ImGui::GetContentRegionAvail().x, ui::scaled(240.0F))
+        : thumbnailSize + cardPadding * 2.0F;
+    const float cardHeight = m_listView
+        ? ui::scaled(38.0F)
+        : thumbnailSize + cardPadding * 2.0F + labelHeight;
     const float spacing = 10.0F;
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {spacing, spacing});
     const float availableWidth = ImGui::GetContentRegionAvail().x;
-    const int columnCount = std::max(
+    const int columnCount = m_listView ? 1 : std::max(
         1,
         static_cast<int>((availableWidth + spacing) / (cardWidth + spacing))
     );
@@ -286,6 +490,10 @@ ContentBrowserPanel::onImGuiRender() {
     for (const auto& entry : m_entries) {
         const std::filesystem::path path = entry.path();
         const std::string filename = path.filename().generic_string();
+        if (!search.empty()
+            && lowercase(filename).find(search) == std::string::npos) {
+            continue;
+        }
         std::error_code entryError;
         const bool directory = entry.is_directory(entryError);
         const vshade::asset::AssetType type = directory
@@ -308,9 +516,7 @@ ContentBrowserPanel::onImGuiRender() {
         }
         if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             if (directory) {
-                m_currentDirectory = path.lexically_normal();
-                m_selectedPath.clear();
-                refresh();
+                navigateTo(path);
             } else if (type == vshade::asset::AssetType::Scene) {
                 sceneToOpen = path;
             }
@@ -324,6 +530,125 @@ ContentBrowserPanel::onImGuiRender() {
             );
             ImGui::TextUnformatted(filename.c_str());
             ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginPopupContextItem("AssetActions")) {
+            m_selectedPath = path;
+            if (ImGui::MenuItem("Rename", "F2")) {
+                m_pendingRename = path;
+                m_renameBuffer.fill('\0');
+                const std::string currentName = filename;
+                std::memcpy(
+                    m_renameBuffer.data(),
+                    currentName.data(),
+                    std::min(currentName.size(), m_renameBuffer.size() - 1)
+                );
+                m_openRename = true;
+            }
+            if (ImGui::MenuItem("Duplicate", "Ctrl+D")) {
+                std::error_code copyError;
+                const std::string stem = path.stem().generic_string();
+                const std::string extension = path.extension().generic_string();
+                std::filesystem::path destination = path.parent_path()
+                    / (stem + " Copy" + extension);
+                for (int suffix = 2;
+                     std::filesystem::exists(destination, copyError);
+                     ++suffix) {
+                    destination = path.parent_path()
+                        / (stem + " Copy " + std::to_string(suffix) + extension);
+                }
+                if (directory) {
+                    std::filesystem::copy(
+                        path,
+                        destination,
+                        std::filesystem::copy_options::recursive,
+                        copyError
+                    );
+                } else {
+                    std::filesystem::copy_file(path, destination, copyError);
+                }
+                if (m_operationHandler) {
+                    m_operationHandler(
+                        copyError ? "Duplicate failed: " + filename
+                                  : "Duplicated " + filename,
+                        !copyError
+                    );
+                }
+                refresh();
+            }
+            if (!directory && ImGui::MenuItem("Reimport")) {
+                m_textureThumbnails.erase(path.generic_string());
+                m_importFailures.erase(path.generic_string());
+                try {
+                    if (!m_assets) {
+                        throw std::runtime_error("No asset manager is available");
+                    }
+                    const auto reload = [&]<typename Resource>() {
+                        const auto reference = m_assets->reference<Resource>(path);
+                        if (m_assets->isLoaded(reference.handle())) {
+                            m_assets->unload(reference.handle());
+                        }
+                        static_cast<void>(m_assets->load<Resource>(path));
+                    };
+                    switch (type) {
+                        case vshade::asset::AssetType::Texture:
+                            reload.template operator()<vshade::renderer::Texture2D>();
+                            break;
+                        case vshade::asset::AssetType::Model:
+                            reload.template operator()<vshade::renderer::Model>();
+                            break;
+                        case vshade::asset::AssetType::Audio:
+                            reload.template operator()<vshade::audio::AudioClip>();
+                            break;
+                        case vshade::asset::AssetType::Prefab:
+                            reload.template operator()<vshade::scene::Prefab>();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (m_operationHandler) {
+                        m_operationHandler("Reimported " + filename, true);
+                    }
+                } catch (const std::exception&) {
+                    m_importFailures.insert(path.generic_string());
+                    if (m_operationHandler) {
+                        m_operationHandler("Reimport failed: " + filename, false);
+                    }
+                }
+                refresh();
+            }
+            if (ImGui::MenuItem("Copy Project-Relative Path")) {
+                std::error_code relativeError;
+                const std::string relative = std::filesystem::relative(
+                    path,
+                    m_rootDirectory.parent_path(),
+                    relativeError
+                ).generic_string();
+                ImGui::SetClipboardText(
+                    relativeError ? path.generic_string().c_str() : relative.c_str()
+                );
+            }
+#if defined(_WIN32)
+            if (ImGui::MenuItem("Reveal in Explorer")) {
+                const std::wstring parameters = L"/select,\""
+                    + path.wstring() + L"\"";
+                ShellExecuteW(
+                    nullptr,
+                    L"open",
+                    L"explorer.exe",
+                    parameters.c_str(),
+                    nullptr,
+                    SW_SHOWNORMAL
+                );
+            }
+#endif
+            ImGui::Separator();
+            ui::pushDestructiveTextStyle();
+            if (ImGui::MenuItem("Delete")) {
+                m_pendingDelete = path;
+                m_openDelete = true;
+            }
+            ui::popDestructiveTextStyle();
+            ImGui::EndPopup();
         }
         if (hovered) {
             ImGui::SetTooltip("%s\n%s", filename.c_str(), typeName(directory, type));
@@ -351,13 +676,34 @@ ContentBrowserPanel::onImGuiRender() {
             minimum.y + cardPadding
         };
         const ImVec2 previewMaximum{
-            maximum.x - cardPadding,
+            m_listView
+                ? previewMinimum.x + thumbnailSize
+                : maximum.x - cardPadding,
             minimum.y + cardPadding + thumbnailSize
         };
-        if (const auto icon = iconForEntry(directory, type)) {
+        std::shared_ptr<vshade::renderer::Texture2D> previewTexture;
+        if (!directory && type == vshade::asset::AssetType::Texture && m_assets) {
+            const std::string key = path.generic_string();
+            if (const auto found = m_textureThumbnails.find(key);
+                found != m_textureThumbnails.end()) {
+                previewTexture = found->second;
+            } else if (!m_importFailures.contains(key)) {
+                try {
+                    previewTexture = m_assets->loadResource<
+                        vshade::renderer::Texture2D>(path).shared();
+                    m_textureThumbnails.emplace(key, previewTexture);
+                } catch (const std::exception&) {
+                    m_importFailures.insert(key);
+                }
+            }
+        }
+        const auto icon = previewTexture
+            ? previewTexture
+            : iconForEntry(directory, type);
+        if (icon) {
             const ImTextureID textureId =
                 static_cast<ImTextureID>(icon->rendererId());
-            constexpr float iconPadding = 8.0F;
+            const float iconPadding = previewTexture ? 0.0F : ui::scaled(8.0F);
             drawList->AddImage(
                 ImTextureRef{textureId},
                 {
@@ -371,8 +717,12 @@ ContentBrowserPanel::onImGuiRender() {
             );
         }
 
-        const float labelLeft = minimum.x + cardPadding;
-        const float labelTop = previewMaximum.y + 4.0F;
+        const float labelLeft = m_listView
+            ? previewMaximum.x + ui::scaled(8.0F)
+            : minimum.x + cardPadding;
+        const float labelTop = m_listView
+            ? minimum.y + (cardHeight - ImGui::GetTextLineHeight()) * 0.5F
+            : previewMaximum.y + 4.0F;
         drawList->AddCircleFilled(
             {labelLeft + 4.0F, labelTop + 8.0F},
             3.5F,
@@ -384,11 +734,129 @@ ContentBrowserPanel::onImGuiRender() {
             ImGui::GetColorU32(ImGuiCol_Text),
             label.c_str()
         );
+        if (m_importFailures.contains(path.generic_string())) {
+            const ImVec2 badgeCenter{
+                maximum.x - ui::scaled(10.0F),
+                minimum.y + ui::scaled(10.0F),
+            };
+            drawList->AddCircleFilled(
+                badgeCenter,
+                ui::scaled(7.0F),
+                ImGui::GetColorU32(ui::color(ui::ColorRole::Error)),
+                16
+            );
+            drawList->AddText(
+                {badgeCenter.x - ui::scaled(2.0F), badgeCenter.y - ui::scaled(7.0F)},
+                IM_COL32_WHITE,
+                "!"
+            );
+        }
 
         ImGui::PopID();
         ++index;
     }
     ImGui::PopStyleVar();
+
+    if (m_openRename) {
+        ImGui::OpenPopup("Rename Asset");
+        m_openRename = false;
+    }
+    if (ImGui::BeginPopupModal(
+            "Rename Asset",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        ImGui::InputText(
+            "Name",
+            m_renameBuffer.data(),
+            m_renameBuffer.size()
+        );
+        const std::filesystem::path destination =
+            m_pendingRename.parent_path() / m_renameBuffer.data();
+        std::error_code destinationError;
+        const bool destinationExists =
+            std::filesystem::exists(destination, destinationError);
+        const bool validName = m_renameBuffer[0] != '\0'
+            && destination != m_pendingRename
+            && !destinationExists
+            && !destinationError;
+        if (destinationExists) {
+            ImGui::TextColored(
+                ui::color(ui::ColorRole::Warning),
+                "An item with that name already exists."
+            );
+        }
+        ImGui::BeginDisabled(!validName);
+        if (ImGui::Button("Rename")) {
+            std::error_code renameError;
+            if (!std::filesystem::exists(destination, renameError)) {
+                std::filesystem::rename(
+                    m_pendingRename,
+                    destination,
+                    renameError
+                );
+            }
+            if (m_operationHandler) {
+                m_operationHandler(
+                    renameError ? "Rename failed"
+                                : "Renamed to " + destination.filename().generic_string(),
+                    !renameError
+                );
+            }
+            m_pendingRename.clear();
+            refresh();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            m_pendingRename.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    if (m_openDelete) {
+        ImGui::OpenPopup("Delete Asset?");
+        m_openDelete = false;
+    }
+    if (ImGui::BeginPopupModal(
+            "Delete Asset?",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        ImGui::TextWrapped(
+            "Permanently delete '%s'?",
+            m_pendingDelete.filename().generic_string().c_str()
+        );
+        ImGui::TextColored(
+            ui::color(ui::ColorRole::Warning),
+            "References to this asset may become missing."
+        );
+        ui::pushDestructiveButtonStyle();
+        if (ImGui::Button("Delete")) {
+            std::error_code deleteError;
+            std::filesystem::remove_all(m_pendingDelete, deleteError);
+            if (m_operationHandler) {
+                m_operationHandler(
+                    deleteError ? "Asset deletion failed"
+                                : "Deleted asset",
+                    !deleteError
+                );
+            }
+            m_textureThumbnails.erase(m_pendingDelete.generic_string());
+            m_pendingDelete.clear();
+            refresh();
+            ImGui::CloseCurrentPopup();
+        }
+        ui::popDestructiveButtonStyle();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            m_pendingDelete.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 
     if (m_entries.empty() && !m_directoryError) {
         ImGui::TextDisabled("This folder is empty.");

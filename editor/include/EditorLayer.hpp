@@ -70,6 +70,7 @@ private:
     void drawMenuBar();
     void drawToolbar();
     void drawStatusBar();
+    void drawToasts();
     void drawFileDialogs();
     void drawUnsavedChangesModal();
     void buildDefaultDockLayout(std::uint32_t dockspaceId);
@@ -145,6 +146,7 @@ private:
     std::string m_buildActivity = "Idle";
     std::string m_lastOperation = "Ready";
     OperationTone m_lastOperationTone = OperationTone::Neutral;
+    float m_toastSecondsRemaining = 0.0F;
 };
 
 } // namespace editor

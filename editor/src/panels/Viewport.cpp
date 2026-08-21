@@ -31,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <concepts>
+#include <cstdio>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -356,7 +357,7 @@ bool Viewport::drawOverlayToolbar(
 
     const ImVec2 optionsPadding = ui::scaled(8.0F, 5.0F);
     const ImVec2 optionFramePadding = ui::scaled(10.0F, 3.0F);
-    const float optionsWidth = ui::scaled(m_snapEnabled ? 500.0F : 415.0F);
+    const float optionsWidth = ui::scaled(m_snapEnabled ? 635.0F : 550.0F);
     const float optionsHeight = ImGui::GetFontSize()
         + optionFramePadding.y * 2.0F
         + optionsPadding.y * 2.0F;
@@ -445,13 +446,39 @@ bool Viewport::drawOverlayToolbar(
     ImGui::SameLine(0.0F, spacing);
     ImGui::SetNextItemWidth(ui::scaled(88.0F));
     if (ImGui::BeginCombo("##GizmoVisibility", "Gizmos")) {
+        ImGui::MenuItem("Grid", nullptr, &m_showGrid);
+        ImGui::MenuItem("Selection Outline", nullptr, &m_showSelectionOutline);
         ImGui::MenuItem("Cameras", nullptr, &m_showCameraGizmos);
         ImGui::MenuItem("Lights", nullptr, &m_showLightGizmos);
         ImGui::MenuItem("Colliders", nullptr, &m_showColliderGizmos);
         ImGui::MenuItem("Audio", nullptr, &m_showAudioGizmos);
         ImGui::Separator();
         ImGui::MenuItem("Physics", nullptr, &m_showPhysicsGizmos);
+        ImGui::MenuItem("Renderer Statistics", nullptr, &m_showRendererStats);
         ImGui::EndCombo();
+    }
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::SetNextItemWidth(ui::scaled(72.0F));
+    float cameraSpeed = m_editorCamera.movementSpeed();
+    if (ImGui::DragFloat(
+            "##CameraSpeed",
+            &cameraSpeed,
+            0.25F,
+            0.25F,
+            100.0F,
+            "%.1f u/s"
+        )) {
+        m_editorCamera.setMovementSpeed(cameraSpeed);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Editor camera movement speed");
+    }
+    ImGui::SameLine(0.0F, spacing);
+    if (ImGui::SmallButton("?")) {
+        m_showHelp = !m_showHelp;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Viewport controls and shortcuts");
     }
     overlayHovered |= ImGui::IsWindowHovered();
     ImGui::End();
@@ -570,6 +597,12 @@ void Viewport::onImGuiRender(
         if (m_editing && m_showPhysicsGizmos) {
             queuePhysicsGizmos();
         }
+        if (m_editing && m_showGrid) {
+            queueEditorGrid();
+        }
+        if (m_editing && m_showSelectionOutline) {
+            queueSelectionOutline(selectedEntity);
+        }
         renderScene();
 
         const ImVec2 viewportPosition = ImGui::GetCursorScreenPos();
@@ -609,6 +642,19 @@ void Viewport::onImGuiRender(
                 availableSize.x,
                 availableSize.y
             );
+            drawOrientationWidget(
+                viewportPosition.x,
+                viewportPosition.y,
+                availableSize.x,
+                availableSize.y
+            );
+            drawViewportFeedback(
+                selectedEntity,
+                viewportPosition.x,
+                viewportPosition.y,
+                availableSize.x,
+                availableSize.y
+            );
             if (!spawnedAsset
                 && !sceneIconClicked
                 && !m_overlayHovered
@@ -629,7 +675,9 @@ void Viewport::onImGuiRender(
             finishGizmoRecording();
             m_gizmoUsing = false;
             if (!m_runtimeCameraActive) {
-                const ImVec2 textSize = ImGui::CalcTextSize("No Camera");
+                constexpr const char* message =
+                    "No active runtime camera\nStop Play mode, then press Shift+C to create/select one";
+                const ImVec2 textSize = ImGui::CalcTextSize(message);
                 ImGui::GetWindowDrawList()->AddText(
                     {
                         viewportPosition.x
@@ -638,7 +686,7 @@ void Viewport::onImGuiRender(
                             + (availableSize.y - textSize.y) * 0.5F,
                     },
                     ImGui::GetColorU32(ImGuiCol_TextDisabled),
-                    "No Camera"
+                    message
                 );
             }
         }
@@ -1244,6 +1292,223 @@ void Viewport::queueSelectedColliderGizmo(
                 }
             },
             legacy->shape
+        );
+    }
+}
+
+void Viewport::queueEditorGrid() const {
+    constexpr int halfExtent = 20;
+    constexpr float spacing = 1.0F;
+    const vshade::math::Vec4 minor{0.30F, 0.32F, 0.36F, 0.32F};
+    const vshade::math::Vec4 major{0.40F, 0.43F, 0.48F, 0.55F};
+    for (int line = -halfExtent; line <= halfExtent; ++line) {
+        const float offset = static_cast<float>(line) * spacing;
+        const auto color = line % 5 == 0 ? major : minor;
+        vshade::renderer::DebugDraw::line(
+            {-halfExtent * spacing, 0.0F, offset},
+            {halfExtent * spacing, 0.0F, offset},
+            color
+        );
+        vshade::renderer::DebugDraw::line(
+            {offset, 0.0F, -halfExtent * spacing},
+            {offset, 0.0F, halfExtent * spacing},
+            color
+        );
+    }
+    vshade::renderer::DebugDraw::line(
+        {-halfExtent * spacing, 0.002F, 0.0F},
+        {halfExtent * spacing, 0.002F, 0.0F},
+        {0.86F, 0.22F, 0.24F, 0.85F}
+    );
+    vshade::renderer::DebugDraw::line(
+        {0.0F, 0.002F, -halfExtent * spacing},
+        {0.0F, 0.002F, halfExtent * spacing},
+        {0.22F, 0.48F, 0.92F, 0.85F}
+    );
+}
+
+void Viewport::queueSelectionOutline(
+    const vshade::scene::Entity selectedEntity
+) const {
+    if (!selectedEntity || !m_assets) {
+        return;
+    }
+    const auto* state =
+        selectedEntity.tryGet<vshade::scene::HierarchyStateComponent>();
+    if (state && !state->visible) {
+        return;
+    }
+
+    vshade::math::Vec3 localMinimum{-0.5F};
+    vshade::math::Vec3 localMaximum{0.5F};
+    if (const auto* renderer =
+            selectedEntity.tryGet<vshade::scene::ModelRendererComponent>();
+        renderer && renderer->model.valid()) {
+        try {
+            const auto model = m_assets->loadResource(renderer->model);
+            if (model && model->localBounds()) {
+                localMinimum = model->localBounds()->minimum;
+                localMaximum = model->localBounds()->maximum;
+            }
+        } catch (const std::exception&) {
+            return;
+        }
+    }
+
+    const auto& transform = selectedEntity.transform();
+    const std::array<vshade::math::Vec3, 8> localCorners{{
+        {localMinimum.x, localMinimum.y, localMinimum.z},
+        {localMaximum.x, localMinimum.y, localMinimum.z},
+        {localMaximum.x, localMaximum.y, localMinimum.z},
+        {localMinimum.x, localMaximum.y, localMinimum.z},
+        {localMinimum.x, localMinimum.y, localMaximum.z},
+        {localMaximum.x, localMinimum.y, localMaximum.z},
+        {localMaximum.x, localMaximum.y, localMaximum.z},
+        {localMinimum.x, localMaximum.y, localMaximum.z},
+    }};
+    std::array<vshade::math::Vec3, 8> corners{};
+    for (std::size_t index = 0; index < corners.size(); ++index) {
+        corners[index] = transform.transformPoint(localCorners[index]);
+    }
+    constexpr std::array<std::array<std::size_t, 2>, 12> edges{{
+        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7},
+    }};
+    for (const auto edge : edges) {
+        vshade::renderer::DebugDraw::line(
+            corners[edge[0]],
+            corners[edge[1]],
+            {1.0F, 0.68F, 0.10F, 1.0F}
+        );
+    }
+}
+
+void Viewport::drawOrientationWidget(
+    const float x,
+    const float y,
+    const float width,
+    const float height
+) const {
+    if (width < ui::scaled(100.0F) || height < ui::scaled(100.0F)) {
+        return;
+    }
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const float radius = ui::scaled(32.0F);
+    const ImVec2 center{
+        x + width - radius - ui::scaled(12.0F),
+        y + height - radius - ui::scaled(12.0F),
+    };
+    drawList->AddCircleFilled(
+        center,
+        radius,
+        IM_COL32(18, 20, 25, 210),
+        32
+    );
+    const auto drawAxis = [&](const vshade::math::Vec3 axis, const ImU32 color, const char* label) {
+        const vshade::math::Vec4 cameraAxis =
+            m_editorCamera.viewMatrix() * vshade::math::Vec4{axis, 0.0F};
+        const ImVec2 end{
+            center.x + cameraAxis.x * radius * 0.68F,
+            center.y - cameraAxis.y * radius * 0.68F,
+        };
+        drawList->AddLine(center, end, color, ui::scaled(2.0F));
+        drawList->AddCircleFilled(end, ui::scaled(3.0F), color, 12);
+        drawList->AddText(
+            {end.x + ui::scaled(3.0F), end.y - ui::scaled(7.0F)},
+            color,
+            label
+        );
+    };
+    drawAxis({1.0F, 0.0F, 0.0F}, IM_COL32(238, 82, 83, 255), "X");
+    drawAxis({0.0F, 1.0F, 0.0F}, IM_COL32(95, 210, 115, 255), "Y");
+    drawAxis({0.0F, 0.0F, 1.0F}, IM_COL32(80, 145, 245, 255), "Z");
+}
+
+void Viewport::drawViewportFeedback(
+    vshade::scene::Entity& selectedEntity,
+    const float x,
+    const float y,
+    const float width,
+    const float height
+) {
+    if (m_hovered
+        && !ImGui::GetIO().WantTextInput
+        && ImGui::GetIO().KeyShift
+        && ImGui::IsKeyPressed(ImGuiKey_C)
+        && m_scene) {
+        const auto cameras = m_scene->view<
+            const vshade::scene::UUIDComponent,
+            vshade::scene::CameraComponent>();
+        const auto firstCamera = cameras.begin();
+        if (firstCamera != cameras.end()) {
+            const auto handle = *firstCamera;
+            selectedEntity = m_scene->findEntity(
+                cameras.get<const vshade::scene::UUIDComponent>(handle).uuid
+            );
+        }
+        if (!selectedEntity || !selectedEntity.has<vshade::scene::CameraComponent>()) {
+            if (m_editHooks.begin) {
+                m_editHooks.begin();
+            }
+            selectedEntity = m_scene->create("Camera");
+            selectedEntity.add<vshade::scene::CameraComponent>();
+            if (m_editHooks.commit) {
+                m_editHooks.commit();
+            }
+        }
+    }
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    if (m_showRendererStats && m_sceneRenderer) {
+        const auto& stats = m_sceneRenderer->frameStats();
+        std::array<char, 192> text{};
+        std::snprintf(
+            text.data(),
+            text.size(),
+            "Entities: %llu\nDraw calls: %llu\nTriangles: %llu\nDebug lines: %llu",
+            static_cast<unsigned long long>(stats.entityCount),
+            static_cast<unsigned long long>(stats.rendering.drawCalls),
+            static_cast<unsigned long long>(stats.rendering.triangleCount),
+            static_cast<unsigned long long>(stats.debugLineCount)
+        );
+        const ImVec2 padding = ui::scaled(10.0F, 8.0F);
+        const ImVec2 textSize = ImGui::CalcTextSize(text.data());
+        const ImVec2 minimum{x + ui::scaled(12.0F), y + ui::scaled(94.0F)};
+        const ImVec2 maximum{
+            minimum.x + textSize.x + padding.x * 2.0F,
+            minimum.y + textSize.y + padding.y * 2.0F,
+        };
+        drawList->AddRectFilled(minimum, maximum, IM_COL32(18, 20, 25, 220), ui::scaled(6.0F));
+        drawList->AddText(
+            {minimum.x + padding.x, minimum.y + padding.y},
+            ImGui::GetColorU32(ImGuiCol_Text),
+            text.data()
+        );
+    }
+    if (m_showHelp) {
+        constexpr const char* help =
+            "Viewport Controls\n"
+            "RMB + WASD  Fly camera\n"
+            "F             Frame selected\n"
+            "W / E / R     Translate / Rotate / Scale\n"
+            "Shift+C       Create or select a camera";
+        const ImVec2 padding = ui::scaled(14.0F, 12.0F);
+        const ImVec2 textSize = ImGui::CalcTextSize(help);
+        const ImVec2 minimum{
+            x + (width - textSize.x) * 0.5F - padding.x,
+            y + height - textSize.y - padding.y * 2.0F - ui::scaled(16.0F),
+        };
+        const ImVec2 maximum{
+            minimum.x + textSize.x + padding.x * 2.0F,
+            minimum.y + textSize.y + padding.y * 2.0F,
+        };
+        drawList->AddRectFilled(minimum, maximum, IM_COL32(18, 20, 25, 230), ui::scaled(8.0F));
+        drawList->AddRect(minimum, maximum, ImGui::GetColorU32(ImGuiCol_Border), ui::scaled(8.0F));
+        drawList->AddText(
+            {minimum.x + padding.x, minimum.y + padding.y},
+            ImGui::GetColorU32(ImGuiCol_Text),
+            help
         );
     }
 }

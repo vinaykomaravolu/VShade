@@ -20,8 +20,10 @@ public:
     void setViewportSize(float width, float height);
     /** Frames a world-space target while preserving the current view direction. */
     void focusOn(const vshade::math::Vec3& target, float radius);
+    void setMovementSpeed(float speed);
 
     [[nodiscard]] bool isLooking() const noexcept;
+    [[nodiscard]] float movementSpeed() const noexcept;
     [[nodiscard]] const vshade::renderer::Camera& camera() const noexcept;
     [[nodiscard]] const vshade::math::Mat4& viewMatrix() const noexcept;
     [[nodiscard]] const vshade::math::Mat4& projectionMatrix() const noexcept;

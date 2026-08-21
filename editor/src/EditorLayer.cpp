@@ -18,6 +18,7 @@
 #include <scene/SceneRuntime.hpp>
 #include <scene/SceneSerializer.hpp>
 
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -136,6 +137,15 @@ EditorLayer::EditorLayer(
       m_requestExit(std::move(requestExit)),
       m_contentBrowser(std::filesystem::path{}),
       m_viewport(assets) {
+    m_contentBrowser.setAssetManager(assets);
+    m_contentBrowser.setOperationHandler(
+        [this](std::string message, const bool success) {
+            setOperationResult(
+                std::move(message),
+                success ? OperationTone::Success : OperationTone::Error
+            );
+        }
+    );
     m_inspectorPanel.setAssetManager(assets);
     m_inspectorPanel.setAssetSelector(m_assetSelector);
     m_inspectorPanel.setScriptRegistry(scripts);
@@ -178,6 +188,10 @@ void EditorLayer::onAttach() {
 }
 
 void EditorLayer::onUpdate(const float deltaTime) {
+    m_toastSecondsRemaining = std::max(
+        0.0F,
+        m_toastSecondsRemaining - deltaTime
+    );
     if (m_sceneState == SceneState::Pause
         && m_stepRequested
         && m_runtime
@@ -298,6 +312,58 @@ void EditorLayer::drawDockspace()
     }
     drawFileDialogs();
     drawUnsavedChangesModal();
+    drawToasts();
+}
+
+void EditorLayer::drawToasts() {
+    if (m_toastSecondsRemaining <= 0.0F || m_lastOperation.empty()) {
+        return;
+    }
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 padding = ui::scaled(18.0F, 42.0F);
+    ImGui::SetNextWindowPos(
+        {
+            viewport->WorkPos.x + viewport->WorkSize.x - padding.x,
+            viewport->WorkPos.y + viewport->WorkSize.y - padding.y,
+        },
+        ImGuiCond_Always,
+        {1.0F, 1.0F}
+    );
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowBgAlpha(0.94F);
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration
+        | ImGuiWindowFlags_AlwaysAutoResize
+        | ImGuiWindowFlags_NoSavedSettings
+        | ImGuiWindowFlags_NoFocusOnAppearing
+        | ImGuiWindowFlags_NoNav
+        | ImGuiWindowFlags_NoMove;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui::scaled(8.0F));
+    ImGui::PushStyleVar(
+        ImGuiStyleVar_WindowPadding,
+        ui::scaled(14.0F, 10.0F)
+    );
+    ImGui::Begin("##OperationToast", nullptr, flags);
+    ImVec4 tone = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+    switch (m_lastOperationTone) {
+        case OperationTone::Success:
+            tone = ui::color(ui::ColorRole::Success);
+            break;
+        case OperationTone::Warning:
+            tone = ui::color(ui::ColorRole::Warning);
+            break;
+        case OperationTone::Error:
+            tone = ui::color(ui::ColorRole::Error);
+            break;
+        case OperationTone::Neutral:
+            tone = ui::color(ui::ColorRole::Accent);
+            break;
+    }
+    ImGui::TextColored(tone, "●");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(m_lastOperation.c_str());
+    ImGui::End();
+    ImGui::PopStyleVar(2);
 }
 
 void EditorLayer::buildDefaultDockLayout(const std::uint32_t dockspaceId) {
@@ -1462,6 +1528,7 @@ void EditorLayer::setOperationResult(
 ) {
     m_lastOperation = std::move(message);
     m_lastOperationTone = tone;
+    m_toastSecondsRemaining = 3.5F;
 }
 
 } // namespace editor

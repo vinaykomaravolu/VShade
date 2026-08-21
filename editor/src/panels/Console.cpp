@@ -203,6 +203,32 @@ void Console::onImGuiRender() {
     }
 
     const std::string query = lowercase(m_search.data());
+    const std::size_t warningCount = std::ranges::count_if(
+        entries,
+        [](const ConsoleEntry& entry) {
+            return entry.level == spdlog::level::warn;
+        }
+    );
+    const std::size_t errorCount = std::ranges::count_if(
+        entries,
+        [](const ConsoleEntry& entry) {
+            return entry.level == spdlog::level::err
+                || entry.level == spdlog::level::critical;
+        }
+    );
+    ImGui::TextDisabled("%zu messages", entries.size());
+    ImGui::SameLine();
+    ImGui::TextColored(
+        ui::color(ui::ColorRole::Warning),
+        "%zu warnings",
+        warningCount
+    );
+    ImGui::SameLine();
+    ImGui::TextColored(
+        ui::color(ui::ColorRole::Error),
+        "%zu errors",
+        errorCount
+    );
     ImGui::BeginChild("##ConsoleEntries", {0.0F, 0.0F}, false);
     for (std::size_t entryIndex = 0; entryIndex < entries.size(); ++entryIndex) {
         const ConsoleEntry& entry = entries[entryIndex];
