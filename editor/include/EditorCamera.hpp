@@ -18,6 +18,8 @@ public:
     void onUpdate(float deltaTime);
     void setInputEnabled(bool enabled) noexcept;
     void setViewportSize(float width, float height);
+    /** Frames a world-space target while preserving the current view direction. */
+    void focusOn(const vshade::math::Vec3& target, float radius);
 
     [[nodiscard]] bool isLooking() const noexcept;
     [[nodiscard]] const vshade::renderer::Camera& camera() const noexcept;

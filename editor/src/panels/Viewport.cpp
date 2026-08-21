@@ -295,6 +295,26 @@ void Viewport::onUpdate(const float deltaTime) {
 
     const bool cameraLookActive =
         Input::isMouseButtonDown(MouseButton::Right);
+    if (m_editing
+        && m_visible
+        && !ImGui::GetIO().WantTextInput
+        && Input::isKeyPressed(KeyCode::F)
+        && m_scene
+        && m_scene->valid(m_selectedEntity)) {
+        const vshade::math::Transform& transform = m_selectedEntity.transform();
+        const vshade::math::Vec3 scale = transform.scale();
+        const float largestAxis = std::max({
+            std::abs(scale.x),
+            std::abs(scale.y),
+            std::abs(scale.z),
+            0.25F,
+        });
+        constexpr float unitCubeRadius = 0.866025404F;
+        m_editorCamera.focusOn(
+            transform.position(),
+            largestAxis * unitCubeRadius
+        );
+    }
     if (m_editing && m_visible && m_hovered && !m_gizmoUsing && !cameraLookActive) {
         if (Input::isKeyPressed(KeyCode::W)) {
             m_gizmoOperation = GizmoOperation::Translate;
@@ -433,6 +453,8 @@ void Viewport::onImGuiRender(
         finishGizmoRecording();
         m_gizmoUsing = false;
     }
+
+    m_selectedEntity = selectedEntity;
 
     ImGui::End();
 }

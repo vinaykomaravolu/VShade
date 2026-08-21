@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include <glm/gtc/matrix_inverse.hpp>
+
 namespace editor {
 
 EditorCamera::EditorCamera(
@@ -80,6 +82,41 @@ void EditorCamera::setViewportSize(const float width, const float height) {
         m_nearClip,
         m_farClip
     );
+}
+
+void EditorCamera::focusOn(
+    const vshade::math::Vec3& target,
+    const float radius
+) {
+    if (!std::isfinite(target.x)
+        || !std::isfinite(target.y)
+        || !std::isfinite(target.z)
+        || !std::isfinite(radius)
+        || radius <= 0.0F) {
+        return;
+    }
+
+    const vshade::math::Mat4 inverseView = glm::inverse(m_camera.view());
+    vshade::math::Vec3 forward = vshade::math::normalizedOrZero(
+        -vshade::math::Vec3(inverseView[2])
+    );
+    if (vshade::math::lengthSquared(forward) == 0.0F) {
+        forward = {0.0F, 0.0F, -1.0F};
+    }
+    vshade::math::Vec3 up = vshade::math::normalizedOrZero(
+        vshade::math::Vec3(inverseView[1])
+    );
+    if (vshade::math::lengthSquared(up) == 0.0F) {
+        up = {0.0F, 1.0F, 0.0F};
+    }
+
+    const float halfFov = m_verticalFovRadians * 0.5F;
+    const float framingDistance = std::max(
+        radius / std::sin(halfFov) * 1.2F,
+        m_nearClip + radius
+    );
+    m_camera.lookAt(target - forward * framingDistance, target, up);
+    m_controller.syncFromCamera();
 }
 
 bool EditorCamera::isLooking() const noexcept {

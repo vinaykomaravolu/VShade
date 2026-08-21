@@ -98,6 +98,7 @@ private:
     std::unique_ptr<vshade::scene::SceneRenderer> m_sceneRenderer;
     vshade::asset::AssetManager* m_assets = nullptr;
     std::shared_ptr<vshade::scene::Scene> m_scene;
+    vshade::scene::Entity m_selectedEntity;
     vshade::scene::SceneRuntime* m_runtime = nullptr;
     EditorCamera m_editorCamera;
     SceneEditHooks m_editHooks;
