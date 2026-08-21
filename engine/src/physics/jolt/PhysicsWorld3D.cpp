@@ -18,6 +18,9 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
@@ -32,6 +35,7 @@
 #include <cstdint>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -232,6 +236,50 @@ void validateShape(const PhysicsShape3D& shape) {
                 if (!std::isfinite(typedShape.halfHeight) || typedShape.halfHeight <= 0.0F ||
                     !std::isfinite(typedShape.radius) || typedShape.radius <= 0.0F) {
                     throw std::invalid_argument("Capsule dimensions must be finite and positive");
+                }
+            } else if constexpr (std::same_as<Shape, CylinderShape3D>) {
+                if (!std::isfinite(typedShape.halfHeight)
+                    || typedShape.halfHeight <= 0.0F
+                    || !std::isfinite(typedShape.radius)
+                    || typedShape.radius <= 0.0F) {
+                    throw std::invalid_argument(
+                        "Cylinder dimensions must be finite and positive"
+                    );
+                }
+            } else if constexpr (std::same_as<Shape, MeshShape3D>) {
+                if (typedShape.vertices.empty()
+                    || typedShape.indices.empty()
+                    || typedShape.indices.size() % 3 != 0) {
+                    throw std::invalid_argument(
+                        "Mesh colliders require indexed triangle geometry"
+                    );
+                }
+                for (const math::Vec3& vertex : typedShape.vertices) {
+                    if (!finite(vertex)) {
+                        throw std::invalid_argument(
+                            "Mesh collider vertices must be finite"
+                        );
+                    }
+                }
+                for (const std::uint32_t index : typedShape.indices) {
+                    if (index >= typedShape.vertices.size()) {
+                        throw std::invalid_argument(
+                            "Mesh collider index is out of range"
+                        );
+                    }
+                }
+            } else if constexpr (std::same_as<Shape, ConvexShape3D>) {
+                if (typedShape.points.size() < 4) {
+                    throw std::invalid_argument(
+                        "Convex colliders require at least four points"
+                    );
+                }
+                for (const math::Vec3& point : typedShape.points) {
+                    if (!finite(point)) {
+                        throw std::invalid_argument(
+                            "Convex collider points must be finite"
+                        );
+                    }
                 }
             }
         },
@@ -498,6 +546,58 @@ PhysicsBody3D PhysicsWorld3D::createBody(
                     typedShape.halfHeight,
                     typedShape.radius
                 );
+            } else if constexpr (std::same_as<Shape, CylinderShape3D>) {
+                nativeShape = new JPH::CylinderShape(
+                    typedShape.halfHeight,
+                    typedShape.radius,
+                    std::min(
+                        JPH::cDefaultConvexRadius,
+                        std::min(typedShape.halfHeight, typedShape.radius) * 0.5F
+                    )
+                );
+            } else if constexpr (std::same_as<Shape, MeshShape3D>) {
+                JPH::VertexList vertices;
+                vertices.reserve(typedShape.vertices.size());
+                for (const math::Vec3& vertex : typedShape.vertices) {
+                    vertices.emplace_back(vertex.x, vertex.y, vertex.z);
+                }
+                JPH::IndexedTriangleList triangles;
+                triangles.reserve(typedShape.indices.size() / 3);
+                for (std::size_t index = 0;
+                     index < typedShape.indices.size(); index += 3) {
+                    triangles.emplace_back(
+                        typedShape.indices[index],
+                        typedShape.indices[index + 1],
+                        typedShape.indices[index + 2],
+                        0
+                    );
+                }
+                JPH::Shape::ShapeResult result = JPH::MeshShapeSettings(
+                    std::move(vertices),
+                    std::move(triangles)
+                ).Create();
+                if (!result.IsValid()) {
+                    throw std::invalid_argument(
+                        "Failed to create mesh collider: "
+                        + std::string(result.GetError().c_str())
+                    );
+                }
+                nativeShape = result.Get();
+            } else if constexpr (std::same_as<Shape, ConvexShape3D>) {
+                JPH::Array<JPH::Vec3> points;
+                points.reserve(typedShape.points.size());
+                for (const math::Vec3& point : typedShape.points) {
+                    points.emplace_back(point.x, point.y, point.z);
+                }
+                JPH::Shape::ShapeResult result =
+                    JPH::ConvexHullShapeSettings(points).Create();
+                if (!result.IsValid()) {
+                    throw std::invalid_argument(
+                        "Failed to create convex collider: "
+                        + std::string(result.GetError().c_str())
+                    );
+                }
+                nativeShape = result.Get();
             }
         },
         shape
@@ -517,6 +617,13 @@ PhysicsBody3D PhysicsWorld3D::createBody(
         toJoltMotionType(settings.type),
         toJoltObjectLayer(settings.type)
     );
+    if (std::holds_alternative<MeshShape3D>(shape)
+        && settings.type != BodyType::Static) {
+        throw std::invalid_argument(
+            "MeshCollider3DComponent requires a static rigid body; "
+            "use ConvexCollider3DComponent for moving bodies"
+        );
+    }
     bodySettings.mLinearVelocity = toJoltVector(settings.linearVelocity);
     bodySettings.mAngularVelocity = toJoltVector(settings.angularVelocity);
     bodySettings.mUserData = settings.userData;

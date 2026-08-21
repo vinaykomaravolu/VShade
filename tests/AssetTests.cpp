@@ -404,6 +404,9 @@ TEST_CASE("Default renderer loaders create texture shader and mesh resources", "
           vshade::math::Vec3{2.0F, 2.0F, 2.0F});
     REQUIRE(model->rootNodes().size() == 1);
     CHECK(model->rootNodes()[0] == 0);
+    REQUIRE(model->localBounds().has_value());
+    CHECK_FALSE(model->collisionVertices().empty());
+    CHECK(model->collisionIndices().size() == 3);
     REQUIRE(model->primitives()[0].material);
     CHECK(model->primitives()[0].material->albedoColor() ==
           vshade::math::Vec4{0.25F, 0.5F, 0.75F, 1.0F});

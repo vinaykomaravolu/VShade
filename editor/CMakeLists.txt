@@ -74,6 +74,9 @@ set(VSHADE_EDITOR_ICONS
     assets/icons/audio.png
     assets/icons/scene.png
     assets/icons/prefab.png
+    assets/icons/camera.png
+    assets/icons/directional_light.png
+    assets/icons/point_light.png
 )
 set_source_files_properties(${VSHADE_EDITOR_ICONS} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_sources(VShadeEditor PRIVATE ${VSHADE_EDITOR_ICONS})
@@ -89,8 +92,12 @@ add_custom_command(TARGET VShadeEditor POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/audio.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/scene.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/prefab.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/camera.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/directional_light.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/point_light.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/speaker.png"
         "$<TARGET_FILE_DIR:VShadeEditor>/icons"
-    COMMENT "Copying editor Content Browser icons"
+    COMMENT "Copying editor icons"
 )
 
 if(MSVC)

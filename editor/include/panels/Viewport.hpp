@@ -64,6 +64,14 @@ private:
         vshade::math::Vec2 size
     );
     void renderScene();
+    void queueSelectedCameraFrustum(
+        vshade::scene::Entity selectedEntity,
+        float aspectRatio
+    ) const;
+    void queueSelectedColliderGizmo(
+        vshade::scene::Entity selectedEntity
+    ) const;
+    void queuePhysicsGizmos() const;
     void resizeFramebuffer(float width, float height);
     void drawGizmo(
         vshade::scene::Entity selectedEntity,
@@ -71,6 +79,14 @@ private:
         float y,
         float width,
         float height
+    );
+    bool drawSceneIcons(
+        vshade::scene::Entity& selectedEntity,
+        float x,
+        float y,
+        float width,
+        float height,
+        bool allowInteraction
     );
     void selectEntityUnderMouse(
         vshade::scene::Entity& selectedEntity,
@@ -116,6 +132,11 @@ private:
     bool m_visible = true;
     bool m_editing = true;
     bool m_runtimeCameraActive = false;
+    bool m_showCameraGizmos = true;
+    bool m_showLightGizmos = true;
+    bool m_showColliderGizmos = true;
+    bool m_showAudioGizmos = true;
+    bool m_showPhysicsGizmos = false;
 };
 
 } // namespace editor

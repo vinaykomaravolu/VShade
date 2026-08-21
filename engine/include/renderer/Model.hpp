@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,12 @@ struct ModelNode {
     std::vector<std::size_t> primitives;
     /** @brief Indices into Model::nodes() parented below this node. */
     std::vector<std::size_t> children;
+};
+
+/** Model-local axis-aligned bounds calculated from imported geometry. */
+struct ModelBounds {
+    math::Vec3 minimum{0.0F};
+    math::Vec3 maximum{0.0F};
 };
 
 /**
@@ -60,10 +67,17 @@ public:
     /** @brief Returns roots of the model's selected/default scene. */
     [[nodiscard]] const std::vector<std::size_t>& rootNodes() const noexcept;
 
+    [[nodiscard]] const std::optional<ModelBounds>& localBounds() const noexcept;
+    [[nodiscard]] const std::vector<math::Vec3>& collisionVertices() const noexcept;
+    [[nodiscard]] const std::vector<std::uint32_t>& collisionIndices() const noexcept;
+
 private:
     std::vector<ModelPrimitive> m_primitives;
     std::vector<ModelNode> m_nodes;
     std::vector<std::size_t> m_rootNodes;
+    std::optional<ModelBounds> m_localBounds;
+    std::vector<math::Vec3> m_collisionVertices;
+    std::vector<std::uint32_t> m_collisionIndices;
 };
 
 } // namespace vshade::renderer

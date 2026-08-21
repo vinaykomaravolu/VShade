@@ -21,6 +21,9 @@ using vshade::physics::PhysicsBody3DSettings;
 using vshade::physics::PhysicsMaterial3D;
 using vshade::physics::PhysicsWorld3D;
 using vshade::physics::SphereShape3D;
+using vshade::physics::CylinderShape3D;
+using vshade::physics::MeshShape3D;
+using vshade::physics::ConvexShape3D;
 
 constexpr float fixedTimeStep = 1.0F / 60.0F;
 
@@ -101,6 +104,57 @@ TEST_CASE("Physics3D handles impulses raycasts and stale handles", "[physics][ph
     );
     CHECK(replacement.id() != stale.id());
     CHECK(world.contains(replacement));
+}
+
+TEST_CASE("Physics3D creates cylinder mesh and convex shapes", "[physics][physics3d]") {
+    PhysicsWorld3D world({.maxBodies = 1'024});
+    const auto floor = world.createBody(
+        {.type = BodyType::Static},
+        MeshShape3D{
+            .vertices = {
+                {-4.0F, 0.0F, -4.0F},
+                { 4.0F, 0.0F, -4.0F},
+                { 4.0F, 0.0F,  4.0F},
+                {-4.0F, 0.0F,  4.0F},
+            },
+            .indices = {0, 2, 1, 0, 3, 2},
+        }
+    );
+    const auto cylinder = world.createBody(
+        dynamicBodyAt(-1.0F, 3.0F, 0.0F),
+        CylinderShape3D{0.5F, 0.5F}
+    );
+    const auto convex = world.createBody(
+        dynamicBodyAt(1.0F, 3.0F, 0.0F),
+        ConvexShape3D{{
+            {-0.5F, -0.5F, -0.5F},
+            { 0.5F, -0.5F, -0.5F},
+            { 0.0F, -0.5F,  0.5F},
+            { 0.0F,  0.5F,  0.0F},
+        }}
+    );
+
+    for (int step = 0; step < 180; ++step) {
+        world.step(fixedTimeStep);
+    }
+
+    CHECK(world.contains(floor));
+    CHECK(world.position(cylinder).y == Catch::Approx(0.5F).margin(0.06F));
+    CHECK(world.position(convex).y > 0.35F);
+    CHECK_THROWS_AS(
+        world.createBody(
+            dynamicBodyAt(0.0F, 1.0F, 0.0F),
+            MeshShape3D{
+                .vertices = {
+                    {0.0F, 0.0F, 0.0F},
+                    {1.0F, 0.0F, 0.0F},
+                    {0.0F, 0.0F, 1.0F},
+                },
+                .indices = {0, 2, 1},
+            }
+        ),
+        std::invalid_argument
+    );
 }
 
 TEST_CASE("Physics3D reports contact phases after stepping", "[physics][physics3d]") {

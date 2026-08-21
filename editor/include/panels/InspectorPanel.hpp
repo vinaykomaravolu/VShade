@@ -45,6 +45,7 @@ private:
     void drawCollider2D(vshade::scene::Entity entity);
     void drawRigidBody3D(vshade::scene::Entity entity);
     void drawCollider3D(vshade::scene::Entity entity);
+    void drawTypedColliders3D(vshade::scene::Entity entity);
     void drawScripts(vshade::scene::Entity entity);
     void drawAddComponentMenu(vshade::scene::Entity entity);
 

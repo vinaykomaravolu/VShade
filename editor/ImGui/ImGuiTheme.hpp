@@ -18,6 +18,7 @@ enum class ColorRole {
     DestructiveHovered,
     Muted,
     Chrome,
+    SceneIconBackground,
 };
 
 enum class Icon {
@@ -28,6 +29,7 @@ enum class Icon {
     Translate,
     Rotate,
     Scale,
+    Reset,
 };
 
 struct Metrics final {

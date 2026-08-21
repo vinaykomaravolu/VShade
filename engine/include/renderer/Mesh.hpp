@@ -5,7 +5,9 @@
 #include "renderer/VertexArray.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace vshade::renderer {
 
@@ -32,7 +34,9 @@ public:
      */
     explicit Mesh(
         std::shared_ptr<VertexArray> vertexArray,
-        PrimitiveTopology topology = PrimitiveTopology::Triangles
+        PrimitiveTopology topology = PrimitiveTopology::Triangles,
+        std::vector<MeshVertex> collisionVertices = {},
+        std::vector<std::uint32_t> collisionIndices = {}
     );
 
     /**
@@ -47,9 +51,15 @@ public:
      */
     [[nodiscard]] PrimitiveTopology topology() const noexcept;
 
+    /** CPU-side geometry retained for model bounds and editor physics shapes. */
+    [[nodiscard]] const std::vector<MeshVertex>& collisionVertices() const noexcept;
+    [[nodiscard]] const std::vector<std::uint32_t>& collisionIndices() const noexcept;
+
 private:
     std::shared_ptr<VertexArray> m_vertexArray;
     PrimitiveTopology m_topology = PrimitiveTopology::Triangles;
+    std::vector<MeshVertex> m_collisionVertices;
+    std::vector<std::uint32_t> m_collisionIndices;
 };
 
 } // namespace vshade::renderer

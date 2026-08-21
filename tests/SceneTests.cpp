@@ -587,6 +587,68 @@ TEST_CASE("Scene physics components round trip through JSON", "[scene][physics]"
     CHECK(collider3D.offset.z == Catch::Approx(0.5F));
 }
 
+TEST_CASE("Typed 3D colliders serialize independently", "[scene][physics3d]") {
+    const std::filesystem::path path = sceneOutputPath("typed-colliders.json");
+    vshade::scene::Scene source("Typed colliders");
+
+    auto boxEntity = source.createEntity("Box");
+    auto& box = boxEntity.add<vshade::scene::BoxCollider3DComponent>();
+    box.halfExtents = {1.0F, 2.0F, 3.0F};
+    box.offset = {0.1F, 0.2F, 0.3F};
+
+    auto sphereEntity = source.createEntity("Sphere");
+    auto& sphere = sphereEntity.add<vshade::scene::SphereCollider3DComponent>();
+    sphere.radius = 2.5F;
+    sphere.sensor = true;
+
+    auto capsuleEntity = source.createEntity("Capsule");
+    auto& capsule = capsuleEntity.add<vshade::scene::CapsuleCollider3DComponent>();
+    capsule.halfHeight = 1.5F;
+    capsule.radius = 0.4F;
+
+    auto cylinderEntity = source.createEntity("Cylinder");
+    auto& cylinder = cylinderEntity.add<vshade::scene::CylinderCollider3DComponent>();
+    cylinder.halfHeight = 2.0F;
+    cylinder.radius = 0.75F;
+
+    const vshade::asset::AssetReference<vshade::renderer::Model> modelReference{
+        vshade::asset::AssetHandle<vshade::renderer::Model>::fromId(42),
+        "assets/models/collision.glb"
+    };
+    auto meshEntity = source.createEntity("Mesh");
+    meshEntity.add<vshade::scene::MeshCollider3DComponent>().model =
+        modelReference;
+    auto convexEntity = source.createEntity("Convex");
+    convexEntity.add<vshade::scene::ConvexCollider3DComponent>().model =
+        modelReference;
+
+    vshade::scene::SceneSerializer writer(source);
+    REQUIRE(writer.serialize(path));
+    vshade::scene::Scene loaded;
+    vshade::scene::SceneSerializer reader(loaded);
+    REQUIRE(reader.deserialize(path));
+
+    const auto loadedBox = loaded.findEntity(boxEntity.uuid());
+    REQUIRE(loadedBox.has<vshade::scene::BoxCollider3DComponent>());
+    CHECK(loadedBox.get<vshade::scene::BoxCollider3DComponent>()
+              .halfExtents.y == Catch::Approx(2.0F));
+    const auto loadedSphere = loaded.findEntity(sphereEntity.uuid());
+    REQUIRE(loadedSphere.has<vshade::scene::SphereCollider3DComponent>());
+    CHECK(loadedSphere.get<vshade::scene::SphereCollider3DComponent>().sensor);
+    CHECK(loaded.findEntity(capsuleEntity.uuid())
+              .get<vshade::scene::CapsuleCollider3DComponent>()
+              .radius == Catch::Approx(0.4F));
+    CHECK(loaded.findEntity(cylinderEntity.uuid())
+              .get<vshade::scene::CylinderCollider3DComponent>()
+              .halfHeight == Catch::Approx(2.0F));
+    CHECK(loaded.findEntity(meshEntity.uuid())
+              .get<vshade::scene::MeshCollider3DComponent>()
+              .model == modelReference);
+    CHECK(loaded.findEntity(convexEntity.uuid())
+              .get<vshade::scene::ConvexCollider3DComponent>()
+              .model == modelReference);
+}
+
 TEST_CASE("Scene serialization round trips stable components", "[scene]") {
     const std::filesystem::path path = sceneOutputPath("roundtrip.json");
 

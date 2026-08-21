@@ -493,12 +493,22 @@ template<typename Resource>
             return {{"Type", "Box"}, {"HalfExtents", vector3(typedShape.halfExtents)}};
         } else if constexpr (std::is_same_v<Shape, physics::SphereShape3D>) {
             return {{"Type", "Sphere"}, {"Radius", serializedFloat(typedShape.radius)}};
-        } else {
+        } else if constexpr (std::is_same_v<Shape, physics::CapsuleShape3D>) {
             return {
                 {"Type", "Capsule"},
                 {"HalfHeight", serializedFloat(typedShape.halfHeight)},
                 {"Radius", serializedFloat(typedShape.radius)},
             };
+        } else if constexpr (std::is_same_v<Shape, physics::CylinderShape3D>) {
+            return {
+                {"Type", "Cylinder"},
+                {"HalfHeight", serializedFloat(typedShape.halfHeight)},
+                {"Radius", serializedFloat(typedShape.radius)},
+            };
+        } else {
+            throw std::invalid_argument(
+                "Mesh and convex shapes must use their typed collider components"
+            );
         }
     }, shape);
 }
@@ -526,6 +536,14 @@ template<typename Resource>
             throw std::invalid_argument("3D capsule dimensions must be positive");
         }
         return physics::CapsuleShape3D{halfHeight, radius};
+    }
+    if (type == "Cylinder") {
+        const float halfHeight = finiteFloat(json.at("HalfHeight"));
+        const float radius = finiteFloat(json.at("Radius"));
+        if (halfHeight <= 0.0F || radius <= 0.0F) {
+            throw std::invalid_argument("3D cylinder dimensions must be positive");
+        }
+        return physics::CylinderShape3D{halfHeight, radius};
     }
     throw std::invalid_argument("unknown 3D physics shape: " + type);
 }
@@ -559,6 +577,94 @@ template<typename Resource>
         throw std::invalid_argument("3D physics material values must be non-negative");
     }
     return component;
+}
+
+template<typename Component>
+[[nodiscard]] Json serializeTypedCollider3D(const Component& component) {
+    return {
+        {"Material", {
+            {"Friction", serializedFloat(component.material.friction)},
+            {"Restitution", serializedFloat(component.material.restitution)},
+        }},
+        {"Offset", vector3(component.offset)},
+        {"Sensor", component.sensor},
+    };
+}
+
+template<typename Component>
+void deserializeTypedColliderProperties(
+    Component& component,
+    const Json& json
+) {
+    const auto offset = floatArray<3>(json.at("Offset"));
+    const Json& material = json.at("Material");
+    component.material.friction = finiteFloat(material.at("Friction"));
+    component.material.restitution = finiteFloat(material.at("Restitution"));
+    component.offset = {offset[0], offset[1], offset[2]};
+    component.sensor = json.at("Sensor").get<bool>();
+    if (component.material.friction < 0.0F
+        || component.material.restitution < 0.0F) {
+        throw std::invalid_argument(
+            "3D physics material values must be non-negative"
+        );
+    }
+}
+
+template<typename Component>
+[[nodiscard]] Component deserializeTypedCollider3D(const Json& json) {
+    Component component;
+    deserializeTypedColliderProperties(component, json);
+    if constexpr (std::is_same_v<Component, BoxCollider3DComponent>) {
+        const auto value = floatArray<3>(json.at("HalfExtents"));
+        component.halfExtents = {value[0], value[1], value[2]};
+        if (value[0] <= 0.0F || value[1] <= 0.0F || value[2] <= 0.0F) {
+            throw std::invalid_argument("3D box half extents must be positive");
+        }
+    } else if constexpr (std::is_same_v<Component, SphereCollider3DComponent>) {
+        component.radius = finiteFloat(json.at("Radius"));
+        if (component.radius <= 0.0F) {
+            throw std::invalid_argument("3D sphere radius must be positive");
+        }
+    } else if constexpr (
+        std::is_same_v<Component, CapsuleCollider3DComponent>
+        || std::is_same_v<Component, CylinderCollider3DComponent>
+    ) {
+        component.halfHeight = finiteFloat(json.at("HalfHeight"));
+        component.radius = finiteFloat(json.at("Radius"));
+        if (component.halfHeight <= 0.0F || component.radius <= 0.0F) {
+            throw std::invalid_argument("3D collider dimensions must be positive");
+        }
+    } else {
+        if (json.contains("Model")) {
+            component.model = deserializeAssetReference<renderer::Model>(
+                json.at("Model")
+            );
+        }
+    }
+    return component;
+}
+
+template<typename Component>
+[[nodiscard]] Json serializeSizedCollider3D(const Component& component) {
+    Json json = serializeTypedCollider3D(component);
+    if constexpr (std::is_same_v<Component, BoxCollider3DComponent>) {
+        json["HalfExtents"] = vector3(component.halfExtents);
+    } else if constexpr (
+        std::is_same_v<Component, SphereCollider3DComponent>
+    ) {
+        json["Radius"] = serializedFloat(component.radius);
+    } else if constexpr (
+        std::is_same_v<Component, CapsuleCollider3DComponent>
+        || std::is_same_v<Component, CylinderCollider3DComponent>
+    ) {
+        json["HalfHeight"] = serializedFloat(component.halfHeight);
+        json["Radius"] = serializedFloat(component.radius);
+    } else {
+        if (component.model.valid()) {
+            json["Model"] = serializeAssetReference(component.model);
+        }
+    }
+    return json;
 }
 
 [[nodiscard]] std::string_view cameraProjectionName(const CameraProjection projection) {
@@ -770,6 +876,36 @@ std::string SceneSerializer::serializeToString(const SceneJsonFormat format) con
             if (registry.all_of<Collider3DComponent>(handle)) {
                 entity["Collider3D"] = serializeCollider3D(
                     registry.get<Collider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<BoxCollider3DComponent>(handle)) {
+                entity["BoxCollider3D"] = serializeSizedCollider3D(
+                    registry.get<BoxCollider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<SphereCollider3DComponent>(handle)) {
+                entity["SphereCollider3D"] = serializeSizedCollider3D(
+                    registry.get<SphereCollider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<CapsuleCollider3DComponent>(handle)) {
+                entity["CapsuleCollider3D"] = serializeSizedCollider3D(
+                    registry.get<CapsuleCollider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<CylinderCollider3DComponent>(handle)) {
+                entity["CylinderCollider3D"] = serializeSizedCollider3D(
+                    registry.get<CylinderCollider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<MeshCollider3DComponent>(handle)) {
+                entity["MeshCollider3D"] = serializeSizedCollider3D(
+                    registry.get<MeshCollider3DComponent>(handle)
+                );
+            }
+            if (registry.all_of<ConvexCollider3DComponent>(handle)) {
+                entity["ConvexCollider3D"] = serializeSizedCollider3D(
+                    registry.get<ConvexCollider3DComponent>(handle)
                 );
             }
             if (registry.all_of<ScriptComponent>(handle)) {
@@ -1077,6 +1213,35 @@ bool SceneSerializer::deserializeFromString(const std::string& json) {
                     deserializeCollider3D(*collider)
                 );
             }
+            const auto loadTypedCollider = [&]<typename Component>(
+                const char* name
+            ) {
+                if (const auto collider = serializedEntity.find(name);
+                    collider != serializedEntity.end()) {
+                    loadedRegistry.emplace<Component>(
+                        handle,
+                        deserializeTypedCollider3D<Component>(*collider)
+                    );
+                }
+            };
+            loadTypedCollider.template operator()<BoxCollider3DComponent>(
+                "BoxCollider3D"
+            );
+            loadTypedCollider.template operator()<SphereCollider3DComponent>(
+                "SphereCollider3D"
+            );
+            loadTypedCollider.template operator()<CapsuleCollider3DComponent>(
+                "CapsuleCollider3D"
+            );
+            loadTypedCollider.template operator()<CylinderCollider3DComponent>(
+                "CylinderCollider3D"
+            );
+            loadTypedCollider.template operator()<MeshCollider3DComponent>(
+                "MeshCollider3D"
+            );
+            loadTypedCollider.template operator()<ConvexCollider3DComponent>(
+                "ConvexCollider3D"
+            );
             if (const auto scripts = serializedEntity.find("Scripts");
                 scripts != serializedEntity.end()) {
                 loadedRegistry.emplace<ScriptComponent>(

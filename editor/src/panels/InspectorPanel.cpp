@@ -10,6 +10,7 @@
 #include <physics/physics2d/PhysicsShape2D.hpp>
 #include <physics/physics3d/PhysicsShape3D.hpp>
 #include <renderer/Lighting.hpp>
+#include <renderer/Model.hpp>
 #include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
 #include <scene/components/AudioComponents.hpp>
@@ -27,7 +28,9 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -157,6 +160,108 @@ void InspectorPanel::setEditHooks(SceneEditHooks hooks) {
     m_editHooks = std::move(hooks);
 }
 
+[[nodiscard]] bool hasTypedCollider3D(const vshade::scene::Entity entity) {
+    return entity.has<vshade::scene::BoxCollider3DComponent>()
+        || entity.has<vshade::scene::SphereCollider3DComponent>()
+        || entity.has<vshade::scene::CapsuleCollider3DComponent>()
+        || entity.has<vshade::scene::CylinderCollider3DComponent>()
+        || entity.has<vshade::scene::MeshCollider3DComponent>()
+        || entity.has<vshade::scene::ConvexCollider3DComponent>();
+}
+
+[[nodiscard]] bool hasAnyCollider3D(const vshade::scene::Entity entity) {
+    return entity.has<vshade::scene::Collider3DComponent>()
+        || hasTypedCollider3D(entity);
+}
+
+[[nodiscard]] std::shared_ptr<vshade::renderer::Model> entityModel(
+    const vshade::scene::Entity entity,
+    vshade::asset::AssetManager* assets
+) {
+    const auto* modelRenderer =
+        entity.tryGet<vshade::scene::ModelRendererComponent>();
+    if (assets == nullptr || modelRenderer == nullptr
+        || !modelRenderer->model.valid()) {
+        return {};
+    }
+    try {
+        return assets->loadResource(modelRenderer->model).shared();
+    } catch (const std::exception& error) {
+        ENGINE_WARN(
+            "Could not fit collider for '{}': {}",
+            entity.name(),
+            error.what()
+        );
+        return {};
+    }
+}
+
+template<typename Component>
+bool fitColliderToModel(
+    const vshade::scene::Entity entity,
+    vshade::asset::AssetManager* assets,
+    Component& component
+) {
+    const auto* modelRenderer =
+        entity.tryGet<vshade::scene::ModelRendererComponent>();
+    const auto model = entityModel(entity, assets);
+    if (!modelRenderer || !model || !model->localBounds()) {
+        return false;
+    }
+
+    if constexpr (
+        std::is_same_v<Component, vshade::scene::MeshCollider3DComponent>
+        || std::is_same_v<Component, vshade::scene::ConvexCollider3DComponent>
+    ) {
+        component.model = modelRenderer->model;
+        return true;
+    } else {
+        constexpr float minimumSize = 0.001F;
+        const auto& bounds = *model->localBounds();
+        const vshade::math::Vec3 center =
+            (bounds.minimum + bounds.maximum) * 0.5F;
+        const vshade::math::Vec3 extents = glm::max(
+            (bounds.maximum - bounds.minimum) * 0.5F,
+            vshade::math::Vec3{minimumSize}
+        );
+        component.offset = center;
+        if constexpr (
+            std::is_same_v<Component, vshade::scene::BoxCollider3DComponent>
+        ) {
+            component.halfExtents = extents;
+        } else if constexpr (
+            std::is_same_v<Component, vshade::scene::SphereCollider3DComponent>
+        ) {
+            component.radius = std::max({extents.x, extents.y, extents.z});
+        } else if constexpr (
+            std::is_same_v<Component, vshade::scene::CapsuleCollider3DComponent>
+        ) {
+            component.radius = std::max(extents.x, extents.z);
+            component.halfHeight = std::max(
+                extents.y - component.radius,
+                minimumSize
+            );
+        } else if constexpr (
+            std::is_same_v<Component, vshade::scene::CylinderCollider3DComponent>
+        ) {
+            component.radius = std::max(extents.x, extents.z);
+            component.halfHeight = extents.y;
+        }
+        return true;
+    }
+}
+
+template<typename Component>
+void drawColliderProperties(Component& component) {
+    ImGui::DragFloat3("Offset", &component.offset.x, 0.05F);
+    ImGui::DragFloat("Friction", &component.material.friction, 0.01F);
+    ImGui::DragFloat("Restitution", &component.material.restitution, 0.01F);
+    component.material.friction = std::max(component.material.friction, 0.0F);
+    component.material.restitution =
+        std::max(component.material.restitution, 0.0F);
+    ImGui::Checkbox("Sensor", &component.sensor);
+}
+
 void InspectorPanel::setAssetSelector(AssetSelector& selector) noexcept {
     m_assetSelector = &selector;
 }
@@ -259,6 +364,7 @@ void InspectorPanel::onImGuiRender(
         drawCollider2D(selectedEntity);
         drawRigidBody3D(selectedEntity);
         drawCollider3D(selectedEntity);
+        drawTypedColliders3D(selectedEntity);
         drawScripts(selectedEntity);
         ImGui::Separator();
         drawAddComponentMenu(selectedEntity);
@@ -842,6 +948,110 @@ void InspectorPanel::drawCollider3D(vshade::scene::Entity entity) {
     );
 }
 
+void InspectorPanel::drawTypedColliders3D(vshade::scene::Entity entity) {
+    const auto fitButton = [this, entity](auto& collider) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Fit");
+        ImGui::SameLine();
+        if (ui::iconButton(
+                "##ResetToModelBounds",
+                ui::Icon::Reset,
+                ui::scaled(26.0F, 24.0F),
+                "Reset collider to the model's local bounds"
+            )) {
+            commitMutation(m_editHooks, [&] {
+                if (!fitColliderToModel(entity, m_assets, collider)) {
+                    ENGINE_WARN(
+                        "Entity '{}' has no loaded model bounds to fit",
+                        entity.name()
+                    );
+                }
+            });
+        }
+    };
+
+    drawComponent<vshade::scene::BoxCollider3DComponent>(
+        "Box Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            ImGui::DragFloat3(
+                "Half Extents",
+                &collider.halfExtents.x,
+                0.05F
+            );
+            collider.halfExtents = glm::max(
+                collider.halfExtents,
+                vshade::math::Vec3{0.001F}
+            );
+            drawColliderProperties(collider);
+        }
+    );
+    drawComponent<vshade::scene::SphereCollider3DComponent>(
+        "Sphere Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            ImGui::DragFloat("Radius", &collider.radius, 0.05F);
+            collider.radius = std::max(collider.radius, 0.001F);
+            drawColliderProperties(collider);
+        }
+    );
+    drawComponent<vshade::scene::CapsuleCollider3DComponent>(
+        "Capsule Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            ImGui::DragFloat("Half Height", &collider.halfHeight, 0.05F);
+            ImGui::DragFloat("Radius", &collider.radius, 0.05F);
+            collider.halfHeight = std::max(collider.halfHeight, 0.001F);
+            collider.radius = std::max(collider.radius, 0.001F);
+            drawColliderProperties(collider);
+        }
+    );
+    drawComponent<vshade::scene::CylinderCollider3DComponent>(
+        "Cylinder Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            ImGui::DragFloat("Half Height", &collider.halfHeight, 0.05F);
+            ImGui::DragFloat("Radius", &collider.radius, 0.05F);
+            collider.halfHeight = std::max(collider.halfHeight, 0.001F);
+            collider.radius = std::max(collider.radius, 0.001F);
+            drawColliderProperties(collider);
+        }
+    );
+    drawComponent<vshade::scene::MeshCollider3DComponent>(
+        "Mesh Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            if (m_assets && m_assetSelector) {
+                m_assetSelector->draw("Model", collider.model, *m_assets);
+            }
+            ImGui::TextDisabled("Static rigid bodies only");
+            drawColliderProperties(collider);
+        }
+    );
+    drawComponent<vshade::scene::ConvexCollider3DComponent>(
+        "Convex Collider 3D",
+        entity,
+        m_editHooks,
+        [&](auto& collider) {
+            fitButton(collider);
+            if (m_assets && m_assetSelector) {
+                m_assetSelector->draw("Model", collider.model, *m_assets);
+            }
+            drawColliderProperties(collider);
+        }
+    );
+}
+
 void InspectorPanel::drawScripts(vshade::scene::Entity entity) {
     drawComponent<vshade::scene::ScriptComponent>(
         "Scripts",
@@ -996,19 +1206,44 @@ void InspectorPanel::drawAddComponentMenu(
         && ImGui::MenuItem("Rigid Body 3D")) {
         commitMutation(m_editHooks, [&] {
             entity.add<vshade::scene::RigidBody3DComponent>();
-            if (!entity.has<vshade::scene::Collider3DComponent>()) {
-                entity.add<vshade::scene::Collider3DComponent>();
-            }
         });
         ImGui::CloseCurrentPopup();
     }
-    if (entity.has<vshade::scene::RigidBody3DComponent>()
-        && !entity.has<vshade::scene::Collider3DComponent>()
-        && ImGui::MenuItem("Collider 3D")) {
-        commitMutation(m_editHooks, [&] {
-            entity.add<vshade::scene::Collider3DComponent>();
-        });
-        ImGui::CloseCurrentPopup();
+    if (!hasAnyCollider3D(entity)) {
+        const auto addCollider = [&]<typename Component>() {
+            commitMutation(m_editHooks, [&] {
+                if (!entity.has<vshade::scene::RigidBody3DComponent>()) {
+                    entity.add<vshade::scene::RigidBody3DComponent>();
+                }
+                auto& collider = entity.add<Component>();
+                (void)fitColliderToModel(entity, m_assets, collider);
+            });
+            ImGui::CloseCurrentPopup();
+        };
+        if (ImGui::MenuItem("Box Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::BoxCollider3DComponent>();
+        }
+        if (ImGui::MenuItem("Sphere Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::SphereCollider3DComponent>();
+        }
+        if (ImGui::MenuItem("Capsule Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::CapsuleCollider3DComponent>();
+        }
+        if (ImGui::MenuItem("Cylinder Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::CylinderCollider3DComponent>();
+        }
+        if (ImGui::MenuItem("Mesh Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::MeshCollider3DComponent>();
+        }
+        if (ImGui::MenuItem("Convex Collider 3D")) {
+            addCollider.template operator()<
+                vshade::scene::ConvexCollider3DComponent>();
+        }
     }
     if (!entity.has<vshade::scene::ScriptComponent>()
         && ImGui::MenuItem("Script")) {

@@ -120,6 +120,8 @@ ImVec4 color(const ColorRole role) noexcept {
         case ColorRole::DestructiveHovered: return {0.9020F, 0.2510F, 0.2863F, 1.0F};
         case ColorRole::Muted: return {0.5216F, 0.6000F, 0.7020F, 1.0F};
         case ColorRole::Chrome: return {0.0471F, 0.0549F, 0.0706F, 1.0F};
+        case ColorRole::SceneIconBackground:
+            return {0.92F, 0.94F, 0.98F, 0.92F};
     }
     return {1.0F, 1.0F, 1.0F, 1.0F};
 }
@@ -287,6 +289,25 @@ bool iconButton(
                 {center.x + extent, center.y - extent + handle * 2.0F},
                 glyphColor,
                 0.8F * glyphScale
+            );
+            break;
+        }
+        case Icon::Reset: {
+            constexpr float arcStart = -2.7F;
+            constexpr float arcEnd = 2.05F;
+            const float radius = 6.5F * glyphScale;
+            drawList->PathArcTo(center, radius, arcStart, arcEnd, 22);
+            drawList->PathStroke(glyphColor, 0, 1.7F * glyphScale);
+            const ImVec2 tip{
+                center.x + std::cos(arcStart) * radius,
+                center.y + std::sin(arcStart) * radius,
+            };
+            const float head = 3.0F * glyphScale;
+            drawList->AddTriangleFilled(
+                tip,
+                {tip.x + head, tip.y - head * 0.2F},
+                {tip.x + head * 0.25F, tip.y + head},
+                glyphColor
             );
             break;
         }

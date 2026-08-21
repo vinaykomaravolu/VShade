@@ -95,6 +95,12 @@ Prefab Prefab::fromEntity(const Scene& scene, const Entity root) {
         copy.template operator()<Collider2DComponent>();
         copy.template operator()<RigidBody3DComponent>();
         copy.template operator()<Collider3DComponent>();
+        copy.template operator()<BoxCollider3DComponent>();
+        copy.template operator()<SphereCollider3DComponent>();
+        copy.template operator()<CapsuleCollider3DComponent>();
+        copy.template operator()<CylinderCollider3DComponent>();
+        copy.template operator()<MeshCollider3DComponent>();
+        copy.template operator()<ConvexCollider3DComponent>();
         copy.template operator()<ScriptComponent>();
 
         if (sourceUuid != rootUuid) {

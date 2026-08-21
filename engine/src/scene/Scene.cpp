@@ -114,6 +114,17 @@ Entity Scene::duplicateEntity(const Entity source) {
                 source.component<Collider3DComponent>()
             );
         }
+        const auto duplicateCollider = [&]<typename Component>() {
+            if (source.has<Component>()) {
+                duplicate.add<Component>(source.get<Component>());
+            }
+        };
+        duplicateCollider.template operator()<BoxCollider3DComponent>();
+        duplicateCollider.template operator()<SphereCollider3DComponent>();
+        duplicateCollider.template operator()<CapsuleCollider3DComponent>();
+        duplicateCollider.template operator()<CylinderCollider3DComponent>();
+        duplicateCollider.template operator()<MeshCollider3DComponent>();
+        duplicateCollider.template operator()<ConvexCollider3DComponent>();
         if (source.hasComponents<ScriptComponent>()) {
             duplicate.addComponent<ScriptComponent>(
                 source.component<ScriptComponent>()
@@ -164,6 +175,12 @@ std::unique_ptr<Scene> Scene::instantiate() const {
         copyComponent.template operator()<Collider2DComponent>();
         copyComponent.template operator()<RigidBody3DComponent>();
         copyComponent.template operator()<Collider3DComponent>();
+        copyComponent.template operator()<BoxCollider3DComponent>();
+        copyComponent.template operator()<SphereCollider3DComponent>();
+        copyComponent.template operator()<CapsuleCollider3DComponent>();
+        copyComponent.template operator()<CylinderCollider3DComponent>();
+        copyComponent.template operator()<MeshCollider3DComponent>();
+        copyComponent.template operator()<ConvexCollider3DComponent>();
         copyComponent.template operator()<ScriptComponent>();
         copyComponent.template operator()<ParentComponent>();
         copyComponent.template operator()<PrefabInstanceComponent>();
@@ -453,6 +470,12 @@ void Scene::copyPrefabComponents(
     copy.template operator()<Collider2DComponent>();
     copy.template operator()<RigidBody3DComponent>();
     copy.template operator()<Collider3DComponent>();
+    copy.template operator()<BoxCollider3DComponent>();
+    copy.template operator()<SphereCollider3DComponent>();
+    copy.template operator()<CapsuleCollider3DComponent>();
+    copy.template operator()<CylinderCollider3DComponent>();
+    copy.template operator()<MeshCollider3DComponent>();
+    copy.template operator()<ConvexCollider3DComponent>();
     copy.template operator()<ScriptComponent>();
 
     for (const auto& handler : SceneComponentRegistry::handlers()) {

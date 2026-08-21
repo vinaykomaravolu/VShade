@@ -49,6 +49,7 @@ struct SceneRuntime::Impl {
     Impl(core::EngineServices& services, const SceneRuntimeConfig initialConfig)
         : services(&services),
           nativeScripts(services.scripts()),
+          physics3D({}, &services.assets()),
           renderer(initialConfig.rendering
               ? std::make_unique<SceneRenderer>(services.assets())
               : nullptr),

@@ -18,6 +18,10 @@ std::shared_ptr<vshade::renderer::Texture2D> g_model;
 std::shared_ptr<vshade::renderer::Texture2D> g_audio;
 std::shared_ptr<vshade::renderer::Texture2D> g_scene;
 std::shared_ptr<vshade::renderer::Texture2D> g_prefab;
+std::shared_ptr<vshade::renderer::Texture2D> g_camera;
+std::shared_ptr<vshade::renderer::Texture2D> g_directionalLight;
+std::shared_ptr<vshade::renderer::Texture2D> g_pointLight;
+std::shared_ptr<vshade::renderer::Texture2D> g_speaker;
 
 [[nodiscard]] std::filesystem::path iconDirectory() {
 #ifdef VSHADE_EDITOR_ICON_DIR
@@ -63,6 +67,29 @@ std::shared_ptr<vshade::renderer::Texture2D> g_prefab;
     }
 }
 
+[[nodiscard]] std::shared_ptr<vshade::renderer::Texture2D> loadOptionalIcon(
+    const char* filename
+) {
+    const std::filesystem::path path = iconDirectory() / filename;
+    try {
+        return std::make_shared<vshade::renderer::Texture2D>(
+            vshade::renderer::Texture2D::fromFile(
+                path,
+                vshade::renderer::TextureFilter::Linear,
+                vshade::renderer::TextureWrap::ClampToEdge,
+                false
+            )
+        );
+    } catch (const std::exception& error) {
+        ENGINE_WARN(
+            "Failed to load optional editor icon '{}': {}; using vector fallback",
+            path.generic_string(),
+            error.what()
+        );
+        return {};
+    }
+}
+
 } // namespace
 
 void EditorIcons::initialize() {
@@ -74,6 +101,10 @@ void EditorIcons::initialize() {
     g_audio = loadIcon("audio.png");
     g_scene = loadIcon("scene.png");
     g_prefab = loadIcon("prefab.png");
+    g_camera = loadOptionalIcon("camera.png");
+    g_directionalLight = loadOptionalIcon("directional_light.png");
+    g_pointLight = loadOptionalIcon("point_light.png");
+    g_speaker = loadOptionalIcon("speaker.png");
 }
 
 void EditorIcons::shutdown() {
@@ -84,6 +115,10 @@ void EditorIcons::shutdown() {
     g_audio.reset();
     g_scene.reset();
     g_prefab.reset();
+    g_camera.reset();
+    g_directionalLight.reset();
+    g_pointLight.reset();
+    g_speaker.reset();
 }
 
 std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::folder() {
@@ -112,6 +147,22 @@ std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::scene() {
 
 std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::prefab() {
     return g_prefab;
+}
+
+std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::camera() {
+    return g_camera;
+}
+
+std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::directionalLight() {
+    return g_directionalLight;
+}
+
+std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::pointLight() {
+    return g_pointLight;
+}
+
+std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::speaker() {
+    return g_speaker;
 }
 
 std::shared_ptr<vshade::renderer::Texture2D> EditorIcons::forAsset(

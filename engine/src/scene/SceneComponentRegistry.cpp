@@ -22,7 +22,10 @@ void SceneComponentRegistry::add(Handler handler) {
         handler.name == "AudioSource" || handler.name == "AudioListener" ||
         handler.name == "Light" || handler.name == "RigidBody2D" ||
         handler.name == "Collider2D" || handler.name == "RigidBody3D" ||
-        handler.name == "Collider3D" || handler.name == "Scripts" ||
+        handler.name == "Collider3D" || handler.name == "BoxCollider3D" ||
+        handler.name == "SphereCollider3D" || handler.name == "CapsuleCollider3D" ||
+        handler.name == "CylinderCollider3D" || handler.name == "MeshCollider3D" ||
+        handler.name == "ConvexCollider3D" || handler.name == "Scripts" ||
         handler.name == "Parent" ||
         handler.type == entt::type_hash<CameraComponent>::value() ||
         handler.type == entt::type_hash<ModelRendererComponent>::value() ||
@@ -30,6 +33,12 @@ void SceneComponentRegistry::add(Handler handler) {
         handler.type == entt::type_hash<Collider2DComponent>::value() ||
         handler.type == entt::type_hash<RigidBody3DComponent>::value() ||
         handler.type == entt::type_hash<Collider3DComponent>::value() ||
+        handler.type == entt::type_hash<BoxCollider3DComponent>::value() ||
+        handler.type == entt::type_hash<SphereCollider3DComponent>::value() ||
+        handler.type == entt::type_hash<CapsuleCollider3DComponent>::value() ||
+        handler.type == entt::type_hash<CylinderCollider3DComponent>::value() ||
+        handler.type == entt::type_hash<MeshCollider3DComponent>::value() ||
+        handler.type == entt::type_hash<ConvexCollider3DComponent>::value() ||
         handler.type == entt::type_hash<ScriptComponent>::value() ||
         handler.type == entt::type_hash<ParentComponent>::value()) {
         throw std::invalid_argument(

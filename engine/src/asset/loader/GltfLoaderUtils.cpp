@@ -166,7 +166,9 @@ std::shared_ptr<renderer::Mesh> loadGltfPrimitive(
     vertexArray->setIndexBuffer(std::move(indexBuffer));
     return std::make_shared<renderer::Mesh>(
         std::move(vertexArray),
-        topology(primitive.type)
+        topology(primitive.type),
+        std::move(vertices),
+        std::move(indices)
     );
 }
 

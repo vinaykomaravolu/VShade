@@ -1,20 +1,77 @@
 #include "physics/physics3d/PhysicsSystem3D.hpp"
 
+#include "asset/AssetManager.hpp"
+#include "renderer/Model.hpp"
 #include "scene/Components.hpp"
 #include "scene/Entity.hpp"
 #include "scene/Scene.hpp"
 
+#include <algorithm>
+#include <concepts>
 #include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace vshade::physics {
 
+namespace {
+
+[[nodiscard]] bool hasCollider(const scene::Entity entity) {
+    return entity.has<scene::Collider3DComponent>()
+        || entity.has<scene::BoxCollider3DComponent>()
+        || entity.has<scene::SphereCollider3DComponent>()
+        || entity.has<scene::CapsuleCollider3DComponent>()
+        || entity.has<scene::CylinderCollider3DComponent>()
+        || entity.has<scene::MeshCollider3DComponent>()
+        || entity.has<scene::ConvexCollider3DComponent>();
+}
+
+struct ResolvedCollider {
+    PhysicsShape3D shape;
+    PhysicsMaterial3D material;
+    math::Vec3 offset{0.0F};
+    bool sensor = false;
+};
+
+template<typename Component>
+[[nodiscard]] ResolvedCollider resolvedPrimitive(
+    const Component& component,
+    PhysicsShape3D shape
+) {
+    return {
+        .shape = std::move(shape),
+        .material = component.material,
+        .offset = component.offset,
+        .sensor = component.sensor,
+    };
+}
+
+[[nodiscard]] asset::AssetReference<renderer::Model> colliderModelReference(
+    const scene::Entity entity,
+    const asset::AssetReference<renderer::Model>& explicitModel
+) {
+    if (explicitModel.valid()) {
+        return explicitModel;
+    }
+    if (const auto* renderer =
+            entity.tryGet<scene::ModelRendererComponent>()) {
+        return renderer->model;
+    }
+    return {};
+}
+
+} // namespace
+
 struct PhysicsSystem3D::Impl {
-    explicit Impl(const PhysicsWorld3DSettings& initialSettings)
-        : settings(initialSettings), physicsWorld(initialSettings) {
+    explicit Impl(
+        const PhysicsWorld3DSettings& initialSettings,
+        asset::AssetManager* initialAssets
+    ) : settings(initialSettings),
+        physicsWorld(initialSettings),
+        assets(initialAssets) {
         installContactCollector();
     }
 
@@ -56,8 +113,101 @@ struct PhysicsSystem3D::Impl {
             entity.component<scene::TransformComponent>();
         const scene::RigidBody3DComponent& rigidBody =
             entity.component<scene::RigidBody3DComponent>();
-        const scene::Collider3DComponent& collider =
-            entity.component<scene::Collider3DComponent>();
+        ResolvedCollider collider;
+        bool legacyCollider = false;
+        if (const auto* legacy = entity.tryGet<scene::Collider3DComponent>()) {
+            legacyCollider = true;
+            collider = {
+                .shape = legacy->shape,
+                .material = legacy->material,
+                .offset = legacy->offset,
+                .sensor = legacy->sensor,
+            };
+        } else if (const auto* box =
+                entity.tryGet<scene::BoxCollider3DComponent>()) {
+            collider = resolvedPrimitive(
+                *box,
+                BoxShape3D{box->halfExtents}
+            );
+        } else if (const auto* sphere =
+                entity.tryGet<scene::SphereCollider3DComponent>()) {
+            collider = resolvedPrimitive(*sphere, SphereShape3D{sphere->radius});
+        } else if (const auto* capsule =
+                entity.tryGet<scene::CapsuleCollider3DComponent>()) {
+            collider = resolvedPrimitive(
+                *capsule,
+                CapsuleShape3D{capsule->halfHeight, capsule->radius}
+            );
+        } else if (const auto* cylinder =
+                entity.tryGet<scene::CylinderCollider3DComponent>()) {
+            collider = resolvedPrimitive(
+                *cylinder,
+                CylinderShape3D{cylinder->halfHeight, cylinder->radius}
+            );
+        } else {
+            const auto* mesh = entity.tryGet<scene::MeshCollider3DComponent>();
+            const auto* convex =
+                entity.tryGet<scene::ConvexCollider3DComponent>();
+            const auto modelReference = colliderModelReference(
+                entity,
+                mesh ? mesh->model : convex->model
+            );
+            if (assets == nullptr || !modelReference.valid()) {
+                throw std::invalid_argument(
+                    "Mesh and convex colliders require a resolvable model asset"
+                );
+            }
+            const auto model = assets->loadResource(modelReference).shared();
+            if (model->collisionVertices().empty()) {
+                throw std::invalid_argument(
+                    "Collider model contains no triangle geometry"
+                );
+            }
+            if (mesh) {
+                collider = resolvedPrimitive(
+                    *mesh,
+                    MeshShape3D{
+                        model->collisionVertices(),
+                        model->collisionIndices(),
+                    }
+                );
+            } else {
+                collider = resolvedPrimitive(
+                    *convex,
+                    ConvexShape3D{model->collisionVertices()}
+                );
+            }
+        }
+
+        if (!legacyCollider) {
+            const math::Vec3 scale = glm::abs(transform.transform.scale());
+            collider.offset *= scale;
+            std::visit(
+                [&scale](auto& shape) {
+                    using Shape = std::remove_cvref_t<decltype(shape)>;
+                    if constexpr (std::same_as<Shape, BoxShape3D>) {
+                        shape.halfExtents *= scale;
+                    } else if constexpr (std::same_as<Shape, SphereShape3D>) {
+                        shape.radius *= std::max({scale.x, scale.y, scale.z});
+                    } else if constexpr (
+                        std::same_as<Shape, CapsuleShape3D>
+                        || std::same_as<Shape, CylinderShape3D>
+                    ) {
+                        shape.halfHeight *= scale.y;
+                        shape.radius *= std::max(scale.x, scale.z);
+                    } else if constexpr (std::same_as<Shape, MeshShape3D>) {
+                        for (math::Vec3& vertex : shape.vertices) {
+                            vertex *= scale;
+                        }
+                    } else if constexpr (std::same_as<Shape, ConvexShape3D>) {
+                        for (math::Vec3& point : shape.points) {
+                            point *= scale;
+                        }
+                    }
+                },
+                collider.shape
+            );
+        }
 
         PhysicsBody3DSettings bodySettings = rigidBody.settings;
         bodySettings.position = transform.transform.position();
@@ -75,10 +225,9 @@ struct PhysicsSystem3D::Impl {
     void removeMissingBodies(scene::Scene& scene) {
         for (auto iterator = bodies.begin(); iterator != bodies.end();) {
             const scene::Entity entity = scene.findEntity(iterator->first);
-            if (!entity || !entity.hasComponents<
-                    scene::RigidBody3DComponent,
-                    scene::Collider3DComponent
-                >()) {
+            if (!entity
+                || !entity.has<scene::RigidBody3DComponent>()
+                || !hasCollider(entity)) {
                 if (physicsWorld.contains(iterator->second)) {
                     physicsWorld.destroyBody(iterator->second);
                 }
@@ -92,29 +241,31 @@ struct PhysicsSystem3D::Impl {
     void addMissingBodies(scene::Scene& scene) {
         auto view = scene.view<
             const scene::UUIDComponent,
-            const scene::RigidBody3DComponent,
-            const scene::Collider3DComponent
+            const scene::RigidBody3DComponent
         >();
-        for (const auto [handle, uuid, rigidBody, collider] : view.each()) {
+        for (const auto [handle, uuid, rigidBody] : view.each()) {
             (void)handle;
             (void)rigidBody;
-            (void)collider;
-            if (!bodies.contains(uuid.uuid)) {
-                bodies.emplace(uuid.uuid, createBody(scene.findEntity(uuid.uuid)));
+            const scene::Entity entity = scene.findEntity(uuid.uuid);
+            if (hasCollider(entity) && !bodies.contains(uuid.uuid)) {
+                bodies.emplace(uuid.uuid, createBody(entity));
             }
         }
     }
 
     PhysicsWorld3DSettings settings;
     PhysicsWorld3D physicsWorld;
+    asset::AssetManager* assets = nullptr;
     std::unordered_map<std::uint64_t, PhysicsBody3D> bodies;
     scene::Scene* attachedScene = nullptr;
     SceneContactListener3D contactListener;
     std::vector<ContactEvent3D> pendingContacts;
 };
 
-PhysicsSystem3D::PhysicsSystem3D(const PhysicsWorld3DSettings& settings)
-    : m_impl(std::make_unique<Impl>(settings)) {}
+PhysicsSystem3D::PhysicsSystem3D(
+    const PhysicsWorld3DSettings& settings,
+    asset::AssetManager* assets
+) : m_impl(std::make_unique<Impl>(settings, assets)) {}
 
 PhysicsSystem3D::~PhysicsSystem3D() = default;
 PhysicsSystem3D::PhysicsSystem3D(PhysicsSystem3D&&) noexcept = default;

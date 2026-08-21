@@ -25,6 +25,10 @@ public:
     [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> audio();
     [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> scene();
     [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> prefab();
+    [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> camera();
+    [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> directionalLight();
+    [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> pointLight();
+    [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> speaker();
 
     /** @brief Returns the icon for a file asset type. Folders use folder(). */
     [[nodiscard]] static std::shared_ptr<vshade::renderer::Texture2D> forAsset(

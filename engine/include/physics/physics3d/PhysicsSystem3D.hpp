@@ -10,6 +10,8 @@ namespace vshade::scene {
 class Scene;
 }
 
+namespace vshade::asset { class AssetManager; }
+
 namespace vshade::physics {
 
 /** @brief A ray hit mapped back to the scene entity that owns the body. */
@@ -30,7 +32,10 @@ using SceneContactListener3D = std::function<void(const SceneContactEvent3D&)>;
 /** @brief Synchronizes scene components with their runtime Jolt bodies. */
 class PhysicsSystem3D final {
 public:
-    explicit PhysicsSystem3D(const PhysicsWorld3DSettings& settings = {});
+    explicit PhysicsSystem3D(
+        const PhysicsWorld3DSettings& settings = {},
+        asset::AssetManager* assets = nullptr
+    );
     ~PhysicsSystem3D();
 
     PhysicsSystem3D(PhysicsSystem3D&&) noexcept;

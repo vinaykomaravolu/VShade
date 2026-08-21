@@ -1,4 +1,5 @@
 #include "panels/Viewport.hpp"
+#include "EditorIcons.hpp"
 #include "ImGui/ImGuiTheme.hpp"
 #include "widgets/AssetSelector.hpp"
 
@@ -12,18 +13,24 @@
 #include <math/Ray.hpp>
 #include <math/Transform.hpp>
 #include <math/Vector.hpp>
+#include <renderer/DebugDraw.hpp>
 #include <renderer/Framebuffer.hpp>
 #include <renderer/Model.hpp>
 #include <renderer/Renderer.hpp>
+#include <renderer/Texture.hpp>
 #include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
 #include <scene/SceneRenderer.hpp>
 #include <scene/SceneRuntime.hpp>
 #include <scene/components/CoreComponents.hpp>
+#include <scene/components/AudioComponents.hpp>
+#include <scene/components/LightComponent.hpp>
 #include <scene/components/RenderComponents.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -31,8 +38,10 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
@@ -118,6 +127,158 @@ struct ViewportCursor {
     return name;
 }
 
+[[nodiscard]] std::optional<ImVec2> projectToViewport(
+    const vshade::math::Vec3& worldPosition,
+    const vshade::math::Mat4& viewProjection,
+    const float x,
+    const float y,
+    const float width,
+    const float height
+) {
+    const vshade::math::Vec4 clip = viewProjection
+        * vshade::math::Vec4{worldPosition, 1.0F};
+    if (clip.w <= 0.0F || !std::isfinite(clip.w)) {
+        return std::nullopt;
+    }
+    const vshade::math::Vec3 ndc = vshade::math::Vec3{clip} / clip.w;
+    if (ndc.x < -1.0F || ndc.x > 1.0F
+        || ndc.y < -1.0F || ndc.y > 1.0F
+        || ndc.z < -1.0F || ndc.z > 1.0F) {
+        return std::nullopt;
+    }
+    return ImVec2{
+        x + (ndc.x * 0.5F + 0.5F) * width,
+        y + (0.5F - ndc.y * 0.5F) * height,
+    };
+}
+
+void drawCameraSceneIcon(
+    ImDrawList& drawList,
+    const ImVec2 center,
+    const ImU32 color,
+    const float scale
+) {
+    const float halfWidth = 7.0F * scale;
+    const float halfHeight = 5.0F * scale;
+    drawList.AddRectFilled(
+        {center.x - halfWidth, center.y - halfHeight},
+        {center.x + 2.0F * scale, center.y + halfHeight},
+        color,
+        2.0F * scale
+    );
+    drawList.AddTriangleFilled(
+        {center.x + 2.0F * scale, center.y - 3.5F * scale},
+        {center.x + halfWidth, center.y - 6.0F * scale},
+        {center.x + halfWidth, center.y + 6.0F * scale},
+        color
+    );
+}
+
+void drawPointLightSceneIcon(
+    ImDrawList& drawList,
+    const ImVec2 center,
+    const ImU32 color,
+    const float scale
+) {
+    drawList.AddCircleFilled(
+        {center.x, center.y - 2.0F * scale},
+        5.0F * scale,
+        color,
+        20
+    );
+    drawList.AddRectFilled(
+        {center.x - 3.0F * scale, center.y + 3.0F * scale},
+        {center.x + 3.0F * scale, center.y + 7.0F * scale},
+        color,
+        scale
+    );
+    drawList.AddLine(
+        {center.x - 2.5F * scale, center.y + 9.0F * scale},
+        {center.x + 2.5F * scale, center.y + 9.0F * scale},
+        color,
+        1.5F * scale
+    );
+}
+
+void drawDirectionalLightSceneIcon(
+    ImDrawList& drawList,
+    const ImVec2 center,
+    const ImU32 color,
+    const float scale
+) {
+    const float innerRadius = 5.0F * scale;
+    drawList.AddCircleFilled(center, innerRadius, color, 24);
+    constexpr float twoPi = 6.283185307F;
+    for (int ray = 0; ray < 8; ++ray) {
+        const float angle = twoPi * static_cast<float>(ray) / 8.0F;
+        const vshade::math::Vec2 direction{std::cos(angle), std::sin(angle)};
+        drawList.AddLine(
+            {
+                center.x + direction.x * 7.0F * scale,
+                center.y + direction.y * 7.0F * scale,
+            },
+            {
+                center.x + direction.x * 10.0F * scale,
+                center.y + direction.y * 10.0F * scale,
+            },
+            color,
+            1.6F * scale
+        );
+    }
+}
+
+void drawSpeakerSceneIcon(
+    ImDrawList& drawList,
+    const ImVec2 center,
+    const ImU32 color,
+    const float scale
+) {
+    drawList.AddRectFilled(
+        {center.x - 7.0F * scale, center.y - 3.0F * scale},
+        {center.x - 3.0F * scale, center.y + 3.0F * scale},
+        color,
+        scale
+    );
+    drawList.AddTriangleFilled(
+        {center.x - 3.0F * scale, center.y - 4.0F * scale},
+        {center.x + 2.0F * scale, center.y - 7.0F * scale},
+        {center.x + 2.0F * scale, center.y + 7.0F * scale},
+        color
+    );
+    drawList.PathArcTo(
+        {center.x + 1.0F * scale, center.y},
+        6.0F * scale,
+        -0.8F,
+        0.8F,
+        12
+    );
+    drawList.PathStroke(color, 0, 1.6F * scale);
+}
+
+[[nodiscard]] bool drawTextureSceneIcon(
+    ImDrawList& drawList,
+    const std::shared_ptr<vshade::renderer::Texture2D>& texture,
+    const ImVec2 center,
+    const float scale,
+    const float alpha = 1.0F
+) {
+    if (!texture) {
+        return false;
+    }
+    const float extent = 9.0F * scale;
+    const ImTextureID textureId =
+        static_cast<ImTextureID>(texture->rendererId());
+    drawList.AddImage(
+        ImTextureRef{textureId},
+        {center.x - extent, center.y - extent},
+        {center.x + extent, center.y + extent},
+        {0.0F, 0.0F},
+        {1.0F, 1.0F},
+        ImGui::ColorConvertFloat4ToU32({1.0F, 1.0F, 1.0F, alpha})
+    );
+    return true;
+}
+
 } // namespace
 
 Viewport::Viewport(vshade::asset::AssetManager& assets)
@@ -195,7 +356,7 @@ bool Viewport::drawOverlayToolbar(
 
     const ImVec2 optionsPadding = ui::scaled(8.0F, 5.0F);
     const ImVec2 optionFramePadding = ui::scaled(10.0F, 3.0F);
-    const float optionsWidth = ui::scaled(m_snapEnabled ? 400.0F : 315.0F);
+    const float optionsWidth = ui::scaled(m_snapEnabled ? 500.0F : 415.0F);
     const float optionsHeight = ImGui::GetFontSize()
         + optionFramePadding.y * 2.0F
         + optionsPadding.y * 2.0F;
@@ -280,6 +441,17 @@ bool Viewport::drawOverlayToolbar(
             100.0F,
             snapFormat
         );
+    }
+    ImGui::SameLine(0.0F, spacing);
+    ImGui::SetNextItemWidth(ui::scaled(88.0F));
+    if (ImGui::BeginCombo("##GizmoVisibility", "Gizmos")) {
+        ImGui::MenuItem("Cameras", nullptr, &m_showCameraGizmos);
+        ImGui::MenuItem("Lights", nullptr, &m_showLightGizmos);
+        ImGui::MenuItem("Colliders", nullptr, &m_showColliderGizmos);
+        ImGui::MenuItem("Audio", nullptr, &m_showAudioGizmos);
+        ImGui::Separator();
+        ImGui::MenuItem("Physics", nullptr, &m_showPhysicsGizmos);
+        ImGui::EndCombo();
     }
     overlayHovered |= ImGui::IsWindowHovered();
     ImGui::End();
@@ -386,6 +558,18 @@ void Viewport::onImGuiRender(
         const ImVec2 availableSize = ImGui::GetContentRegionAvail();
         resizeFramebuffer(availableSize.x, availableSize.y);
         m_editorCamera.setViewportSize(availableSize.x, availableSize.y);
+        if (m_editing && m_showCameraGizmos && availableSize.y > 0.0F) {
+            queueSelectedCameraFrustum(
+                selectedEntity,
+                availableSize.x / availableSize.y
+            );
+        }
+        if (m_editing && m_showColliderGizmos) {
+            queueSelectedColliderGizmo(selectedEntity);
+        }
+        if (m_editing && m_showPhysicsGizmos) {
+            queuePhysicsGizmos();
+        }
         renderScene();
 
         const ImVec2 viewportPosition = ImGui::GetCursorScreenPos();
@@ -410,6 +594,14 @@ void Viewport::onImGuiRender(
                 {viewportPosition.x, viewportPosition.y},
                 {availableSize.x, availableSize.y}
             );
+            const bool sceneIconClicked = drawSceneIcons(
+                selectedEntity,
+                viewportPosition.x,
+                viewportPosition.y,
+                availableSize.x,
+                availableSize.y,
+                imageHovered && !m_overlayHovered
+            );
             drawGizmo(
                 selectedEntity,
                 viewportPosition.x,
@@ -418,6 +610,7 @@ void Viewport::onImGuiRender(
                 availableSize.y
             );
             if (!spawnedAsset
+                && !sceneIconClicked
                 && !m_overlayHovered
                 && imageHovered
                 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
@@ -461,6 +654,220 @@ void Viewport::onImGuiRender(
 
 bool Viewport::wantsCursorCapture() const noexcept {
     return m_editing && m_editorCamera.isLooking();
+}
+
+bool Viewport::drawSceneIcons(
+    vshade::scene::Entity& selectedEntity,
+    const float x,
+    const float y,
+    const float width,
+    const float height,
+    const bool allowInteraction
+) {
+    if (!m_scene || width <= 0.0F || height <= 0.0F) {
+        return false;
+    }
+
+    ImDrawList& drawList = *ImGui::GetWindowDrawList();
+    const vshade::math::Mat4 viewProjection =
+        m_editorCamera.camera().viewProjection();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const float iconScale = ui::scaled(1.0F);
+    const float hitRadius = 13.0F * iconScale;
+    const float iconSpacing = 25.0F * iconScale;
+    const auto cameraTexture = EditorIcons::camera();
+    const auto directionalLightTexture = EditorIcons::directionalLight();
+    const auto pointLightTexture = EditorIcons::pointLight();
+    const auto speakerTexture = EditorIcons::speaker();
+    const ImU32 darkIconColor = ImGui::ColorConvertFloat4ToU32(
+        ui::color(ui::ColorRole::Chrome)
+    );
+    const ImVec4 iconBacking = ui::color(
+        ui::ColorRole::SceneIconBackground
+    );
+    bool clicked = false;
+
+    const auto entities = m_scene->view<
+        const vshade::scene::UUIDComponent,
+        const vshade::scene::TransformComponent>();
+    for (const auto [handle, uuid, transformComponent] : entities.each()) {
+        (void)handle;
+        vshade::scene::Entity entity = m_scene->findEntity(uuid.uuid);
+        if (!entity) {
+            continue;
+        }
+        const auto* camera = entity.tryGet<vshade::scene::CameraComponent>();
+        const auto* light = entity.tryGet<vshade::scene::LightComponent>();
+        const auto* audio = entity.tryGet<vshade::scene::AudioSourceComponent>();
+        const bool drawCamera = camera && m_showCameraGizmos;
+        const bool drawLight = light && m_showLightGizmos;
+        const bool drawAudio = audio && m_showAudioGizmos;
+        const int iconCount = (drawCamera ? 1 : 0)
+            + (drawLight ? 1 : 0)
+            + (drawAudio ? 1 : 0);
+        if (iconCount == 0) {
+            continue;
+        }
+
+        const auto projected = projectToViewport(
+            transformComponent.transform.position(),
+            viewProjection,
+            x,
+            y,
+            width,
+            height
+        );
+        if (!projected) {
+            continue;
+        }
+
+        int iconIndex = 0;
+        const auto drawIcon = [&] (
+            const char* label,
+            const ImVec4 backing,
+            const auto& drawIconBody
+        ) {
+            const float offset = (
+                static_cast<float>(iconIndex)
+                - static_cast<float>(iconCount - 1) * 0.5F
+            ) * iconSpacing;
+            ++iconIndex;
+            const ImVec2 center{projected->x + offset, projected->y};
+            drawList.AddCircleFilled(
+                center,
+                12.0F * iconScale,
+                ImGui::ColorConvertFloat4ToU32(backing),
+                24
+            );
+            if (entity == selectedEntity) {
+                drawList.AddCircle(
+                    center,
+                    13.0F * iconScale,
+                    ImGui::ColorConvertFloat4ToU32(
+                        ui::color(ui::ColorRole::Accent)
+                    ),
+                    24,
+                    2.0F * iconScale
+                );
+            }
+            drawIconBody(center);
+
+            const float deltaX = mouse.x - center.x;
+            const float deltaY = mouse.y - center.y;
+            const bool hovered = allowInteraction
+                && deltaX * deltaX + deltaY * deltaY
+                    <= hitRadius * hitRadius;
+            if (hovered) {
+                const std::string_view name = entity.name();
+                ImGui::SetTooltip(
+                    "%.*s\n%s",
+                    static_cast<int>(name.size()),
+                    name.data(),
+                    label
+                );
+                if (!clicked && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    selectedEntity = entity;
+                    clicked = true;
+                }
+            }
+        };
+
+        if (drawCamera) {
+            drawIcon(
+                "Camera",
+                iconBacking,
+                [&](const ImVec2 center) {
+                    if (!drawTextureSceneIcon(
+                            drawList,
+                            cameraTexture,
+                            center,
+                            iconScale
+                        )) {
+                        drawCameraSceneIcon(
+                            drawList,
+                            center,
+                            darkIconColor,
+                            iconScale
+                        );
+                    }
+                }
+            );
+        }
+        if (drawLight) {
+            float iconAlpha = 1.0F;
+            if (!light->enabled) {
+                iconAlpha = 0.4F;
+            }
+            if (std::holds_alternative<vshade::renderer::DirectionalLight>(
+                    light->light
+                )) {
+                drawIcon(
+                    "Directional Light",
+                    iconBacking,
+                    [&](const ImVec2 center) {
+                        if (!drawTextureSceneIcon(
+                                drawList,
+                                directionalLightTexture,
+                                center,
+                                iconScale,
+                                iconAlpha
+                            )) {
+                            drawDirectionalLightSceneIcon(
+                                drawList,
+                                center,
+                                darkIconColor,
+                                iconScale
+                            );
+                        }
+                    }
+                );
+            } else {
+                drawIcon(
+                    "Point Light",
+                    iconBacking,
+                    [&](const ImVec2 center) {
+                        if (!drawTextureSceneIcon(
+                                drawList,
+                                pointLightTexture,
+                                center,
+                                iconScale,
+                                iconAlpha
+                            )) {
+                            drawPointLightSceneIcon(
+                                drawList,
+                                center,
+                                darkIconColor,
+                                iconScale
+                            );
+                        }
+                    }
+                );
+            }
+        }
+        if (drawAudio) {
+            drawIcon(
+                "Audio Source",
+                iconBacking,
+                [&](const ImVec2 center) {
+                    if (!drawTextureSceneIcon(
+                            drawList,
+                            speakerTexture,
+                            center,
+                            iconScale,
+                            1.0F
+                        )) {
+                        drawSpeakerSceneIcon(
+                            drawList,
+                            center,
+                            darkIconColor,
+                            iconScale
+                        );
+                    }
+                }
+            );
+        }
+    }
+    return clicked;
 }
 
 void Viewport::drawGizmo(
@@ -573,6 +980,294 @@ void Viewport::renderScene() {
         throw;
     }
     vshade::renderer::Framebuffer::unbind();
+}
+
+void Viewport::queueSelectedCameraFrustum(
+    const vshade::scene::Entity selectedEntity,
+    const float aspectRatio
+) const {
+    if (!m_scene
+        || !selectedEntity.valid()
+        || !selectedEntity.has<vshade::scene::CameraComponent>()) {
+        return;
+    }
+
+    const auto& camera =
+        selectedEntity.get<vshade::scene::CameraComponent>();
+    if (camera.projection != vshade::scene::CameraProjection::Perspective
+        || !std::isfinite(camera.verticalFieldOfViewRadians)
+        || !std::isfinite(aspectRatio)
+        || !std::isfinite(camera.nearPlane)
+        || !std::isfinite(camera.farPlane)
+        || camera.verticalFieldOfViewRadians <= 0.0F
+        || camera.verticalFieldOfViewRadians >= glm::pi<float>()
+        || aspectRatio <= 0.0F
+        || camera.nearPlane <= 0.0F
+        || camera.farPlane <= camera.nearPlane) {
+        return;
+    }
+
+    const auto& transform = selectedEntity.transform();
+    const vshade::math::Vec3 position = transform.position();
+    const vshade::math::Vec3 forward = transform.forward();
+    const vshade::math::Vec3 right = transform.right();
+    const vshade::math::Vec3 up = transform.up();
+
+    const float halfFov = camera.verticalFieldOfViewRadians * 0.5F;
+    const float nearHalfHeight = std::tan(halfFov) * camera.nearPlane;
+    const float nearHalfWidth = nearHalfHeight * aspectRatio;
+    const float farHalfHeight = std::tan(halfFov) * camera.farPlane;
+    const float farHalfWidth = farHalfHeight * aspectRatio;
+    const vshade::math::Vec3 nearCenter =
+        position + forward * camera.nearPlane;
+    const vshade::math::Vec3 farCenter =
+        position + forward * camera.farPlane;
+
+    const std::array<vshade::math::Vec3, 4> nearCorners{
+        nearCenter + up * nearHalfHeight - right * nearHalfWidth,
+        nearCenter + up * nearHalfHeight + right * nearHalfWidth,
+        nearCenter - up * nearHalfHeight + right * nearHalfWidth,
+        nearCenter - up * nearHalfHeight - right * nearHalfWidth,
+    };
+    const std::array<vshade::math::Vec3, 4> farCorners{
+        farCenter + up * farHalfHeight - right * farHalfWidth,
+        farCenter + up * farHalfHeight + right * farHalfWidth,
+        farCenter - up * farHalfHeight + right * farHalfWidth,
+        farCenter - up * farHalfHeight - right * farHalfWidth,
+    };
+
+    const ImVec4 accent = ui::color(ui::ColorRole::Accent);
+    const vshade::math::Vec4 color{
+        accent.x,
+        accent.y,
+        accent.z,
+        accent.w,
+    };
+    for (std::size_t corner = 0; corner < nearCorners.size(); ++corner) {
+        const std::size_t next = (corner + 1) % nearCorners.size();
+        vshade::renderer::DebugDraw::line(
+            nearCorners[corner], nearCorners[next], color
+        );
+        vshade::renderer::DebugDraw::line(
+            farCorners[corner], farCorners[next], color
+        );
+        vshade::renderer::DebugDraw::line(
+            nearCorners[corner], farCorners[corner], color
+        );
+    }
+}
+
+void Viewport::queueSelectedColliderGizmo(
+    const vshade::scene::Entity selectedEntity
+) const {
+    if (!m_scene || !selectedEntity.valid()) {
+        return;
+    }
+
+    const ImVec4 accent = ui::color(ui::ColorRole::Accent);
+    const vshade::math::Vec4 color{
+        accent.x, accent.y, accent.z, 0.9F
+    };
+    const auto& transform = selectedEntity.transform();
+    const auto worldPoint = [&](const vshade::math::Vec3& point) {
+        return transform.transformPoint(point);
+    };
+    const auto line = [&](
+        const vshade::math::Vec3& first,
+        const vshade::math::Vec3& second
+    ) {
+        vshade::renderer::DebugDraw::line(
+            worldPoint(first),
+            worldPoint(second),
+            color
+        );
+    };
+    const auto drawBox = [&](
+        const vshade::math::Vec3& offset,
+        const vshade::math::Vec3& halfExtents
+    ) {
+        const std::array<vshade::math::Vec3, 8> corners{
+            offset + vshade::math::Vec3{-halfExtents.x, -halfExtents.y, -halfExtents.z},
+            offset + vshade::math::Vec3{ halfExtents.x, -halfExtents.y, -halfExtents.z},
+            offset + vshade::math::Vec3{ halfExtents.x,  halfExtents.y, -halfExtents.z},
+            offset + vshade::math::Vec3{-halfExtents.x,  halfExtents.y, -halfExtents.z},
+            offset + vshade::math::Vec3{-halfExtents.x, -halfExtents.y,  halfExtents.z},
+            offset + vshade::math::Vec3{ halfExtents.x, -halfExtents.y,  halfExtents.z},
+            offset + vshade::math::Vec3{ halfExtents.x,  halfExtents.y,  halfExtents.z},
+            offset + vshade::math::Vec3{-halfExtents.x,  halfExtents.y,  halfExtents.z},
+        };
+        constexpr std::array<std::array<std::size_t, 2>, 12> edges{{
+            {0, 1}, {1, 2}, {2, 3}, {3, 0},
+            {4, 5}, {5, 6}, {6, 7}, {7, 4},
+            {0, 4}, {1, 5}, {2, 6}, {3, 7},
+        }};
+        for (const auto& edge : edges) {
+            line(corners[edge[0]], corners[edge[1]]);
+        }
+    };
+    const auto drawRing = [&](
+        const vshade::math::Vec3& offset,
+        const float firstRadius,
+        const float secondRadius,
+        const int firstAxis,
+        const int secondAxis
+    ) {
+        constexpr std::size_t segments = 32;
+        for (std::size_t segment = 0; segment < segments; ++segment) {
+            const float firstAngle = glm::two_pi<float>()
+                * static_cast<float>(segment) / static_cast<float>(segments);
+            const float secondAngle = glm::two_pi<float>()
+                * static_cast<float>(segment + 1) / static_cast<float>(segments);
+            vshade::math::Vec3 first = offset;
+            vshade::math::Vec3 second = offset;
+            first[firstAxis] += std::cos(firstAngle) * firstRadius;
+            first[secondAxis] += std::sin(firstAngle) * secondRadius;
+            second[firstAxis] += std::cos(secondAngle) * firstRadius;
+            second[secondAxis] += std::sin(secondAngle) * secondRadius;
+            line(first, second);
+        }
+    };
+    const auto drawSphere = [&](
+        const vshade::math::Vec3& offset,
+        const float radius
+    ) {
+        drawRing(offset, radius, radius, 0, 1);
+        drawRing(offset, radius, radius, 0, 2);
+        drawRing(offset, radius, radius, 1, 2);
+    };
+    const auto drawCylinder = [&](
+        const vshade::math::Vec3& offset,
+        const float halfHeight,
+        const float radius,
+        const bool capsule
+    ) {
+        drawRing(offset + vshade::math::Vec3{0.0F, halfHeight, 0.0F}, radius, radius, 0, 2);
+        drawRing(offset - vshade::math::Vec3{0.0F, halfHeight, 0.0F}, radius, radius, 0, 2);
+        constexpr std::array<vshade::math::Vec3, 4> directions{
+            vshade::math::Vec3{1.0F, 0.0F, 0.0F},
+            vshade::math::Vec3{-1.0F, 0.0F, 0.0F},
+            vshade::math::Vec3{0.0F, 0.0F, 1.0F},
+            vshade::math::Vec3{0.0F, 0.0F, -1.0F},
+        };
+        for (const auto& direction : directions) {
+            line(
+                offset + direction * radius + vshade::math::Vec3{0.0F, -halfHeight, 0.0F},
+                offset + direction * radius + vshade::math::Vec3{0.0F, halfHeight, 0.0F}
+            );
+        }
+        if (capsule) {
+            drawRing(offset, radius, halfHeight + radius, 0, 1);
+            drawRing(offset, radius, halfHeight + radius, 2, 1);
+        }
+    };
+    const auto drawModelWireframe = [&](
+        const vshade::asset::AssetReference<vshade::renderer::Model>& reference,
+        const vshade::math::Vec3& offset
+    ) {
+        if (!m_assets || !reference.valid()) {
+            return;
+        }
+        try {
+            const auto model = m_assets->loadResource(reference).shared();
+            const auto& vertices = model->collisionVertices();
+            const auto& indices = model->collisionIndices();
+            for (std::size_t index = 0; index + 2 < indices.size(); index += 3) {
+                const vshade::math::Vec3 a = vertices[indices[index]] + offset;
+                const vshade::math::Vec3 b = vertices[indices[index + 1]] + offset;
+                const vshade::math::Vec3 c = vertices[indices[index + 2]] + offset;
+                line(a, b);
+                line(b, c);
+                line(c, a);
+            }
+        } catch (const std::exception&) {
+            // The Inspector reports asset errors; viewport gizmos stay non-fatal.
+        }
+    };
+
+    if (const auto* box =
+            selectedEntity.tryGet<vshade::scene::BoxCollider3DComponent>()) {
+        drawBox(box->offset, box->halfExtents);
+    } else if (const auto* sphere =
+            selectedEntity.tryGet<vshade::scene::SphereCollider3DComponent>()) {
+        drawSphere(sphere->offset, sphere->radius);
+    } else if (const auto* capsule =
+            selectedEntity.tryGet<vshade::scene::CapsuleCollider3DComponent>()) {
+        drawCylinder(capsule->offset, capsule->halfHeight, capsule->radius, true);
+    } else if (const auto* cylinder =
+            selectedEntity.tryGet<vshade::scene::CylinderCollider3DComponent>()) {
+        drawCylinder(cylinder->offset, cylinder->halfHeight, cylinder->radius, false);
+    } else if (const auto* mesh =
+            selectedEntity.tryGet<vshade::scene::MeshCollider3DComponent>()) {
+        drawModelWireframe(mesh->model, mesh->offset);
+    } else if (const auto* convex =
+            selectedEntity.tryGet<vshade::scene::ConvexCollider3DComponent>()) {
+        drawModelWireframe(convex->model, convex->offset);
+    } else if (const auto* legacy =
+            selectedEntity.tryGet<vshade::scene::Collider3DComponent>()) {
+        std::visit(
+            [&](const auto& shape) {
+                using Shape = std::remove_cvref_t<decltype(shape)>;
+                if constexpr (std::same_as<Shape, vshade::physics::BoxShape3D>) {
+                    drawBox(legacy->offset, shape.halfExtents);
+                } else if constexpr (
+                    std::same_as<Shape, vshade::physics::SphereShape3D>
+                ) {
+                    drawSphere(legacy->offset, shape.radius);
+                } else if constexpr (
+                    std::same_as<Shape, vshade::physics::CapsuleShape3D>
+                ) {
+                    drawCylinder(legacy->offset, shape.halfHeight, shape.radius, true);
+                } else if constexpr (
+                    std::same_as<Shape, vshade::physics::CylinderShape3D>
+                ) {
+                    drawCylinder(legacy->offset, shape.halfHeight, shape.radius, false);
+                }
+            },
+            legacy->shape
+        );
+    }
+}
+
+void Viewport::queuePhysicsGizmos() const {
+    if (!m_scene) {
+        return;
+    }
+    const ImVec4 warning = ui::color(ui::ColorRole::Warning);
+    const vshade::math::Vec4 color{
+        warning.x, warning.y, warning.z, 0.85F
+    };
+    for (const auto [handle, transform, rigidBody] : m_scene->view<
+             const vshade::scene::TransformComponent,
+             const vshade::scene::RigidBody3DComponent>().each()) {
+        (void)handle;
+        const vshade::math::Vec3 center = transform.transform.position();
+        constexpr float markerSize = 0.12F;
+        vshade::renderer::DebugDraw::line(
+            center - vshade::math::Vec3{markerSize, 0.0F, 0.0F},
+            center + vshade::math::Vec3{markerSize, 0.0F, 0.0F},
+            color
+        );
+        vshade::renderer::DebugDraw::line(
+            center - vshade::math::Vec3{0.0F, markerSize, 0.0F},
+            center + vshade::math::Vec3{0.0F, markerSize, 0.0F},
+            color
+        );
+        vshade::renderer::DebugDraw::line(
+            center - vshade::math::Vec3{0.0F, 0.0F, markerSize},
+            center + vshade::math::Vec3{0.0F, 0.0F, markerSize},
+            color
+        );
+        if (glm::dot(
+                rigidBody.settings.linearVelocity,
+                rigidBody.settings.linearVelocity
+            ) > 0.000001F) {
+            vshade::renderer::DebugDraw::line(
+                center,
+                center + rigidBody.settings.linearVelocity,
+                color
+            );
+        }
+    }
 }
 
 void Viewport::selectEntityUnderMouse(
