@@ -27,6 +27,9 @@ public:
     void setOperationHandler(
         std::function<void(std::string message, bool success)> handler
     );
+    void setSelectionHandler(
+        std::function<void(std::filesystem::path)> handler
+    );
 
     /** @brief Navigates to @p path and selects it when it is under the current root. */
     void reveal(const std::filesystem::path& path);
@@ -49,6 +52,7 @@ private:
     std::vector<std::filesystem::path> m_favorites;
     vshade::asset::AssetManager* m_assets = nullptr;
     std::function<void(std::string, bool)> m_operationHandler;
+    std::function<void(std::filesystem::path)> m_selectionHandler;
     std::unordered_map<std::string, std::shared_ptr<vshade::renderer::Texture2D>>
         m_textureThumbnails;
     std::unordered_set<std::string> m_importFailures;

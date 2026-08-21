@@ -70,7 +70,9 @@ Texture2D::Texture2D(
     const TextureWrap wrap
 ) : m_width(width),
     m_height(height),
-    m_format(format) {
+    m_format(format),
+    m_filter(filter),
+    m_wrap(wrap) {
     if (!Renderer::isInitialized()) {
         throw std::logic_error("Renderer must be initialized before creating a texture");
     }
@@ -121,7 +123,9 @@ Texture2D::Texture2D(Texture2D&& other) noexcept
     : m_rendererId(std::exchange(other.m_rendererId, 0)),
       m_width(std::exchange(other.m_width, 0)),
       m_height(std::exchange(other.m_height, 0)),
-      m_format(other.m_format) {}
+      m_format(other.m_format),
+      m_filter(other.m_filter),
+      m_wrap(other.m_wrap) {}
 
 Texture2D& Texture2D::operator=(Texture2D&& other) noexcept {
     if (this != &other) {
@@ -130,6 +134,8 @@ Texture2D& Texture2D::operator=(Texture2D&& other) noexcept {
         m_width = std::exchange(other.m_width, 0);
         m_height = std::exchange(other.m_height, 0);
         m_format = other.m_format;
+        m_filter = other.m_filter;
+        m_wrap = other.m_wrap;
     }
     return *this;
 }
@@ -237,6 +243,38 @@ std::uint32_t Texture2D::height() const noexcept {
 
 TextureFormat Texture2D::format() const noexcept {
     return m_format;
+}
+
+TextureFilter Texture2D::filter() const noexcept {
+    return m_filter;
+}
+
+TextureWrap Texture2D::wrap() const noexcept {
+    return m_wrap;
+}
+
+void Texture2D::setFilter(const TextureFilter filter) {
+    requireRenderer();
+    GLint previousTexture = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glBindTexture(GL_TEXTURE_2D, m_rendererId);
+    const auto value = static_cast<GLint>(opengl::textureFilter(filter));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, value);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, value);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    m_filter = filter;
+}
+
+void Texture2D::setWrap(const TextureWrap wrap) {
+    requireRenderer();
+    GLint previousTexture = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glBindTexture(GL_TEXTURE_2D, m_rendererId);
+    const auto value = static_cast<GLint>(opengl::textureWrap(wrap));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, value);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, value);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    m_wrap = wrap;
 }
 
 std::uint32_t Texture2D::rendererId() const noexcept {

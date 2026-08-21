@@ -10,6 +10,8 @@
 #include <physics/physics2d/PhysicsShape2D.hpp>
 #include <physics/physics3d/PhysicsShape3D.hpp>
 #include <renderer/Lighting.hpp>
+#include <renderer/Material.hpp>
+#include <renderer/Mesh.hpp>
 #include <renderer/Model.hpp>
 #include <scene/Prefab.hpp>
 #include <scene/Scene.hpp>
@@ -33,6 +35,7 @@
 #include <ranges>
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -339,6 +342,10 @@ void InspectorPanel::setRevealAssetHandler(
     m_revealAsset = std::move(handler);
 }
 
+void InspectorPanel::setSelectedAsset(std::filesystem::path path) {
+    m_selectedAsset = std::move(path).lexically_normal();
+}
+
 void InspectorPanel::onImGuiRender(
     vshade::scene::Entity selectedEntity
 ) {
@@ -442,6 +449,10 @@ void InspectorPanel::onImGuiRender(
         drawScripts(selectedEntity);
         ImGui::Separator();
         drawAddComponentMenu(selectedEntity);
+    } else if (!m_selectedAsset.empty()) {
+        m_nameEntityUuid = 0;
+        m_nameValidationError = false;
+        drawAssetInspector();
     } else {
         m_nameEntityUuid = 0;
         m_nameValidationError = false;
@@ -462,6 +473,187 @@ void InspectorPanel::onImGuiRender(
     }
 
     ImGui::End();
+}
+
+void InspectorPanel::drawAssetInspector() {
+    const auto type = vshade::asset::assetTypeFromExtension(
+        m_selectedAsset.extension()
+    );
+    const std::string filename = m_selectedAsset.filename().generic_string();
+    ImGui::TextUnformatted(filename.c_str());
+    ImGui::TextDisabled("%s", vshade::asset::toString(type));
+    ImGui::TextWrapped("%s", m_selectedAsset.generic_string().c_str());
+    ImGui::Separator();
+
+    try {
+        switch (type) {
+            case vshade::asset::AssetType::Texture:
+                drawTextureAsset(m_selectedAsset);
+                break;
+            case vshade::asset::AssetType::Audio:
+                drawAudioAsset(m_selectedAsset);
+                break;
+            case vshade::asset::AssetType::Model:
+                drawModelAsset(m_selectedAsset);
+                break;
+            default:
+                ImGui::TextDisabled("No specialized inspector for this asset type.");
+                break;
+        }
+    } catch (const std::exception& error) {
+        ImGui::TextColored(
+            ui::color(ui::ColorRole::Error),
+            "Asset could not be loaded."
+        );
+        ImGui::TextWrapped("%s", error.what());
+    }
+}
+
+void InspectorPanel::drawTextureAsset(const std::filesystem::path& path) {
+    if (!m_assets) {
+        ImGui::TextDisabled("Asset manager unavailable.");
+        return;
+    }
+    const auto texture = m_assets->loadResource<
+        vshade::renderer::Texture2D>(path);
+    const float previewSize = std::clamp(
+        ImGui::GetContentRegionAvail().x,
+        ui::scaled(96.0F),
+        ui::scaled(256.0F)
+    );
+    ImGui::Image(
+        ImTextureRef{static_cast<ImTextureID>(texture->rendererId())},
+        {previewSize, previewSize},
+        {0.0F, 1.0F},
+        {1.0F, 0.0F}
+    );
+    ImGui::SeparatorText("Texture");
+    ImGui::LabelText(
+        "Dimensions",
+        "%u x %u px",
+        texture->width(),
+        texture->height()
+    );
+    const char* format = "RGBA8";
+    switch (texture->format()) {
+        case vshade::renderer::TextureFormat::Red8: format = "R8"; break;
+        case vshade::renderer::TextureFormat::RGB8: format = "RGB8"; break;
+        case vshade::renderer::TextureFormat::RGBA8: format = "RGBA8"; break;
+    }
+    ImGui::LabelText("Format", "%s", format);
+
+    int filter = texture->filter() == vshade::renderer::TextureFilter::Nearest
+        ? 0
+        : 1;
+    constexpr const char* filters[] = {"Nearest", "Linear"};
+    if (ImGui::Combo("Filtering", &filter, filters, IM_ARRAYSIZE(filters))) {
+        texture->setFilter(filter == 0
+            ? vshade::renderer::TextureFilter::Nearest
+            : vshade::renderer::TextureFilter::Linear);
+    }
+    int wrap = texture->wrap() == vshade::renderer::TextureWrap::Repeat ? 0 : 1;
+    constexpr const char* wraps[] = {"Repeat", "Clamp To Edge"};
+    if (ImGui::Combo("Wrapping", &wrap, wraps, IM_ARRAYSIZE(wraps))) {
+        texture->setWrap(wrap == 0
+            ? vshade::renderer::TextureWrap::Repeat
+            : vshade::renderer::TextureWrap::ClampToEdge);
+    }
+    ImGui::TextDisabled("Sampling changes affect the loaded texture until reimport.");
+}
+
+void InspectorPanel::drawAudioAsset(const std::filesystem::path& path) {
+    if (!m_assets) {
+        ImGui::TextDisabled("Asset manager unavailable.");
+        return;
+    }
+    const auto clip = m_assets->loadResource<vshade::audio::AudioClip>(path);
+    const double seconds = clip->durationSeconds();
+    const auto minutes = static_cast<unsigned int>(seconds / 60.0);
+    const double remainingSeconds = seconds - static_cast<double>(minutes) * 60.0;
+    ImGui::SeparatorText("Audio");
+    ImGui::LabelText("Duration", "%u:%05.2f", minutes, remainingSeconds);
+    ImGui::LabelText("Channels", "%u", clip->channels());
+    ImGui::LabelText("Sample Rate", "%u Hz", clip->sampleRate());
+    ImGui::LabelText(
+        "PCM Frames",
+        "%llu",
+        static_cast<unsigned long long>(clip->frameCount())
+    );
+    ImGui::LabelText("Looping", "Configured per Audio Source component");
+}
+
+void InspectorPanel::drawModelAsset(const std::filesystem::path& path) {
+    if (!m_assets) {
+        ImGui::TextDisabled("Asset manager unavailable.");
+        return;
+    }
+    const auto model = m_assets->loadResource<vshade::renderer::Model>(path);
+    std::unordered_set<const vshade::renderer::Mesh*> meshes;
+    std::vector<std::shared_ptr<vshade::renderer::Material>> materials;
+    std::unordered_set<const vshade::renderer::Material*> seenMaterials;
+    for (const auto& primitive : model->primitives()) {
+        if (primitive.mesh) {
+            meshes.insert(primitive.mesh.get());
+        }
+        if (primitive.material
+            && seenMaterials.insert(primitive.material.get()).second) {
+            materials.push_back(primitive.material);
+        }
+    }
+
+    ImGui::SeparatorText("Model");
+    ImGui::LabelText("Mesh Count", "%zu", meshes.size());
+    ImGui::LabelText("Materials", "%zu", materials.size());
+    ImGui::LabelText("Animations", "0 (not imported)");
+    ImGui::LabelText("Import Scale", "1.0 (fixed)");
+    ImGui::TextColored(
+        ui::color(ui::ColorRole::Warning),
+        "Animation import and persistent import scale are not implemented yet."
+    );
+    if (model->localBounds()) {
+        const auto size = model->localBounds()->maximum
+            - model->localBounds()->minimum;
+        ImGui::LabelText(
+            "Bounds",
+            "%.2f x %.2f x %.2f units",
+            size.x,
+            size.y,
+            size.z
+        );
+    }
+
+    ImGui::SeparatorText("Embedded Materials");
+    for (std::size_t index = 0; index < materials.size(); ++index) {
+        auto& material = *materials[index];
+        ImGui::PushID(static_cast<int>(index));
+        const std::string title = "Material " + std::to_string(index + 1);
+        if (ImGui::CollapsingHeader(title.c_str())) {
+            ImGui::LabelText(
+                "Shader",
+                material.hasShader() ? "Custom shader" : "Renderer default"
+            );
+            ImGui::LabelText(
+                "Albedo Texture",
+                material.hasAlbedoTexture() ? "Assigned" : "None"
+            );
+            vshade::math::Vec4 color = material.albedoColor();
+            if (ImGui::ColorEdit4("Color", &color.x)) {
+                material.setAlbedoColor(color);
+            }
+            float roughness = material.roughness();
+            if (ImGui::SliderFloat("Roughness", &roughness, 0.0F, 1.0F)) {
+                material.setRoughness(roughness);
+            }
+            float metallic = material.metallic();
+            if (ImGui::SliderFloat("Metallic", &metallic, 0.0F, 1.0F)) {
+                material.setMetallic(metallic);
+            }
+            ImGui::TextDisabled(
+                "Embedded edits affect the loaded model until reimport."
+            );
+        }
+        ImGui::PopID();
+    }
 }
 
 void InspectorPanel::drawTag(vshade::scene::Entity entity) {

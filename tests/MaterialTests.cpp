@@ -90,6 +90,12 @@ TEST_CASE("Material retains shared texture resources", "[material][opengl]") {
         pixel.data()
     );
     const std::weak_ptr<vshade::renderer::Texture2D> observedTexture = texture;
+    CHECK(texture->filter() == vshade::renderer::TextureFilter::Linear);
+    CHECK(texture->wrap() == vshade::renderer::TextureWrap::Repeat);
+    texture->setFilter(vshade::renderer::TextureFilter::Nearest);
+    texture->setWrap(vshade::renderer::TextureWrap::ClampToEdge);
+    CHECK(texture->filter() == vshade::renderer::TextureFilter::Nearest);
+    CHECK(texture->wrap() == vshade::renderer::TextureWrap::ClampToEdge);
     const std::filesystem::path shaderDirectory{VSHADE_SANDBOX_SHADER_DIR};
     auto shader = std::make_shared<vshade::renderer::Shader>(
         vshade::renderer::Shader::fromFiles(

@@ -29,6 +29,7 @@ public:
     void setEditHooks(SceneEditHooks hooks);
     void setReadOnly(bool readOnly) noexcept;
     void setRevealAssetHandler(std::function<void(std::filesystem::path)> handler);
+    void setSelectedAsset(std::filesystem::path path);
     void onImGuiRender(vshade::scene::Entity selectedEntity);
 
 private:
@@ -48,12 +49,17 @@ private:
     void drawTypedColliders3D(vshade::scene::Entity entity);
     void drawScripts(vshade::scene::Entity entity);
     void drawAddComponentMenu(vshade::scene::Entity entity);
+    void drawAssetInspector();
+    void drawTextureAsset(const std::filesystem::path& path);
+    void drawAudioAsset(const std::filesystem::path& path);
+    void drawModelAsset(const std::filesystem::path& path);
 
     vshade::asset::AssetManager* m_assets = nullptr;
     AssetSelector* m_assetSelector = nullptr;
     vshade::script::NativeScriptRegistry* m_scripts = nullptr;
     SceneEditHooks m_editHooks;
     std::function<void(std::filesystem::path)> m_revealAsset;
+    std::filesystem::path m_selectedAsset;
     std::array<char, 256> m_nameBuffer{};
     std::array<char, 128> m_componentSearch{};
     std::uint64_t m_nameEntityUuid = 0;

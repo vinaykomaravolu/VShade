@@ -72,6 +72,8 @@ TEST_CASE("Audio clips load through the default asset manager", "[audio][asset]"
         CHECK(clip->sourcePath().filename() == sampleName);
         CHECK(clip->channels() > 0);
         CHECK(clip->sampleRate() > 0);
+        CHECK(clip->frameCount() > 0);
+        CHECK(clip->durationSeconds() > 0.0);
     }
 
     const vshade::asset::AudioLoader loader;

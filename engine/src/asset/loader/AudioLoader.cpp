@@ -43,10 +43,16 @@ std::shared_ptr<audio::AudioClip> AudioLoader::load(
         throw std::runtime_error("Audio clip reports an invalid format");
     }
 
+    ma_uint64 frameCount = 0;
+    if (ma_decoder_get_length_in_pcm_frames(&decoder, &frameCount) != MA_SUCCESS) {
+        throw std::runtime_error("Audio clip duration could not be read");
+    }
+
     return std::shared_ptr<audio::AudioClip>(new audio::AudioClip(
         normalizedPath,
         decoder.outputChannels,
-        decoder.outputSampleRate
+        decoder.outputSampleRate,
+        frameCount
     ));
 }
 

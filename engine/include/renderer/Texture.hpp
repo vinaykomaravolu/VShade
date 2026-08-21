@@ -89,6 +89,10 @@ public:
      * @return Channel and storage format.
      */
     [[nodiscard]] TextureFormat format() const noexcept;
+    [[nodiscard]] TextureFilter filter() const noexcept;
+    [[nodiscard]] TextureWrap wrap() const noexcept;
+    void setFilter(TextureFilter filter);
+    void setWrap(TextureWrap wrap);
 
     /**
      * @brief Returns the native texture identifier.
@@ -101,6 +105,8 @@ private:
     std::uint32_t m_width = 0;
     std::uint32_t m_height = 0;
     TextureFormat m_format = TextureFormat::RGBA8;
+    TextureFilter m_filter = TextureFilter::Linear;
+    TextureWrap m_wrap = TextureWrap::Repeat;
 };
 
 } // namespace vshade::renderer

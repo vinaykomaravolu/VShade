@@ -177,6 +177,12 @@ void ContentBrowserPanel::setOperationHandler(
     m_operationHandler = std::move(handler);
 }
 
+void ContentBrowserPanel::setSelectionHandler(
+    std::function<void(std::filesystem::path)> handler
+) {
+    m_selectionHandler = std::move(handler);
+}
+
 void ContentBrowserPanel::navigateTo(
     std::filesystem::path directory,
     const bool recordHistory
@@ -513,6 +519,9 @@ ContentBrowserPanel::onImGuiRender() {
 
         if (ImGui::IsItemClicked()) {
             m_selectedPath = path;
+            if (!directory && m_selectionHandler) {
+                m_selectionHandler(path);
+            }
         }
         if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             if (directory) {

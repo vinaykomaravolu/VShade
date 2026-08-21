@@ -146,6 +146,12 @@ EditorLayer::EditorLayer(
             );
         }
     );
+    m_contentBrowser.setSelectionHandler(
+        [this](std::filesystem::path path) {
+            m_selectedEntity = {};
+            m_inspectorPanel.setSelectedAsset(std::move(path));
+        }
+    );
     m_inspectorPanel.setAssetManager(assets);
     m_inspectorPanel.setAssetSelector(m_assetSelector);
     m_inspectorPanel.setScriptRegistry(scripts);
@@ -295,6 +301,9 @@ void EditorLayer::drawDockspace()
         m_viewport.onImGuiRender(m_selectedEntity);
     }
     if (m_showInspector) {
+        if (m_selectedEntity) {
+            m_inspectorPanel.setSelectedAsset({});
+        }
         m_inspectorPanel.setReadOnly(m_sceneState != SceneState::Edit);
         m_inspectorPanel.onImGuiRender(m_selectedEntity);
     }
@@ -840,6 +849,7 @@ void EditorLayer::setActiveScene(
         return;
     }
     m_editorScene = std::move(scene);
+    m_inspectorPanel.setSelectedAsset({});
     m_undoHistory.clear();
     m_document.reset(std::move(path), m_undoHistory.currentRevision());
     bindActiveScene();
